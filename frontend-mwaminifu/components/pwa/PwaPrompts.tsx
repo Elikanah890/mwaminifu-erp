@@ -67,8 +67,8 @@ export default function PwaPrompts() {
               </p>
               <p className="mt-1 text-[11px] leading-snug text-danger">
                 {sw
-                  ? 'Data huhifadhiwa kwenye kifaa hiki kwa matumizi nje ya mtandao. Tumia "Safisha data" ukishatoka.'
-                  : 'Data is stored on this device for offline use. Use “Clear offline data” after signing out.'}
+                  ? 'Data huhifadhiwa kwenye kifaa hiki kwa matumizi nje ya mtandao. Taarifa za wateja huhifadhiwa kwa matumizi nje ya mtandao pekee. Tumia "Safisha data" ukishatoka.'
+                  : 'Data is stored on this device for offline use. Customer data is cached for offline use only. Use “Clear offline data” after signing out.'}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">

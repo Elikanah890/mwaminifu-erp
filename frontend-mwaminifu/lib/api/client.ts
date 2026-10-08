@@ -1,4 +1,4 @@
-import { cacheGet, cacheSet, isBrowser, clearOfflineData } from '@/lib/offline/db';
+import { cacheGet, cacheSet, isBrowser, clearOfflineData, purgeExpiredCache } from '@/lib/offline/db';
 import { enqueue } from '@/lib/offline/queue';
 import { cacheCredential, verifyOfflineCredential } from '@/lib/offline/credentials';
 import { uuid } from '@/lib/offline/ids';
@@ -57,20 +57,76 @@ function isSensitive(endpoint: string): boolean {
   return SENSITIVE_PATTERNS.some((re) => re.test(endpoint));
 }
 
-// Only this explicit allow-list of non-sensitive catalogue GETs is persisted to
-// the on-device (IndexedDB) cache. Customer, sales, employee, financial and
-// admin responses are NEVER stored locally so a shared device cannot retain a
-// previous user's business data.
-const CACHEABLE_GET_PATTERNS = [
-  /^\/shops\/[^/]+\/products$/,
-  /^\/shops\/[^/]+\/products\/low-stock$/,
-  /^\/shops\/[^/]+\/categories$/,
-  /^\/plans$/,
-  /^\/config$/,
+// Balanced offline cache (Option B). Only the explicit allow-list below is
+// persisted to the on-device (IndexedDB) cache, and each entry is sanitised and
+// time-bounded:
+//   - products / categories / plans / config  -> catalogue (24h TTL)
+//   - customers                               -> basic fields only (24h TTL)
+//   - sales                                   -> last 24h only (24h TTL)
+//   - current shift                           -> 24h TTL
+//   - stock movements                         -> last 7 days (7d TTL)
+// NEVER cached: older sales, employee lists, reports, subscriptions, audit
+// logs, admin/agent data, or anything not listed here.
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
+
+type ApiPayload = { data?: unknown } & Record<string, unknown>;
+
+function sanitizeCustomers(resp: ApiPayload): ApiPayload {
+  if (!Array.isArray(resp?.data)) return resp;
+  return {
+    ...resp,
+    data: (resp.data as Array<Record<string, unknown>>).map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      outstandingBalance: c.outstandingBalance,
+    })),
+  };
+}
+
+function sanitizeRecentSales(resp: ApiPayload): ApiPayload {
+  if (!Array.isArray(resp?.data)) return resp;
+  const cutoff = Date.now() - DAY_MS;
+  return {
+    ...resp,
+    data: (resp.data as Array<{ saleDate?: string; createdAt?: string }>).filter(
+      (s) => new Date(s.saleDate ?? s.createdAt ?? 0).getTime() >= cutoff
+    ),
+  };
+}
+
+function sanitizeRecentMovements(resp: ApiPayload): ApiPayload {
+  if (!Array.isArray(resp?.data)) return resp;
+  const cutoff = Date.now() - WEEK_MS;
+  return {
+    ...resp,
+    data: (resp.data as Array<{ createdAt?: string }>).filter(
+      (m) => new Date(m.createdAt ?? 0).getTime() >= cutoff
+    ),
+  };
+}
+
+type CacheRule = { test: RegExp; ttlMs: number; sanitize?: (resp: ApiPayload) => ApiPayload };
+
+const OFFLINE_CACHE_RULES: CacheRule[] = [
+  { test: /^\/shops\/[^/]+\/products$/, ttlMs: DAY_MS },
+  { test: /^\/shops\/[^/]+\/products\/low-stock$/, ttlMs: DAY_MS },
+  { test: /^\/shops\/[^/]+\/categories$/, ttlMs: DAY_MS },
+  { test: /^\/plans$/, ttlMs: DAY_MS },
+  { test: /^\/config$/, ttlMs: DAY_MS },
+  { test: /^\/shops\/[^/]+\/customers$/, ttlMs: DAY_MS, sanitize: sanitizeCustomers },
+  { test: /^\/shops\/[^/]+\/sales$/, ttlMs: DAY_MS, sanitize: sanitizeRecentSales },
+  { test: /^\/shifts$/, ttlMs: DAY_MS },
+  { test: /^\/shifts\/active$/, ttlMs: DAY_MS },
+  { test: /^\/shops\/[^/]+\/stock-movements$/, ttlMs: WEEK_MS, sanitize: sanitizeRecentMovements },
 ];
-function isCacheableApiGet(endpoint: string): boolean {
+
+function offlineCacheRuleFor(endpoint: string): CacheRule | undefined {
   const path = endpoint.split('?')[0];
-  return CACHEABLE_GET_PATTERNS.some((re) => re.test(path));
+  return OFFLINE_CACHE_RULES.find((r) => r.test.test(path));
 }
 
 function isOnline(): boolean {
@@ -156,7 +212,11 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
         subscriptionBlockedIfNeeded(response.status, data);
         throw toApiError(response.status, data);
       }
-      if (isCacheableApiGet(endpoint)) await cacheSet(endpoint, data);
+      const rule = offlineCacheRuleFor(endpoint);
+      if (rule) {
+        const toCache = rule.sanitize ? rule.sanitize(data as ApiPayload) : data;
+        await cacheSet(endpoint, toCache, rule.ttlMs);
+      }
       return data as ApiResponse<T>;
     } catch (e) {
       if (e instanceof ApiErrorException) throw e;
@@ -342,6 +402,8 @@ class ApiClient {
    */
   async loadUser(): Promise<PublicUser | null> {
     if (typeof window === 'undefined') return currentUser;
+    // Drop any time-expired offline cache entries on app start.
+    void purgeExpiredCache();
     try {
       const response = await fetch('/api/auth/me', { cache: 'no-store' });
       if (!response.ok) {

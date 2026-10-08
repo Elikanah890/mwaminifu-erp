@@ -23,6 +23,8 @@ export type CacheItem = {
   key: string;
   data: unknown;
   updatedAt: number;
+  /** Epoch ms after which this entry is considered stale and purged. */
+  expiresAt?: number;
 };
 
 export type KvItem = {
@@ -61,20 +63,45 @@ export const CACHE_PREFIX = 'GET:';
 export async function cacheGet<T>(key: string): Promise<{ data: T; updatedAt: number } | null> {
   if (!isBrowser()) return null;
   try {
-    const row = await getDb().cache.get(`${CACHE_PREFIX}${key}`);
+    const cacheKey = `${CACHE_PREFIX}${key}`;
+    const row = await getDb().cache.get(cacheKey);
     if (!row) return null;
+    // Purge expired entries on read (e.g. sales cached > 24h ago).
+    if (row.expiresAt && row.expiresAt < Date.now()) {
+      await getDb().cache.delete(cacheKey).catch(() => undefined);
+      return null;
+    }
     return { data: row.data as T, updatedAt: row.updatedAt };
   } catch {
     return null;
   }
 }
 
-export async function cacheSet(key: string, data: unknown): Promise<void> {
+export async function cacheSet(key: string, data: unknown, ttlMs?: number): Promise<void> {
   if (!isBrowser()) return;
   try {
-    await getDb().cache.put({ key: `${CACHE_PREFIX}${key}`, data, updatedAt: Date.now() });
+    await getDb().cache.put({
+      key: `${CACHE_PREFIX}${key}`,
+      data,
+      updatedAt: Date.now(),
+      expiresAt: ttlMs ? Date.now() + ttlMs : undefined,
+    });
   } catch {
     /* cache writes are best-effort */
+  }
+}
+
+/** Remove all expired cache entries. Safe to call on app start. */
+export async function purgeExpiredCache(): Promise<void> {
+  if (!isBrowser()) return;
+  try {
+    const now = Date.now();
+    const db = getDb();
+    const rows = await db.cache.toArray();
+    const expired = rows.filter((r) => r.expiresAt && r.expiresAt < now).map((r) => r.key);
+    if (expired.length) await db.cache.bulkDelete(expired);
+  } catch {
+    /* best-effort */
   }
 }
 
