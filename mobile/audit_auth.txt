@@ -1,0 +1,27 @@
+# Authentication & Permissions Audit
+
+## Permission fallback changed to empty set for employees
+- **Description**: In auth_bloc.dart, _resolvePermissions() now returns {} instead of Permission.fullOperational.toSet() when API returns no permissions list. This prevents employees from silently receiving full operational privileges, but means UI must gracefully disable features when permissions are empty.
+- **Fix Applied**: Changed _resolvePermissions() fallback from Permission.fullOperational.toSet() to {}; all permission checks now go through hasPermission() which checks _permissions set
+- **Priority**: Critical
+
+## Hard-coded !_isOwner guards block employees
+- **Description**: Several screens have build guards like `!_isOwner ? Center(child: Text(l10n.employeesOnlyOwners)) : ...` that completely block employees from features they might need. Fixed for Employees page (made read-only) and Receipt Settings (owner-only).
+- **Fix Applied**: Employees page: removed !_isOwner guard, made list read-only (no toggle, no add/remove buttons). Receipt Settings: owner-only access, employees cannot navigate to it.
+- **Priority**: Critical
+
+## Auth state propagation after login
+- **Description**: AuthBloc correctly stores user.id, role, permissions, shops, and activeShopId after login via OTP verification, PIN setup, or employee login. _currentUser, _permissions, and shopId are properly set in Authenticated state.
+- **Fix Applied**: Login flows (_onVerifyOtp, _onSetPin, _onLoginWithPin, _onEmployeeLogin) all correctly call _persist() with user, permissions, and shopId from API response. currentShopId getter returns state.shopId from Authenticated state.
+- **Priority**: High
+
+## Token storage and propagation
+- **Description**: ApiClient uses FlutterSecureStorage to store and retrieve accessToken. Interceptor automatically adds Authorization header. Tokens saved via saveToken/saveRefreshToken, retrieved via getToken/clearTokens.
+- **Fix Applied**: Verified ApiClient constructor sets baseUrl from AppConfig, interceptor adds Bearer token. Token persistence works correctly across app restarts.
+- **Priority**: High
+
+## Employee permissions are now empty set by default
+- **Description**: Since the fix, employees have empty permission set unless API explicitly returns permissions. This means UI must check hasPermission() and disable features accordingly. The hasPermission() method checks both role and permissions set.
+- **Fix Applied**: hasPermission() method checks: role (user.role) AND permissions (_permissions set). Employees with empty permissions will have all features disabled unless API returns explicit permissions.
+- **Priority**: High
+

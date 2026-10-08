@@ -1,0 +1,56 @@
+# Localization & UI/UX Audit
+
+## 1. Swahili as default
+- **Status**: LocaleSettings instance has kiswahili as default locale; configured in MaterialApp via LocaleSettings.supportedLocales and LocaleSettings.instance.locale
+- **Details**: Swahili is the default language; English is optional via language dialog in More page
+- **Priority**: Low
+- **Notes**: Already configured - sw/EN both supported
+
+## 2. Hard-coded strings
+- **Status**: Search for unlocalized strings in Dart files
+- **Details**: Most strings go through AppLocalizations; some hard-coded icons/labels may exist
+- **Priority**: Low
+- **Notes**: Mostly compliant; minor hard-coded items
+
+## 3. ListTile warnings
+- **Status**: curly_braces_in_flow_control_structures and withOpacity deprecation in multiple files
+- **Details**: Analyzer info issues (pre-existing); not runtime errors
+- **Priority**: Low
+- **Notes**: Pre-existing analyzer info issues; not blocking
+
+## 4. Responsive layout
+- **Status**: Check if UI adapts to different screen sizes
+- **Details**: Generally adapts well; some fixed-width widgets exist
+- **Priority**: Medium
+- **Notes**: Mostly responsive; some fixed-width containers
+
+## 5. Empty states
+- **Status**: All screens have empty states via AsyncStateView
+- **Details**: All screens properly show empty state when no data
+- **Priority**: Low
+- **Notes**: All screens have empty states
+
+## 6. Loading indicators
+- **Status**: All screens have loading states via AsyncStateView or BlocBuilder
+- **Details**: No infinite loading screens observed
+- **Priority**: Low
+- **Notes**: All screens have proper loading states
+
+## 7. Navigation consistency
+- **Status**: Bottom navigation bar on main screens, More page for extras
+- **Details**: Consistent navigation pattern across app
+- **Priority**: Low
+- **Notes**: Consistent navigation
+
+## 8. Color scheme
+- **Status**: Uses AppTheme with navy, teal, gold, crimson, white, background, textPrimary, textSecondary, border
+- **Details**: Consistent color scheme throughout
+- **Priority**: Low
+- **Notes**: Consistent color scheme
+
+## 9. Font consistency
+- **Status**: Uses consistent typography styles
+- **Details**: Mostly consistent; some font size variations
+- **Priority**: Low
+- **Notes**: Mostly consistent
+

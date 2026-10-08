@@ -1,0 +1,895 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SYSTEM_OWNER
+  AGENT
+  BUSINESS_OWNER
+  EMPLOYEE
+}
+
+enum SaleStatus {
+  COMPLETED
+  SUSPENDED
+  REFUNDED
+  VOIDED
+}
+
+enum LoanStatus {
+  ACTIVE
+  PAID
+  DEFAULTED
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  CONFLICT
+  FAILED
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  phone         String?   @unique
+  email         String?
+  username      String?   @unique
+  passwordHash  String?
+  name          String
+  role          UserRole  @default(BUSINESS_OWNER)
+  pinHash       String?
+  avatarUrl     String?
+  isActive      Boolean   @default(true)
+  isPinSet      Boolean   @default(false)
+  isPhoneVerified Boolean @default(false)
+  lastLoginAt   DateTime?
+  failedLoginAttempts Int @default(0)
+  blockedUntil  DateTime?
+  deviceId      String?
+  fcmToken      String?
+  refreshTokens RefreshToken[]
+  ownedShops    Shop[]    @relation("Owner")
+  employees     Employee[]
+  sales         Sale[]
+  
+  // Shift relations
+  shifts        Shift[]
+  
+  expenses      Expense[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  otps          Otp[]
+  stockAdjustments StockAdjustment[]
+  supportTickets SupportTicket[]
+  supportMessages SupportMessage[]
+  capitalTransactions OwnerCapitalTransaction[]
+  deviceSessions DeviceSession[]
+  stockMovements  StockMovement[]
+  cashTransactions CashTransaction[]
+  auditLogs       AuditLog[]
+  refunds         Refund[]
+  createdBy     String?
+  agentId       String?
+  agent         Agent?    @relation("AgentUsers", fields: [agentId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([phone])
+  @@index([role])
+  @@index([agentId])
+}
+
+model Agent {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  email         String?
+  isActive      Boolean  @default(true)
+  onboardedUsers User[]  @relation("AgentUsers")
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String?
+  ipAddress String?
+  expiresAt DateTime
+  isRevoked Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Otp {
+  id        String    @id @default(cuid())
+  phone     String
+  code      String
+  purpose   String    @default("LOGIN")
+  expiresAt DateTime
+  isUsed    Boolean   @default(false)
+  attempts  Int       @default(0)
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+
+  @@index([phone, purpose])
+  @@index([expiresAt])
+}
+
+model Shop {
+  id            String    @id @default(cuid())
+  ownerId       String
+  owner         User      @relation("Owner", fields: [ownerId], references: [id])
+  name          String
+  address       String?
+  logoUrl       String?
+  coverUrl      String?
+  currency      String    @default("TZS")
+  language      String    @default("en")
+  receiptHeader String?
+  receiptFooter String?
+  taxNumber     String?
+  isArchived    Boolean   @default(false)
+  employees     Employee[]
+  products      Product[]
+  sales         Sale[]
+  customers     Customer[]   @relation("ShopCustomers")
+  expenses      Expense[]    @relation("ShopExpenses")
+  loans         Loan[]       @relation("ShopLoans")
+  notifications Notification[] @relation("ShopNotifications")
+  activityLogs  ActivityLog[]  @relation("ShopActivityLogs")
+  shift         Shift[]
+  categories    Category[]
+  syncMetadata  SyncMetadata?
+  shopSettings  ShopSettings?
+  supportTickets SupportTicket[]
+  subscriptions Subscription[]
+  capitalTransactions OwnerCapitalTransaction[]
+  recurringExpenses   RecurringExpense[]
+  suppliers           Supplier[]
+  purchases           Purchase[]
+  stockMovements      StockMovement[]
+  cashTransactions    CashTransaction[]
+  auditLogs           AuditLog[]
+  refunds             Refund[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([ownerId])
+  @@index([name])
+}
+
+model ShopSettings {
+  id            String    @id @default(cuid())
+  shopId        String    @unique
+  shop          Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  currency      String    @default("TZS")
+  language      String    @default("en")
+  receiptHeader String?
+  receiptFooter String?
+  taxNumber     String?
+  printerSettings Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Employee {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references: [id])
+  role          String    @default("Cashier")
+  permissions   Json      @default("[]")
+  isActive      Boolean   @default(true)
+  tempPinHash   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@unique([userId, shopId])
+  @@index([shopId])
+  @@index([userId])
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references: [id])
+  name          String
+  description   String?
+  icon          String?
+  parentId      String?
+  parent        Category? @relation("CategoryParent", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryParent")
+  isDefault     Boolean   @default(false)
+  isArchived    Boolean   @default(false)
+  products      Product[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@unique([shopId, name])
+  @@index([shopId])
+  @@index([parentId])
+}
+
+model Product {
+  id              String    @id @default(cuid())
+  shopId          String
+  shop            Shop      @relation(fields: [shopId], references: [id])
+  name            String
+  sku             String?
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id])
+  supplier        String?
+  brand           String?
+  description     String?
+  taxRate         Float     @default(0)
+  status          String    @default("ACTIVE") // ACTIVE, DISCONTINUED
+  supplierId      String?
+  supplierRel     Supplier? @relation("ProductSupplier", fields: [supplierId], references: [id])
+  costPrice       Float     @default(0)
+  sellingPrice    Float     @default(0)
+  minPrice        Float?
+  maxPrice        Float?
+  reorderLevel    Int       @default(10)
+  stockQuantity   Int       @default(0)
+  unit            String    @default("piece")
+  unitConversion  Float?
+  baseUnitStock   Int       @default(0)
+  baseUnitName    String    @default("piece")
+  images          Json      @default("[]")
+  barcode         String?
+  isActive        Boolean   @default(true)
+  isService       Boolean   @default(false)
+  saleItems       SaleItem[]
+  stockAdjustments StockAdjustment[]
+  unitConfigs     ProductUnitConfig[]
+  stockMovements  StockMovement[]
+  productImages   ProductImage[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@unique([shopId, sku])
+  @@unique([shopId, barcode])
+  @@index([shopId])
+  @@index([categoryId])
+  @@index([name])
+}
+
+model StockAdjustment {
+  id              String    @id @default(cuid())
+  productId       String
+  product         Product   @relation(fields: [productId], references: [id])
+  quantityChange  Int
+  reason          String?
+  performedBy     String
+  performer       User      @relation(fields: [performedBy], references: [id])
+  shopId          String
+  createdAt       DateTime  @default(now())
+
+  @@index([productId])
+  @@index([shopId])
+  @@index([createdAt])
+}
+
+model Customer {
+  id              String    @id @default(cuid())
+  shopId          String
+  shop            Shop      @relation("ShopCustomers", fields: [shopId], references: [id])
+  name            String
+  phone           String?
+  email           String?
+  address         String?
+  notes           String?
+  outstandingBalance Float  @default(0)
+  totalCreditGiven   Float  @default(0)
+  totalRepaid    Float     @default(0)
+  creditLimit    Float     @default(0)
+  isBlacklisted  Boolean   @default(false)
+  status         String    @default("ACTIVE") // ACTIVE, INACTIVE, BLACKLISTED
+  isArchived      Boolean   @default(false)
+  sales           Sale[]
+  creditPayments  CreditPayment[]
+  creditLedger    CreditLedgerEntry[]
+  refunds         Refund[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([shopId])
+  @@index([phone])
+}
+
+model Sale {
+  id              String      @id @default(cuid())
+  shopId          String
+  shop            Shop        @relation(fields: [shopId], references: [id])
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  customerId      String?
+  customer        Customer?   @relation(fields: [customerId], references: [id])
+  saleDate        DateTime    @default(now())
+  totalAmount     Float       @default(0)
+  discount        Float       @default(0)
+  taxAmount       Float       @default(0)
+  grandTotal      Float       @default(0)
+  changeGiven     Float       @default(0)
+  status          SaleStatus  @default(COMPLETED)
+  paymentMethod   String?
+  paymentDetails  Json        @default("{}")
+  receiptNumber   String?
+  notes           String?
+  syncStatus      SyncStatus  @default(SYNCED)
+  clientId        String?
+  isOffline       Boolean     @default(false)
+  refundReason    String?
+  refundedAt      DateTime?
+  items           SaleItem[]
+  creditPayments  CreditPayment[]
+  activityLogs    ActivityLog[]
+  refunds         Refund[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([customerId])
+  @@index([saleDate])
+  @@index([status])
+  @@index([receiptNumber])
+}
+
+model SaleItem {
+  id          String  @id @default(cuid())
+  saleId      String
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  quantity    Float   @default(1)
+  unitPrice   Float   @default(0)
+  costPrice   Float   @default(0)
+  discount    Float   @default(0)
+  tax         Float   @default(0)
+  total       Float   @default(0)
+  unit        String?
+  createdAt   DateTime @default(now())
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Refund {
+  id            String       @id @default(cuid())
+  shopId        String
+  shop          Shop         @relation(fields: [shopId], references: [id])
+  saleId        String
+  sale          Sale         @relation(fields: [saleId], references: [id])
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+  customerId    String?
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  refundNumber  String?
+  items         Json         @default("[]")
+  amount        Float        @default(0)
+  reason        String?
+  status        RefundStatus @default(COMPLETED)
+  approvedBy    String?
+  approvedAt    DateTime?
+  notes         String?
+  syncStatus    SyncStatus   @default(SYNCED)
+  clientId      String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([shopId])
+  @@index([saleId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Expense {
+  id          String    @id @default(cuid())
+  shopId      String
+  shop        Shop      @relation("ShopExpenses", fields: [shopId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  category    String
+  amount      Float
+  description String?
+  receiptUrl  String?
+  paymentMethod String?
+  approvalStatus String @default("APPROVED") // PENDING, APPROVED, REJECTED
+  expenseDate DateTime  @default(now())
+  syncStatus  SyncStatus @default(SYNCED)
+  clientId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([expenseDate])
+  @@index([category])
+}
+
+model Loan {
+  id              String      @id @default(cuid())
+  shopId          String
+  shop            Shop        @relation("ShopLoans", fields: [shopId], references: [id])
+  lender          String
+  amount          Float
+  interestRate    Float       @default(0)
+  dueDate         DateTime?
+  remainingBalance Float
+  status          LoanStatus  @default(ACTIVE)
+  notes           String?
+  repayments      LoanRepayment[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  @@index([shopId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model LoanRepayment {
+  id            String    @id @default(cuid())
+  loanId        String
+  loan          Loan      @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  amount        Float
+  repaymentDate DateTime  @default(now())
+  method        String    @default("cash")
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  @@index([loanId])
+  @@index([repaymentDate])
+}
+
+model CreditPayment {
+  id          String    @id @default(cuid())
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  saleId      String?
+  sale        Sale?     @relation(fields: [saleId], references: [id])
+  amount      Float
+  paymentDate DateTime  @default(now())
+  method      String    @default("cash")
+  notes       String?
+  syncStatus  SyncStatus @default(SYNCED)
+  clientId    String?
+  createdAt   DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([saleId])
+  @@index([paymentDate])
+}
+
+model SyncMetadata {
+  id                String    @id @default(cuid())
+  shopId            String    @unique
+  shop              Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  deviceId          String
+  lastPullTimestamp DateTime?
+  lastPushTimestamp DateTime?
+  pendingUploads    Int       @default(0)
+  lastError         String?
+  lastErrorAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([shopId, deviceId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id])
+  shopId    String?
+  shop      Shop?     @relation("ShopNotifications", fields: [shopId], references: [id])
+  title     String
+  body      String
+  type      String?
+  data      Json      @default("{}")
+  isRead    Boolean   @default(false)
+  isSent    Boolean   @default(false)
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([shopId])
+  @@index([isRead])
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  shopId      String?
+  shop        Shop?     @relation("ShopActivityLogs", fields: [shopId], references: [id])
+  action      String
+  details     Json      @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  saleId      String?
+  sale        Sale?     @relation(fields: [saleId], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([shopId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id        String    @id @default(cuid())
+  shopId    String
+  shop      Shop      @relation(fields: [shopId], references: [id])
+  plan      String    @default("basic")
+  planId    String?
+  planConfig SubscriptionPlan? @relation(fields: [planId], references: [id])
+  status    String    @default("ACTIVE")
+  billingCycle String  @default("MONTHLY")
+  autoRenew Boolean   @default(true)
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+  payments  SubscriptionPayment[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([planId])
+  @@index([status])
+}
+
+model SubscriptionPayment {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  amount         Float
+  method         String       @default("cash")
+  reference      String?
+  status         String       @default("COMPLETED")
+  paidAt         DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+
+  @@index([subscriptionId])
+}
+
+model SmsLog {
+  id        String    @id @default(cuid())
+  phone     String
+  message   String
+  type      String    @default("OTP")
+  status    String    @default("sent")
+  gateway   String?
+  gatewayId String?
+  error     String?
+  userId    String?
+  shopId    String?
+  createdAt DateTime  @default(now())
+
+  @@index([phone])
+  @@index([createdAt])
+}
+
+model SubscriptionPlan {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  price       Float    @default(0)
+  billingCycle String  @default("MONTHLY")
+  features    Json     @default("[]")
+  limits      Json     @default("{}")
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  displayOrder Int     @default(0)
+  createdBy   String?
+  subscriptions Subscription[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([isActive])
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json     @default("{}")
+  description String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SupportTicket {
+  id         String    @id @default(cuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shopId     String?
+  shop       Shop?     @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  subject    String
+  message    String
+  status     String    @default("OPEN")
+  priority   String    @default("MEDIUM")
+  resolvedAt DateTime?
+  resolvedBy String?
+  createdBy  String?
+  assignedTo String?
+  messages   SupportMessage[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([shopId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User          @relation(fields: [senderId], references: [id])
+  content   String
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId])
+  @@index([senderId])
+}
+
+model Shift {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references: [id])
+  openingCashBalance Float   @default(0)
+  countedCash   Float?
+  expectedCash  Float?
+  discrepancy   Float?
+  cashSales     Float     @default(0)
+  cashExpenses  Float     @default(0)
+  cashRefunds   Float     @default(0)
+  status        String    @default("OPEN") // OPEN, CLOSED
+  closedBy      String?
+  isActive      Boolean   @default(true)
+  startedAt     DateTime  @default(now())
+  closedAt      DateTime?
+
+  @@index([userId, shopId])
+  @@index([isActive])
+  @@index([startedAt])
+}
+
+model OwnerCapitalTransaction {
+  id        String   @id @default(cuid())
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // "INJECTION" or "DRAWING"
+  amount    Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model RecurringExpense {
+  id         String   @id @default(cuid())
+  shopId     String
+  shop       Shop     @relation(fields: [shopId], references: [id])
+  category   String
+  amount     Float
+  frequency  String   // "DAILY", "WEEKLY", "MONTHLY"
+  dayOfWeek  Int?     // For weekly
+  dayOfMonth Int?     // For monthly
+  nextDate   DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([shopId])
+  @@index([isActive])
+  @@index([nextDate])
+}
+
+model DeviceSession {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  deviceId   String
+  lastActive DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, deviceId])
+  @@index([deviceId])
+}
+
+model ProductUnitConfig {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  unitName    String   // "Box", "Bottle"
+  baseUnits   Int      // 1 for bottle, 24 for box
+  sellingPrice Float
+  minPrice    Float?
+  maxPrice    Float?
+  pricingMode String   @default("FIXED") // "FIXED" or "FLUCTUATING"
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model Supplier {
+  id        String     @id @default(cuid())
+  shopId    String
+  shop      Shop       @relation(fields: [shopId], references: [id])
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  products  Product[]  @relation("ProductSupplier")
+  purchases Purchase[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+
+  @@index([shopId])
+  @@index([name])
+}
+
+model Purchase {
+  id            String    @id @default(cuid())
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references: [id])
+  supplierId    String?
+  supplier      Supplier? @relation(fields: [supplierId], references: [id])
+  date          DateTime  @default(now())
+  invoiceNo     String?
+  items         Json      @default("[]")
+  subtotal      Float     @default(0)
+  tax           Float     @default(0)
+  discount      Float     @default(0)
+  total         Float     @default(0)
+  amountPaid    Float     @default(0)
+  status        String    @default("DRAFT") // DRAFT, ORDERED, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
+  paymentStatus String    @default("UNPAID") // UNPAID, PARTIAL, PAID
+  dueDate       DateTime?
+  createdBy     String?
+  receivedAt    DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([shopId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([date])
+}
+
+model StockMovement {
+  id           String    @id @default(cuid())
+  shopId       String
+  shop         Shop      @relation(fields: [shopId], references: [id])
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  type         String    // PURCHASE, SALE, ADJUSTMENT, RETURN, DAMAGED, OPENING, SALE_RETURN
+  quantity     Float
+  balanceAfter Float
+  reference    String?
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id])
+  reason       String?
+  createdAt    DateTime  @default(now())
+
+  @@index([productId])
+  @@index([shopId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model CashTransaction {
+  id        String   @id @default(cuid())
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  type      String   // OPENING, SALE, PURCHASE, EXPENSE, WITHDRAWAL, DEPOSIT, REFUND, ADJUSTMENT, LOAN_DISBURSEMENT, LOAN_REPAYMENT, CREDIT_COLLECTION
+  amount    Float
+  reference String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model CreditLedgerEntry {
+  id            String    @id @default(cuid())
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id])
+  type          String    // CHARGE, REPAYMENT, WRITE_OFF, ADJUSTMENT
+  amount        Float
+  balanceAfter  Float
+  referenceId   String?
+  referenceType String?   // SALE, PAYMENT
+  description   String?
+  createdAt     DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   // SALE_CREATED, SALE_CANCELLED, REFUND, PRODUCT_UPDATED, STOCK_ADJUSTED, EXPENSE_CREATED, etc.
+  entity    String?
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
+  deletedAt      DateTime?
+  deletionReason String?
+  deletedBy      String?
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

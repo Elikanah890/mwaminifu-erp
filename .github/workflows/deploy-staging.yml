@@ -1,0 +1,39 @@
+name: Deploy Staging
+
+# Automatic staging deploy whenever develop is updated (after CI passes).
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Trigger backend deploy (Render)
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_STAGING_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
+            echo "Backend staging deploy triggered."
+          else
+            echo "::warning::RENDER_STAGING_DEPLOY_HOOK is not configured — skipping backend deploy."
+          fi
+
+      - name: Trigger frontend deploy (Vercel)
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_STAGING_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$VERCEL_DEPLOY_HOOK" ]; then
+            curl -fsS -X POST "$VERCEL_DEPLOY_HOOK"
+            echo "Frontend staging deploy triggered."
+          else
+            echo "::warning::VERCEL_STAGING_DEPLOY_HOOK is not configured — skipping frontend deploy."
+          fi

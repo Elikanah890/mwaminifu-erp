@@ -1,0 +1,471 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { apiClient } from '@/lib/api/client';
+import { useShop } from '@/lib/context/ShopContext';
+import { useI18n } from '@/lib/context/I18nContext';
+import { Product, Category } from '@/lib/types';
+import { formatCurrency, errorMessage } from '@/lib/format';
+import PageWrapper from '@/components/PageWrapper';
+import { SkeletonTable, EmptyState } from '@/components/Spinner';
+import { Reveal } from '@/components/motion';
+import Modal from '@/components/Modal';
+import StatusBadge from '@/components/StatusBadge';
+import BarcodeScanner from '@/components/BarcodeScanner';
+import { useToast } from '@/components/Toast';
+import { PackageMinus, Plus, Search, Pencil, Trash2, Upload, X, Download, Percent, ScanBarcode, Wand2 } from 'lucide-react';
+
+const UNITS = ['piece', 'pack', 'bottle', 'box', 'carton', 'kg', 'gram', 'litre', 'millilitre', 'metre', 'dozen', 'tray', 'loaf', 'tube', 'ream'];
+
+export default function OwnerInventoryPage() {
+  const { activeShopId, loading: shopLoading } = useShop();
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [form, setForm] = useState({
+    name: '', sku: '', barcode: '', categoryId: '', brand: '', supplier: '',
+    costPrice: '', sellingPrice: '', taxRate: '', stockQuantity: '', unit: 'piece', reorderLevel: '10', description: '',
+  });
+  const [images, setImages] = useState<string[]>([]);
+
+  const [adjustForm, setAdjustForm] = useState({ quantityChange: '', reason: '' });
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [csvText, setCsvText] = useState('');
+  const [bulkForm, setBulkForm] = useState({ scope: 'all', categoryId: '', type: 'percentage', value: '', field: 'sellingPrice' });
+  const [scanOpen, setScanOpen] = useState(false);
+
+  const load = () => {
+    if (!activeShopId) return;
+    setLoading(true);
+    const q = search ? `&search=${encodeURIComponent(search)}` : '';
+    Promise.all([
+      apiClient.get<Product[]>(`/shops/${activeShopId}/products?limit=200${q}`),
+      apiClient.get<Category[]>(`/shops/${activeShopId}/categories`),
+    ])
+      .then(([p, c]) => { setProducts(p.data ?? []); setCategories(c.data ?? []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(load, 250);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeShopId, search]);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ name: '', sku: '', barcode: '', categoryId: '', brand: '', supplier: '', costPrice: '', sellingPrice: '', taxRate: '', stockQuantity: '', unit: 'piece', reorderLevel: '10', description: '' });
+    setImages([]);
+    setModalOpen(true);
+  };
+
+  const openEdit = (p: Product) => {
+    setEditing(p);
+    setForm({
+      name: p.name, sku: p.sku ?? '', barcode: p.barcode ?? '', categoryId: p.categoryId ?? '', brand: p.brand ?? '', supplier: p.supplier ?? '',
+      costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), taxRate: String((p as unknown as { taxRate?: number }).taxRate ?? 0), stockQuantity: String(p.stockQuantity), unit: p.unit, reorderLevel: String(p.reorderLevel), description: (p as unknown as { description?: string }).description ?? '',
+    });
+    setImages((p as unknown as { images?: string[] }).images ?? []);
+    setModalOpen(true);
+  };
+
+  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    e.target.value = '';
+    for (const file of Array.from(files).slice(0, 5)) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        try {
+          const res = await apiClient.post<{ url: string }>(`/shops/${activeShopId}/upload-image`, { dataUrl });
+          setImages((prev) => [...prev, res.data?.url ?? dataUrl]);
+        } catch {
+          setImages((prev) => [...prev, dataUrl]);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const body = {
+        name: form.name,
+        sku: form.sku || undefined,
+        barcode: form.barcode || undefined,
+        categoryId: form.categoryId || undefined,
+        brand: form.brand || undefined,
+        supplier: form.supplier || undefined,
+        costPrice: Number(form.costPrice) || 0,
+        sellingPrice: Number(form.sellingPrice) || 0,
+        taxRate: Number(form.taxRate) || 0,
+        stockQuantity: Number(form.stockQuantity) || 0,
+        unit: form.unit,
+        reorderLevel: Number(form.reorderLevel) || 10,
+        description: form.description || undefined,
+        images,
+      };
+      if (editing) {
+        await apiClient.put(`/products/${editing.id}`, body);
+        toast(t('update'), 'success');
+      } else {
+        await apiClient.post(`/shops/${activeShopId}/products`, body);
+        toast(t('addProduct'), 'success');
+      }
+      setModalOpen(false);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const remove = async (p: Product) => {
+    if (!window.confirm(`${t('archive')} ${p.name}?`)) return;
+    try {
+      await apiClient.del(`/products/${p.id}`);
+      toast(t('archive'), 'success');
+      load();
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    }
+  };
+
+  const submitAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustTarget) return;
+    setSubmitting(true);
+    try {
+      await apiClient.post(`/products/${adjustTarget.id}/adjust-stock`, { quantityChange: Number(adjustForm.quantityChange), reason: adjustForm.reason });
+      toast(t('adjust'), 'success');
+      setAdjustTarget(null);
+      setAdjustForm({ quantityChange: '', reason: '' });
+      load();
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvText.trim()) return;
+    const lines = csvText.trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) { toast(t('noData'), 'error'); return; }
+    const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+    const rows = lines.slice(1).map((line) => {
+      const cells = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+      const obj: Record<string, unknown> = {};
+      headers.forEach((h, i) => { obj[h] = cells[i]; });
+      return obj;
+    });
+    setSubmitting(true);
+    try {
+      const res = await apiClient.post<{ created: number; updated: number }>(`/shops/${activeShopId}/products/import`, { rows });
+      toast(`${t('import')}: ${res.data?.created ?? 0} / ${res.data?.updated ?? 0}`, 'success');
+      setImportOpen(false);
+      setCsvText('');
+      load();
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitBulk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await apiClient.post(`/shops/${activeShopId}/products/bulk-price`, {
+        scope: bulkForm.scope,
+        categoryId: bulkForm.scope === 'category' ? bulkForm.categoryId : undefined,
+        type: bulkForm.type,
+        value: Number(bulkForm.value),
+        field: bulkForm.field,
+      });
+      toast(t('update'), 'success');
+      setBulkOpen(false);
+      load();
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleScan = (barcode: string) => {
+    setScanOpen(false);
+    if (barcode) setForm((prev) => ({ ...prev, barcode }));
+  };
+
+  const generateBarcode = async () => {
+    try {
+      const res = await apiClient.get<{ barcode: string }>(`/shops/${activeShopId}/products/generate-barcode`);
+      const barcode = res.data?.barcode;
+      if (barcode) setForm((prev) => ({ ...prev, barcode }));
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    }
+  };
+
+  return (
+    <PageWrapper
+      title={t('products')}
+      description={t('products')}
+      breadcrumb={['Owner', t('inventory'), t('products')]}
+      actions={
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => apiClient.download(`/shops/${activeShopId}/reports/products/export?format=csv`, 'products.csv')} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>
+          <button onClick={() => setImportOpen(true)} className="btn-outline inline-flex items-center gap-2 text-sm"><Upload size={16} /> {t('import')}</button>
+          <button onClick={() => setBulkOpen(true)} className="btn-outline inline-flex items-center gap-2 text-sm"><Percent size={16} /> {t('bulk')}</button>
+          <button onClick={openCreate} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addProduct')}</button>
+        </div>
+      }
+    >
+      <Reveal className="mb-6"><div className="surface-card p-4">
+        <div className="relative max-w-md">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`${t('search')} / ${t('barcode')}...`} className="input-field pl-9" />
+        </div>
+      </div></Reveal>
+
+      {shopLoading || loading ? (
+        <SkeletonTable rows={8} />
+      ) : products.length === 0 ? (
+        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+      ) : (
+        <Reveal><div className="surface-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
+              <tr>
+                <th className="px-4 py-3">{t('products')}</th>
+                <th className="px-4 py-3">{t('category')}</th>
+                <th className="px-4 py-3 text-right">{t('costPrice')}</th>
+                <th className="px-4 py-3 text-right">{t('sellingPrice')}</th>
+                <th className="px-4 py-3 text-right">{t('stock')}</th>
+                <th className="px-4 py-3">{t('status')}</th>
+                <th className="px-4 py-3 text-right">{t('actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {products.map((p) => {
+                const imgs = (p as unknown as { images?: string[] }).images ?? [];
+                return (
+                  <tr key={p.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {imgs[0] ? <Image src={imgs[0]} alt="" width={32} height={32} className="w-8 h-8 rounded object-cover" /> : <div className="w-8 h-8 rounded bg-muted-2" />}
+                        <div>
+                          <p className="font-medium text-foreground">{p.name}</p>
+                          <p className="text-xs text-subtle-foreground">{p.sku ?? '-'}{p.barcode ? ` · ${p.barcode}` : ''} · {p.unit}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{p.category?.name ?? '-'}</td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(p.costPrice)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-foreground">{formatCurrency(p.sellingPrice)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{p.stockQuantity}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge active={p.stockQuantity > p.reorderLevel} activeLabel={t('inStock')} inactiveLabel={t('lowStock')} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => { setAdjustTarget(p); setAdjustForm({ quantityChange: '', reason: '' }); }} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><PackageMinus size={14} /></button>
+                        <button onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><Pencil size={14} /></button>
+                        <button onClick={() => remove(p)} className="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div></Reveal>
+      )}
+
+      <Modal open={modalOpen} title={editing ? t('edit') : t('addProduct')} onClose={() => setModalOpen(false)} wide>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1">{t('name')}</label>
+              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('sku')}</label>
+              <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('barcode')}</label>
+              <div className="flex gap-2">
+                <input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="input-field" placeholder="1234567890128" />
+                <button type="button" onClick={() => setScanOpen(true)} className="btn-outline inline-flex items-center gap-1 shrink-0" title={t('scan')}><ScanBarcode size={16} /></button>
+                <button type="button" onClick={generateBarcode} className="btn-outline inline-flex items-center gap-1 shrink-0" title={t('generate')}><Wand2 size={16} /></button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
+              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input-field">
+                <option value="">—</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('brand')}</label>
+              <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('supplier')}</label>
+              <input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('unit')}</label>
+              <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="input-field">
+                {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('costPrice')}</label>
+              <input required type="number" min={0} value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('sellingPrice')}</label>
+              <input required type="number" min={0} value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('tax')} (%)</label>
+              <input type="number" min={0} value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('stock')}</label>
+              <input type="number" min={0} value={form.stockQuantity} onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })} className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('reorderLevel')}</label>
+              <input type="number" min={0} value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} className="input-field" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1">{t('description')}</label>
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input-field" rows={2} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('image')}</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {images.map((img, i) => (
+                <div key={i} className="relative">
+                  <Image src={img} alt="" width={64} height={64} className="w-16 h-16 rounded-lg object-cover border border-border" />
+                  {i === 0 && <span className="absolute bottom-0 left-0 right-0 bg-primary/80 text-white text-[9px] text-center rounded-b-lg py-0.5">{t('primary')}</span>}
+                  {i !== 0 && (
+                    <button type="button" onClick={() => setImages((prev) => [img, ...prev.filter((_, j) => j !== i)])} className="absolute top-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center rounded-t-lg py-0.5 hover:bg-secondary">
+                      {t('primary')}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))} className="absolute -top-2 -right-2 bg-danger text-white rounded-full p-0.5"><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+            <label className="inline-flex items-center gap-2 px-4 py-2 border border-dashed border-border-strong rounded-lg text-sm text-muted-foreground cursor-pointer hover:border-secondary">
+              <Upload size={16} /> {t('upload')}
+              <input type="file" accept="image/*" multiple className="hidden" onChange={onUpload} />
+            </label>
+          </div>
+
+          <button type="submit" disabled={submitting} className="btn-navy w-full">{submitting ? t('loading') : t('save')}</button>
+        </form>
+      </Modal>
+
+      <Modal open={!!adjustTarget} title={`${t('adjust')} — ${adjustTarget?.name ?? ''}`} onClose={() => setAdjustTarget(null)}>
+        <form onSubmit={submitAdjustment} className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t('stock')}: <span className="font-semibold text-foreground">{adjustTarget?.stockQuantity}</span></p>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('quantity')} (+ / -)</label>
+            <input required type="number" value={adjustForm.quantityChange} onChange={(e) => setAdjustForm({ ...adjustForm, quantityChange: e.target.value })} className="input-field" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('reason')}</label>
+            <select required value={adjustForm.reason} onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })} className="input-field">
+              <option value="">—</option>
+              <option value="Damaged">Damaged</option>
+              <option value="Expired">Expired</option>
+              <option value="Stock count correction">Stock count correction</option>
+              <option value="Theft / loss">Theft / loss</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <button type="submit" disabled={submitting} className="btn-navy w-full">{submitting ? t('loading') : t('save')}</button>
+        </form>
+      </Modal>
+
+      <Modal open={importOpen} title={t('import')} onClose={() => setImportOpen(false)} wide>
+        <form onSubmit={submitImport} className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t('import')} — name,sku,costPrice,sellingPrice,stockQuantity,unit</p>
+          <textarea value={csvText} onChange={(e) => setCsvText(e.target.value)} className="input-field" rows={8} placeholder={'name,sku,costPrice,sellingPrice,stockQuantity,unit\nSugar 1kg,SUG1,2000,2500,50,kg'} />
+          <button type="submit" disabled={submitting} className="btn-navy w-full">{submitting ? t('loading') : t('import')}</button>
+        </form>
+      </Modal>
+
+      <Modal open={bulkOpen} title={t('bulk')} onClose={() => setBulkOpen(false)}>
+        <form onSubmit={submitBulk} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('scope')}</label>
+            <select value={bulkForm.scope} onChange={(e) => setBulkForm({ ...bulkForm, scope: e.target.value })} className="input-field">
+              <option value="all">{t('all')}</option>
+              <option value="category">{t('category')}</option>
+            </select>
+          </div>
+          {bulkForm.scope === 'category' && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
+              <select value={bulkForm.categoryId} onChange={(e) => setBulkForm({ ...bulkForm, categoryId: e.target.value })} className="input-field">
+                <option value="">—</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('type')}</label>
+              <select value={bulkForm.type} onChange={(e) => setBulkForm({ ...bulkForm, type: e.target.value })} className="input-field">
+                <option value="percentage">%</option>
+                <option value="fixed">{t('fixed')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('value')}</label>
+              <input required type="number" value={bulkForm.value} onChange={(e) => setBulkForm({ ...bulkForm, value: e.target.value })} className="input-field" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('type')}</label>
+            <select value={bulkForm.field} onChange={(e) => setBulkForm({ ...bulkForm, field: e.target.value })} className="input-field">
+              <option value="sellingPrice">{t('sellingPrice')}</option>
+              <option value="costPrice">{t('costPrice')}</option>
+            </select>
+          </div>
+          <button type="submit" disabled={submitting} className="btn-navy w-full">{submitting ? t('loading') : t('save')}</button>
+        </form>
+      </Modal>
+
+      <BarcodeScanner open={scanOpen} onClose={() => setScanOpen(false)} onScan={handleScan} />
+    </PageWrapper>
+  );
+}

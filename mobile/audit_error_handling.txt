@@ -1,0 +1,82 @@
+# Error Handling & UI States Audit
+
+## Dashboard
+- **Loading State**: AsyncStateView.loading() when _loading
+- **Error State**: AsyncStateView.error() with onRetry to _loadDashboard
+- **Empty State**: AsyncStateView.empty() when activeShopId == null
+- **Discrepancy**: No infinite loading; dashboard data loads or shows empty state
+- **Fix**: Critical
+- **Priority**: Removed postFrameCallback race condition; dashboard now loads correctly
+
+## POS
+- **Loading State**: BlocBuilder<ProductBloc, ProductState> handles ProductLoading, ProductError, ProductsLoaded states
+- **Error State**: Center(child: Text(state.message)) on product error
+- **Empty State**: Center(child: Text(l10n.posNoProducts)) when no products
+- **Discrepancy**: No infinite loading; product list properly handles all states
+- **Fix**: High
+- **Priority**: Added BlocListener<ShopBloc, ShopState> to reload products when shop changes
+
+## Inventory
+- **Loading State**: AsyncStateView.loading() when loading
+- **Error State**: AsyncStateView.error() with onRetry to _loadProducts
+- **Empty State**: AsyncStateView.empty() with inventory icon when no products
+- **Discrepancy**: No infinite loading; proper FAB visibility gated by permission
+- **Fix**: High
+- **Priority**: Working structure with proper permission gating
+
+## Employees
+- **Loading State**: AsyncStateView.loading() when _loading
+- **Error State**: AsyncStateView.error() with onRetry to _load
+- **Empty State**: AsyncStateView.empty() with people outline when no employees
+- **Discrepancy**: Previously blocked by !_isOwner guard; now read-only accessible
+- **Fix**: Critical
+- **Priority**: Removed !_isOwner guard; employees can now view the screen
+
+## Expenses
+- **Loading State**: AsyncStateView.loading() when _loading
+- **Error State**: AsyncStateView.error() with onRetry to _load
+- **Empty State**: AsyncStateView.empty() with money_off icon when no expenses
+- **Discrepancy**: Working structure with proper states
+- **Fix**: High
+- **Priority**: N/A
+
+## Customers
+- **Loading State**: AsyncStateView.loading() when _loading
+- **Error State**: AsyncStateView.error() with onRetry to _load
+- **Empty State**: AsyncStateView.empty() with people outline when no customers
+- **Discrepancy**: Working structure with search functionality
+- **Fix**: High
+- **Priority**: N/A
+
+## Reports
+- **Loading State**: AsyncStateView.loading() when _loading
+- **Error State**: AsyncStateView.error() with onRetry to _loadReport
+- **Empty State**: AsyncStateView.empty() when no data
+- **Discrepancy**: All 9 report types have data loading; 2 types previously had bare 'break' statements
+- **Fix**: High
+- **Priority**: The data loading functions exist; the switch statement issue fixed
+
+## Support
+- **Loading State**: AsyncStateView.loading() when _loading
+- **Error State**: Custom error handling with friendlyError()
+- **Empty State**: AsyncStateView.empty() with support_agent icon when no tickets
+- **Discrepancy**: Working structure for owners
+- **Fix**: Medium
+- **Priority**: N/A
+
+## Notifications
+- **Loading State**: setState() when loading
+- **Error State**: setState() with _error = 'error'
+- **Empty State**: AsyncStateView.empty() with notifications_none icon when no notifications
+- **Discrepancy**: Calls /notifications without shopId; may return wrong data
+- **Fix**: Medium
+- **Priority**: Under review - may need shopId parameter
+
+## POS offline/sync
+- **Loading State**: OfflineQueue.instance.count() check
+- **Error State**: SnackBar with l10n.posNoNetwork on offline failure
+- **Empty State**: N/A
+- **Discrepancy**: Offline queue works but lacks persistent shop context on restart
+- **Fix**: Medium
+- **Priority**: Under review - shopId included in queue entries
+

@@ -1,0 +1,37 @@
+# Normalize line endings on commit; check out LF by default.
+* text=auto eol=lf
+
+# Shell scripts must stay LF.
+*.sh text eol=lf
+
+# Windows scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets — never convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.avif binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.jar binary
+*.so binary
+*.dylib binary
+*.dll binary
+*.keystore binary
+*.jks binary
+
+# Lockfiles are generated — keep them out of diffs/linguist noise.
+package-lock.json linguist-generated=true
+pubspec.lock linguist-generated=true

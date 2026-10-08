@@ -1,0 +1,4 @@
+# Endpoint-to-Screen Matrix
+
+| Screen | Endpoint | Request Params | Response (Expected) | Response (Actual) | Discrepancy | Priority |
+|--------|----------|---------------|---------------------|-------------------|-------------|----------|

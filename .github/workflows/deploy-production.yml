@@ -1,0 +1,58 @@
+name: Deploy Production
+
+# Production is a manual, gated deploy. Run it from the Actions tab (or
+# `gh workflow run deploy-production.yml`) and approve the "production"
+# environment when prompted.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm the production release'
+        required: true
+        default: ''
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Confirm intent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "::error::You must type 'deploy' to confirm the production release."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy to production
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Trigger backend deploy (Render)
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
+            echo "Backend production deploy triggered."
+          else
+            echo "::error::RENDER_PRODUCTION_DEPLOY_HOOK is not configured."
+            exit 1
+          fi
+
+      - name: Trigger frontend deploy (Vercel)
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_PRODUCTION_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$VERCEL_DEPLOY_HOOK" ]; then
+            curl -fsS -X POST "$VERCEL_DEPLOY_HOOK"
+            echo "Frontend production deploy triggered."
+          else
+            echo "::error::VERCEL_PRODUCTION_DEPLOY_HOOK is not configured."
+            exit 1
+          fi

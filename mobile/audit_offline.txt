@@ -1,0 +1,86 @@
+# Offline & Sync Functionality Audit
+
+## 1. Dashboard
+- **Offline Mechanism**: OfflineQueue.instance.count() check in _flushOffline()
+- **Error Handling**: SnackBar with dashboardSyncedOffline/pending messages
+- **Success Status**: No infinite loading; dashboard sync works when shop available
+- **Fix/Notes**: Phase 4 fix: dashboard flush works correctly when shopId available
+
+## 2. POS
+- **Offline Mechanism**: Offline queue adds sales with shopId
+- **Error Handling**: SnackBar with posNoNetwork on offline failure
+- **Success Status**: Offline queue works but lacks persistent shop context on restart
+- **Fix/Notes**: Under review - shopId included in queue entries; POS _loadShop() waits for valid shop
+
+## 3. Inventory
+- **Offline Mechanism**: N/A - no offline queue integration
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 4. Employees
+- **Offline Mechanism**: N/A
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 5. Expenses
+- **Offline Mechanism**: N/A - no offline queue integration
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 6. Customers
+- **Offline Mechanism**: N/A - no offline queue integration
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 7. Reports
+- **Offline Mechanism**: N/A - read-only data
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 8. Support
+- **Offline Mechanism**: N/A - no offline queue
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 9. Receipt Settings
+- **Offline Mechanism**: N/A - no offline queue
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 10. More/Sync Status
+- **Offline Mechanism**: OfflineQueue.instance.count() + GET /sync/status + SyncEngine.flush()
+- **Error Handling**: Sync status display + SnackBar with sync result
+- **Success Status**: Working sync status display + manual sync trigger
+- **Fix/Notes**: Working structure; manual sync via FAB in More page
+
+## 11. Profile
+- **Offline Mechanism**: N/A
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 12. Loans
+- **Offline Mechanism**: N/A - no offline queue integration
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 13. Notifications
+- **Offline Mechanism**: N/A - no offline queue
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+
+## 14. Shop Management
+- **Offline Mechanism**: N/A - no offline queue
+- **Error Handling**: N/A
+- **Success Status**: N/A
+- **Fix/Notes**: N/A
+

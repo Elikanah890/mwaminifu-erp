@@ -1,0 +1,32 @@
+# Shop Context Problems Audit
+
+## shops[0] assumption
+- **Description**: Multiple screens assume the first shop in the list is the active shop without waiting for ShopBloc to load
+- **Screens Affected**: Dashboard, POS, Inventory, Reports, Receipt Settings, Expenses, Customers, Loans
+- **Root Cause**: Screens read activeShopId in initState() but shops may not be loaded yet; some screens listen to ShopBloc state changes via BlocListener, but initial read may be stale
+- **Fix**: Use BlocListener + BlocBuilder pattern; always read activeShopId from current ShopBloc state, not from assumption
+
+## Employee shop assignment
+- **Description**: Employees are assigned to one shop at login, but _resolveActiveShopId() prioritizes preferredShopId from auth, which may not be in their shop list
+- **Screens Affected**: Employees, POS, Inventory, All shop-scoped features
+- **Root Cause**: _resolveActiveShopId() in shop_bloc.dart previously prioritized stored ID over preferredShopId; fixed in Phase 2 by reversing priority
+- **Fix**: preferredShopId from AuthState now takes priority over shops.first.id; ensures employees get their assigned shop
+
+## Shop resolution priority
+- **Description**: Old priority: stored ID → preferredShopId → shops.first.id; New priority: preferredShopId → stored ID → shops.first.id
+- **Screens Affected**: All multi-shop owners and employees
+- **Root Cause**: Old logic caused employees to get wrong shop (shops.first.id) instead of their assigned shop
+- **Fix**: Phase 2 fix: preferredShopId now checked first, ensuring employees get their assigned shop from login
+
+## No shops loaded on first render
+- **Description**: Screens that read activeShopId in initState() before ShopBloc loads get null, causing early return and blank screens
+- **Screens Affected**: Dashboard, POS, Inventory, Customers, Expenses, Loans
+- **Root Cause**: initState() runs before ShopBloc emits ShopLoaded; some screens have BlocListener that reloads on shop change, but initial render may be blank
+- **Fix**: Use WidgetsBinding.instance.addPostFrameCallback or BlocListener to ensure data loads after shop is available
+
+## Shop switch doesn't refresh dependent data
+- **Description**: When shop is switched via dropdown, some screens refresh via BlocListener but others don't
+- **Screens Affected**: Dashboard, Reports, Inventory, POS
+- **Root Cause**: Dashboard uses _loadDashboard(id) called when activeShopId != null && _dashData == null; Inventory has listener; Reports checks state.activeShopId != _shopId but only updates _shopId, doesn't force reload; POS has listener
+- **Fix**: Ensure all screens force data reload when activeShopId changes via appropriate pattern (BlocListener, setState after listener)
+

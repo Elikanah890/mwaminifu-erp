@@ -1,0 +1,82 @@
+# API Contract Audit
+
+## GET /notifications
+- **Flutter Request**: api.get('/notifications') - no shopId parameter
+- **Expected Response**: Notification list for the user
+- **Actual Response**: May return all notifications or fail without shop context
+- **Discrepancy**: Calls /notifications without shopId - may return wrong data or fail silently
+- **Fix**: Add shopId parameter to the call or ensure proper filtering
+- **Priority**: Medium
+
+## GET /shops/:shopId/dashboard
+- **Flutter Request**: api.get('/shops/$shopId/dashboard') - uses shopId from ShopBloc
+- **Expected Response**: Dashboard KPIs data
+- **Actual Response**: Dashboard data loads correctly when shop is available
+- **Discrepancy**: Race condition with postFrameCallback; fixed by using BlocListener + BlocBuilder
+- **Fix**: Removed postFrameCallback; use direct data loading in build() method
+- **Priority**: Critical
+
+## GET /shops/:shopId/reports/:path
+- **Flutter Request**: api.get('/shops/$shopId/reports/$path', queryParameters: {from, to}) - uses shopId and date filters
+- **Expected Response**: Report data for all 9 types
+- **Actual Response**: 2 of 9 types (employees, paymentMethods) have empty data sections in _buildDataSection
+- **Discrepancy**: Report types employees and paymentMethods have empty _buildDataSection cases
+- **Fix**: The data loading functions _employeesData and _paymentMethodsData already exist and work; the issue was the switch statement having bare 'break' statements for these types - fixed
+- **Priority**: High
+
+## POST /shops/:shopId/sales
+- **Flutter Request**: api.post('/shops/$_shopId/sales', data: {'items', 'customerId', 'payments'})
+- **Expected Response**: Sale creation response with receiptNumber, saleDate, grandTotal
+- **Actual Response**: Sale creation works correctly; offline queue adds with shopId
+- **Discrepancy**: Offline queue includes shopId; POS waits for shop to load before enabling
+- **Fix**: POS _loadShop() waits for valid activeShopId before enabling POS functionality
+- **Priority**: Critical
+
+## GET /shops/:shopId/products
+- **Flutter Request**: api.get('/shops/$shopId/products') - uses shopId from ShopBloc
+- **Expected Response**: Product list with pagination/filtering
+- **Actual Response**: Product list works correctly with proper loading/error/empty states
+- **Discrepancy**: Working structure
+- **Fix**: N/A - working correctly
+- **Priority**: None
+
+## GET /shops/:shopId/settings
+- **Flutter Request**: api.get('/shops/:shopId/settings') - uses shopId from ShopBloc
+- **Expected Response**: Receipt settings data (header, footer, tax, currency, language, printer)
+- **Actual Response**: Settings load correctly when shop is available
+- **Discrepancy**: Owner-only access; employees cannot access settings
+- **Fix**: Owner-only access enforced; employees cannot navigate to receipt settings
+- **Priority**: High
+
+## GET /shops/:shopId/employees
+- **Flutter Request**: api.get('/shops/:shopId/employees') - uses shopId from ShopBloc
+- **Expected Response**: Employee list for the shop
+- **Actual Response**: Employee page previously blocked by !_isOwner guard; fixed
+- **Discrepancy**: Employees page now read-only accessible; employees can view their assigned employees
+- **Fix**: Removed !_isOwner guard; employees can view employees list without edit/toggle capabilities
+- **Priority**: Critical
+
+## POST /shops/:shopId/products
+- **Flutter Request**: api.post('/shops/:shopId/products', data: {name, sku, costPrice, sellingPrice, stockQuantity, reorderLevel, unit})
+- **Expected Response**: New product creation response
+- **Actual Response**: Product creation works correctly with proper states
+- **Discrepancy**: Working structure with FAB visibility gated by permission
+- **Fix**: N/A - working correctly
+- **Priority**: None
+
+## PUT /products/:id
+- **Flutter Request**: api.put('/products/:id', data: {name, sku, costPrice, sellingPrice, stockQuantity, reorderLevel, unit})
+- **Expected Response**: Product update response
+- **Actual Response**: Product update works correctly
+- **Discrepancy**: Working structure
+- **Fix**: N/A - working correctly
+- **Priority**: None
+
+## GET /users/me
+- **Flutter Request**: api.get('/users/me') - no parameters
+- **Expected Response**: User profile data with permissions, shops
+- **Actual Response**: User profile loaded correctly on Login/User load; _onLoadUser fetches and stores profile
+- **Discrepancy**: Working profile loading with fallback to persisted profile on offline
+- **Fix**: Verified - _onLoadUser correctly handles offline case by reading from PersistenceStore
+- **Priority**: High
+

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment — never commit real secrets. Keep the placeholder template.
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+
+# Prisma — NOTE: migrations ARE tracked (required for production
+# `prisma migrate deploy`). Only local SQLite/DB files are ignored. See root
+# .gitignore for *.db.
