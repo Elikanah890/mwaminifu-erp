@@ -9,10 +9,13 @@ import { useI18n } from '@/lib/context/I18nContext';
 export default function PwaPrompts() {
   const { canInstall, isIos, installed, dismissed, promptInstall, dismissInstall, updateReady, updateNow, updateLater } = usePwa();
   const { locale } = useI18n();
-  const [iosHint, setIosHint] = useState(false);
+  const [helpHint, setHelpHint] = useState(false);
   const sw = locale === 'sw';
 
-  const showInstall = !installed && !dismissed && (canInstall || isIos);
+  // Show the install card until the app is installed or explicitly dismissed.
+  // It does not depend on the native prompt being ready, so the install entry
+  // point is always discoverable (with manual steps as a fallback).
+  const showInstall = !installed && !dismissed;
 
   return (
     <>
@@ -73,7 +76,7 @@ export default function PwaPrompts() {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <button
-                onClick={() => (canInstall ? promptInstall() : setIosHint((v) => !v))}
+                onClick={() => (canInstall ? promptInstall() : setHelpHint((v) => !v))}
                 className="btn-gold px-3 py-1.5 text-xs"
               >
                 {sw ? 'Sakinisha' : 'Install'}
@@ -86,18 +89,22 @@ export default function PwaPrompts() {
         )}
       </AnimatePresence>
 
-      {/* iOS inline hint */}
+      {/* Manual install instructions (shown when the native prompt isn't ready) */}
       <AnimatePresence>
-        {showInstall && iosHint && (
+        {showInstall && helpHint && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
             className="fixed inset-x-4 bottom-24 z-[185] mx-auto max-w-md rounded-2xl border border-border bg-card p-4 text-sm shadow-2xl sm:left-auto sm:right-6 sm:mx-0"
           >
-            <p className="flex items-center gap-2 font-semibold text-foreground">
-              <Share size={16} className="text-secondary" />
-              {sw ? 'Bonyeza Share kisha "Ongeza kwenye Home Screen"' : 'Tap Share, then "Add to Home Screen"'}
+            <p className="flex items-start gap-2 font-semibold text-foreground">
+              <Share size={16} className="mt-0.5 shrink-0 text-secondary" />
+              {isIos
+                ? (sw ? 'Bonyeza Share kisha "Ongeza kwenye Home Screen"' : 'Tap Share, then "Add to Home Screen"')
+                : (sw
+                    ? 'Fungua menu ya browser (⋮) kisha chagua "Install Mwaminifu"'
+                    : 'Open the browser menu (⋮) and choose "Install Mwaminifu"')}
             </p>
           </motion.div>
         )}

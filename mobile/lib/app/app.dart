@@ -190,7 +190,7 @@ class MainShell extends StatelessWidget {
         final l10n = AppLocalizations.of(context);
         final auth = context.read<AuthBloc>();
         final showPos = auth.isEmployee || auth.hasPermission(Permission.posWrite);
-        final showReports = auth.isEmployee || auth.hasPermission(Permission.reportsRead);
+        final showReports = auth.canViewReports;
 
         return Scaffold(
           body: child,

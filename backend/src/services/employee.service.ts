@@ -20,7 +20,12 @@ export const FULL_OPERATIONAL_PERMISSIONS = [
   'inventory:write',
   'expenses:write',
   'credit:write',
-  'reports:read',
+  // Spec 9.8.1 — reporting is split. These three are on for a full employee;
+  // activity log, loans, valuation and communications remain off by default
+  // but grantable. General Reports / Finance Overview are never grantable.
+  'reports:sales',
+  'reports:inventory',
+  'reports:credit',
 ];
 
 export class EmployeeService {

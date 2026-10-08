@@ -5,7 +5,7 @@ import {
   syncController, notificationController, adminController,
 } from '../controllers/index';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { requireRoles, requirePermission, requireShopAccess, requireEntityAccess, requireActiveSubscription } from '../middlewares/permission.middleware';
+import { requireRoles, requirePermission, requireShopAccess, requireEntityAccess, requireActiveSubscription, requireOwnerOnly } from '../middlewares/permission.middleware';
 import { adminLimiter } from '../middlewares/rateLimit.middleware';
 import { validate } from '../middlewares/validation.middleware';
 import { agentPortalController } from '../controllers/agent-portal.controller';
@@ -109,6 +109,7 @@ router.put('/shifts/:id/close', authMiddleware, requireActiveSubscription(), req
 // Inventory routes
 router.get('/shops/:shopId/products', authMiddleware, requireShopAccess(), inventoryController.list.bind(inventoryController));
 router.get('/shops/:shopId/products/low-stock', authMiddleware, requireShopAccess(), inventoryController.lowStock.bind(inventoryController));
+router.get('/shops/:shopId/products/price-review', authMiddleware, requireShopAccess(), inventoryController.priceReview.bind(inventoryController));
 router.get('/shops/:shopId/products/by-barcode/:barcode', authMiddleware, requireShopAccess(), inventoryController.byBarcode.bind(inventoryController));
 router.get('/shops/:shopId/products/generate-barcode', authMiddleware, requireShopAccess(), inventoryController.generateBarcode.bind(inventoryController));
 router.post('/shops/:shopId/products', authMiddleware, requirePermission('inventory:write'), validate(createProductSchema), inventoryController.create.bind(inventoryController));
@@ -167,17 +168,17 @@ router.get('/customers/:id/statement', authMiddleware, requireEntityAccess('cust
 router.post('/customers/:id/write-off', authMiddleware, requireEntityAccess('customer'), requireRoles('BUSINESS_OWNER'), validate(writeOffSchema), creditController.writeOff.bind(creditController));
 
 // Audit log routes
-router.get('/shops/:shopId/audit-logs', authMiddleware, requireShopAccess(), requireRoles('BUSINESS_OWNER'), auditLogController.list.bind(auditLogController));
-router.get('/shops/:shopId/audit-logs/export', authMiddleware, requireShopAccess(), requireRoles('BUSINESS_OWNER'), auditLogController.export.bind(auditLogController));
+router.get('/shops/:shopId/audit-logs', authMiddleware, requireShopAccess(), requirePermission('reports:activity_log'), auditLogController.list.bind(auditLogController));
+router.get('/shops/:shopId/audit-logs/export', authMiddleware, requireShopAccess(), requirePermission('reports:activity_log'), auditLogController.export.bind(auditLogController));
 router.put('/shops/:shopId/audit-logs/:id', authMiddleware, requireShopAccess(), requireRoles('BUSINESS_OWNER'), validate(auditDeleteSchema), auditLogController.softDelete.bind(auditLogController));
 router.post('/shops/:shopId/audit-logs/bulk-delete', authMiddleware, requireShopAccess(), requireRoles('BUSINESS_OWNER'), validate(auditBulkDeleteSchema), auditLogController.bulkSoftDelete.bind(auditLogController));
 
 // Analytics routes (period-based reporting with per-product analysis)
-router.get('/shops/:shopId/analytics/sales', authMiddleware, requireShopAccess(), requirePermission('reports:read'), analyticsController.sales.bind(analyticsController));
-router.get('/shops/:shopId/analytics/inventory', authMiddleware, requireShopAccess(), requirePermission('reports:read'), analyticsController.inventory.bind(analyticsController));
-router.get('/shops/:shopId/analytics/profit', authMiddleware, requireShopAccess(), requirePermission('reports:read'), analyticsController.profit.bind(analyticsController));
-router.get('/shops/:shopId/analytics/valuation', authMiddleware, requireShopAccess(), requirePermission('reports:read'), analyticsController.valuation.bind(analyticsController));
-router.get('/shops/:shopId/finance/overview', authMiddleware, requireShopAccess(), requirePermission('reports:read'), analyticsController.financeOverview.bind(analyticsController));
+router.get('/shops/:shopId/analytics/sales', authMiddleware, requireShopAccess(), requirePermission('reports:sales'), analyticsController.sales.bind(analyticsController));
+router.get('/shops/:shopId/analytics/inventory', authMiddleware, requireShopAccess(), requirePermission('reports:inventory'), analyticsController.inventory.bind(analyticsController));
+router.get('/shops/:shopId/analytics/profit', authMiddleware, requireShopAccess(), requireOwnerOnly(), analyticsController.profit.bind(analyticsController));
+router.get('/shops/:shopId/analytics/valuation', authMiddleware, requireShopAccess(), requirePermission('reports:valuation'), analyticsController.valuation.bind(analyticsController));
+router.get('/shops/:shopId/finance/overview', authMiddleware, requireShopAccess(), requireOwnerOnly(), analyticsController.financeOverview.bind(analyticsController));
 
 // Employee dashboard & activity routes
 router.get('/employee/dashboard', authMiddleware, employeeDashboardController.dashboard.bind(employeeDashboardController));
@@ -236,16 +237,38 @@ router.put('/shops/:shopId/recurring-expenses/:id/toggle', authMiddleware, requi
 router.delete('/shops/:shopId/recurring-expenses/:id', authMiddleware, requireShopAccess(), requireRoles('BUSINESS_OWNER'), recurringController.remove.bind(recurringController));
 
 // Report routes
-router.get('/shops/:shopId/reports/sales', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.sales.bind(reportController));
-router.get('/shops/:shopId/reports/inventory', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.inventory.bind(reportController));
-router.get('/shops/:shopId/reports/profit', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.profit.bind(reportController));
-router.get('/shops/:shopId/reports/expenses', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.expenses.bind(reportController));
-router.get('/shops/:shopId/reports/credit', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.credit.bind(reportController));
-router.get('/shops/:shopId/reports/loans', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.loans.bind(reportController));
-router.get('/shops/:shopId/reports/cashflow', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.cashFlow.bind(reportController));
-router.get('/shops/:shopId/reports/employees', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.employees.bind(reportController));
-router.get('/shops/:shopId/reports/payment-methods', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.paymentMethods.bind(reportController));
-router.get('/shops/:shopId/reports/:type/export', authMiddleware, requireShopAccess(), requirePermission('reports:read'), reportController.export.bind(reportController));
+router.get('/shops/:shopId/reports/sales', authMiddleware, requireShopAccess(), requirePermission('reports:sales'), reportController.sales.bind(reportController));
+router.get('/shops/:shopId/reports/inventory', authMiddleware, requireShopAccess(), requirePermission('reports:inventory'), reportController.inventory.bind(reportController));
+router.get('/shops/:shopId/reports/profit', authMiddleware, requireShopAccess(), requireOwnerOnly(), reportController.profit.bind(reportController));
+router.get('/shops/:shopId/reports/expenses', authMiddleware, requireShopAccess(), requireOwnerOnly(), reportController.expenses.bind(reportController));
+router.get('/shops/:shopId/reports/credit', authMiddleware, requireShopAccess(), requirePermission('reports:credit'), reportController.credit.bind(reportController));
+router.get('/shops/:shopId/reports/loans', authMiddleware, requireShopAccess(), requirePermission('reports:loans'), reportController.loans.bind(reportController));
+router.get('/shops/:shopId/reports/cashflow', authMiddleware, requireShopAccess(), requireOwnerOnly(), reportController.cashFlow.bind(reportController));
+router.get('/shops/:shopId/reports/employees', authMiddleware, requireShopAccess(), requirePermission('reports:activity_log'), reportController.employees.bind(reportController));
+router.get('/shops/:shopId/reports/payment-methods', authMiddleware, requireShopAccess(), requirePermission('reports:sales'), reportController.paymentMethods.bind(reportController));
+// Export honours the same gating as the report itself (prevents an employee
+// from exporting an owner-only report they cannot view).
+const EXPORT_PERMISSIONS: Record<string, string> = {
+  sales: 'reports:sales',
+  inventory: 'reports:inventory',
+  credit: 'reports:credit',
+  loans: 'reports:loans',
+  valuation: 'reports:valuation',
+  employees: 'reports:activity_log',
+  'activity-log': 'reports:activity_log',
+};
+const OWNER_ONLY_EXPORTS = new Set(['profit', 'expenses', 'cashflow', 'general', 'finance', 'finance-overview']);
+router.get(
+  '/shops/:shopId/reports/:type/export',
+  authMiddleware,
+  requireShopAccess(),
+  (req, res, next) => {
+    const type = String(req.params.type).toLowerCase();
+    if (OWNER_ONLY_EXPORTS.has(type)) return requireOwnerOnly()(req, res, next);
+    return requirePermission(EXPORT_PERMISSIONS[type] ?? 'reports:sales')(req, res, next);
+  },
+  reportController.export.bind(reportController)
+);
 
 // Sync routes
 router.post('/sync/push', authMiddleware, validate(syncPushSchema), requireShopAccess(), syncController.push.bind(syncController));
@@ -435,6 +458,9 @@ router.get('/admin/settings', ...adminAuth, adminController.getSettings.bind(adm
 router.put('/admin/settings', ...adminAuth, validate(updateSettingsSchema), adminController.updateSettings.bind(adminController));
 
 router.get('/admin/platform-stats', ...adminAuth, adminController.platformStats.bind(adminController));
+
+// Active sessions (Spec 4.3 — 2-concurrent-session limit)
+router.get('/admin/sessions', ...adminAuth, adminController.sessions.bind(adminController));
 
 // Agent self-service routes
 router.post('/agents/onboard', authMiddleware, requireRoles('AGENT'), validate(onboardBusinessSchema), adminController.onboardBusiness.bind(adminController));

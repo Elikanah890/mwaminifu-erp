@@ -31,8 +31,8 @@ void main() {
   });
 
   group('Permission.fullOperational', () {
-    test('contains all eight operational permissions', () {
-      expect(Permission.fullOperational, hasLength(8));
+    test('contains the standard operational + grantable report permissions', () {
+      expect(Permission.fullOperational, hasLength(10));
       expect(Permission.fullOperational, containsAll([
         Permission.posWrite,
         Permission.posRefund,
@@ -41,8 +41,18 @@ void main() {
         Permission.inventoryWrite,
         Permission.expensesWrite,
         Permission.creditWrite,
-        Permission.reportsRead,
+        Permission.reportsSales,
+        Permission.reportsInventory,
+        Permission.reportsCredit,
       ]));
+      expect(Permission.fullOperational, isNot(contains(Permission.reportsGeneral)));
+      expect(Permission.fullOperational, isNot(contains(Permission.reportsFinanceOverview)));
+    });
+
+    test('hasAnyReport is false for an employee with no report permissions', () {
+      expect(Permission.hasAnyReport('EMPLOYEE', {}), isFalse);
+      expect(Permission.hasAnyReport('EMPLOYEE', {'reports:sales'}), isTrue);
+      expect(Permission.hasAnyReport('BUSINESS_OWNER', {}), isTrue);
     });
   });
 
@@ -56,10 +66,10 @@ void main() {
         'id': '2',
         'name': 'B',
         'role': 'EMPLOYEE',
-        'permissions': ['pos:write', 'reports:read'],
+        'permissions': ['pos:write', 'reports:sales'],
       });
       expect(employee.isEmployee, isTrue);
-      expect(employee.permissions, ['pos:write', 'reports:read']);
+      expect(employee.permissions, ['pos:write', 'reports:sales']);
     });
   });
 }

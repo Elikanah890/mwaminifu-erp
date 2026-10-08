@@ -17,8 +17,7 @@ const PER_PAGE = 15;
 interface BusinessDetail {
   id: string;
   name: string;
-  phone: string;
-  email?: string | null;
+  // Spec 12.2 — Agents do not see owner contact details.
   isActive: boolean;
   isPinSet: boolean;
   createdAt: string;
@@ -83,7 +82,7 @@ export default function AgentCustomersPage() {
   return (
     <PageWrapper title="My Customers" description="Businesses you have registered" breadcrumb={['Agent', 'My Customers']}>
       <Reveal className="flex flex-wrap items-center gap-3 mb-6">
-        <SearchBar value={search} onChange={(v) => setSearch(v)} placeholder="Search business name, phone..." />
+        <SearchBar value={search} onChange={(v) => setSearch(v)} placeholder="Search business name..." />
         <select className="input-field max-w-[160px]" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All Status</option>
           <option value="active">Active</option>
@@ -106,7 +105,7 @@ export default function AgentCustomersPage() {
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                 <tr className="border-b border-border">
                   <th className="py-3 px-6 font-semibold">Business</th>
-                  <th className="py-3 px-6 font-semibold">Phone</th>
+                  <th className="py-3 px-6 font-semibold">Location</th>
                   <th className="py-3 px-6 font-semibold">Shops</th>
                   <th className="py-3 px-6 font-semibold">Status</th>
                   <th className="py-3 px-6 font-semibold">Registered</th>
@@ -116,7 +115,7 @@ export default function AgentCustomersPage() {
                 {businesses.map((b) => (
                   <tr key={b.id} className="cursor-pointer transition-colors hover:bg-muted" onClick={() => openDetail(b.id)}>
                     <td className="py-3 px-6 font-medium text-foreground">{b.name}</td>
-                    <td className="py-3 px-6 text-muted-foreground">{b.phone}</td>
+                    <td className="py-3 px-6 text-muted-foreground">{b.ownedShops?.[0]?.address || b.ownedShops?.[0]?.name || '-'}</td>
                     <td className="py-3 px-6 text-muted-foreground">{b._count?.ownedShops ?? b.ownedShops?.length ?? 0}</td>
                     <td className="py-3 px-6">
                       <Pill tone={!b.isActive ? 'gray' : b.isPinSet ? 'green' : 'amber'}>
@@ -144,7 +143,7 @@ export default function AgentCustomersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-primary">{detail.name}</h3>
-                <p className="text-muted-foreground">{detail.phone} {detail.email ? `· ${detail.email}` : ''}</p>
+                <p className="text-muted-foreground">Registered business</p>
               </div>
               <Pill tone={!detail.isActive ? 'gray' : detail.isPinSet ? 'green' : 'amber'}>
                 {!detail.isActive ? 'Inactive' : detail.isPinSet ? 'Active' : 'Pending'}

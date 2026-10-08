@@ -119,13 +119,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   bool hasPermission(String permission) {
     final user = _currentUser;
     if (user == null) return false;
-    if (user.isEmployee) return true;
     return Permission.granted(
       role: user.role,
       permissions: _permissions,
       permission: permission,
     );
   }
+
+  /// True when the user may open the Reports area (any report permission).
+  bool get canViewReports =>
+      Permission.hasAnyReport(_currentUser?.role ?? '', _permissions);
 
   String? get currentShopId {
     final state = this.state;

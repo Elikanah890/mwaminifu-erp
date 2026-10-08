@@ -85,12 +85,20 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       if (reloadingRef.current) window.location.reload();
     };
 
-    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((reg) => {
-        registration = reg;
-        watchForUpdates(reg);
-        interval = setInterval(() => reg.update().catch(() => undefined), 60 * 60 * 1000);
-      }).catch(() => undefined);
+    if ('serviceWorker' in navigator) {
+      // Register in every environment so the PWA install prompt works during
+      // development too. In dev the worker is tagged with `?mode=dev` so it
+      // never caches Next's dev chunks (which would serve stale code).
+      const isDev = process.env.NODE_ENV !== 'production';
+      const swUrl = isDev ? '/sw.js?mode=dev' : '/sw.js';
+      navigator.serviceWorker
+        .register(swUrl, { scope: '/', updateViaCache: 'none' })
+        .then((reg) => {
+          registration = reg;
+          watchForUpdates(reg);
+          interval = setInterval(() => reg.update().catch(() => undefined), 60 * 60 * 1000);
+        })
+        .catch(() => undefined);
       navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
     }
 

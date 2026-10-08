@@ -14,6 +14,9 @@ import StatusBadge from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Plus, KeyRound, ShieldCheck, Activity } from 'lucide-react';
 
+// Spec 9.8.1 — reporting is split into individually-grantable permissions.
+// General Reports and Finance Overview are OWNER-ONLY and intentionally absent
+// here (they can never be granted to an employee).
 const PERMISSIONS: Array<{ id: string; label: string }> = [
   { id: 'pos:write', label: 'Record sale' },
   { id: 'pos:refund', label: 'Process refund' },
@@ -22,7 +25,13 @@ const PERMISSIONS: Array<{ id: string; label: string }> = [
   { id: 'inventory:write', label: 'Edit inventory' },
   { id: 'expenses:write', label: 'Record expenses' },
   { id: 'credit:write', label: 'Manage credit' },
-  { id: 'reports:read', label: 'View reports' },
+  { id: 'reports:sales', label: 'View sales report' },
+  { id: 'reports:inventory', label: 'View inventory report' },
+  { id: 'reports:credit', label: 'View credit (deni) report' },
+  { id: 'reports:activity_log', label: 'View staff activity log' },
+  { id: 'reports:loans', label: 'View business loans report' },
+  { id: 'reports:valuation', label: 'View stock value / business valuation' },
+  { id: 'reports:communications', label: 'Send SMS / WhatsApp (Premium)' },
   { id: 'loans:read', label: 'View loans' },
   { id: 'loans:write', label: 'Manage loans' },
   { id: 'cash:read', label: 'View cash' },

@@ -16,11 +16,20 @@ build/
 .next/
 out/
 coverage/
+.turbo/
 *.tsbuildinfo
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+
+# Dart/Flutter tooling (any location)
+.dart_tool/
 
 # ---------------------------------------------------------------------------
 # Flutter / Dart

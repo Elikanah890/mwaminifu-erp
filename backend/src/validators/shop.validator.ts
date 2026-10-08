@@ -56,6 +56,8 @@ export const createProductSchema = z.object({
   unitConversion: z.number().positive().optional(),
   images: z.array(z.string()).optional(),
   barcode: z.string().optional(),
+  // Spec 8.4.1 — explicit Owner-only override when saving at/below cost.
+  priceOverride: z.boolean().optional(),
 });
 
 export const adjustStockSchema = z.object({
@@ -267,6 +269,7 @@ export const createProductUnitConfigSchema = z.object({
   maxPrice: z.number().min(0).optional(),
   pricingMode: z.enum(['FIXED', 'FLUCTUATING']).optional(),
   isDefault: z.boolean().optional(),
+  priceOverride: z.boolean().optional(),
 });
 
 export const createSupplierSchema = z.object({

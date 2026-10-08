@@ -16,7 +16,19 @@ class Permission {
   static const inventoryWrite = 'inventory:write';
   static const expensesWrite = 'expenses:write';
   static const creditWrite = 'credit:write';
-  static const reportsRead = 'reports:read';
+
+  /// Reporting permissions (Spec 9.8.1) — individually grantable.
+  static const reportsSales = 'reports:sales';
+  static const reportsInventory = 'reports:inventory';
+  static const reportsCredit = 'reports:credit';
+  static const reportsActivityLog = 'reports:activity_log';
+  static const reportsLoans = 'reports:loans';
+  static const reportsValuation = 'reports:valuation';
+  static const reportsCommunications = 'reports:communications';
+
+  /// Owner-only reports — NEVER granted to employees.
+  static const reportsGeneral = 'reports:general';
+  static const reportsFinanceOverview = 'reports:finance_overview';
 
   /// Owner-only financial permissions (not part of the default employee set).
   static const loansRead = 'loans:read';
@@ -34,8 +46,17 @@ class Permission {
     inventoryWrite,
     expensesWrite,
     creditWrite,
-    reportsRead,
+    reportsSales,
+    reportsInventory,
+    reportsCredit,
   ];
+
+  /// True when the user can open the Reports area (any report permission).
+  static bool hasAnyReport(String role, Set<String> permissions) {
+    if (role == 'BUSINESS_OWNER' || role == 'SYSTEM_OWNER') return true;
+    return const [reportsSales, reportsInventory, reportsCredit, reportsActivityLog, reportsLoans, reportsValuation, reportsCommunications]
+        .any(permissions.contains);
+  }
 
   /// Pure permission check. Owners always pass; employees are checked against
   /// their permission set (mirrors backend `requirePermission`).

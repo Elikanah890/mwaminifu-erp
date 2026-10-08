@@ -20,8 +20,7 @@ export interface AgentPortalListQuery {
 export interface AgentBusiness {
   id: string;
   name: string;
-  phone: string;
-  email: string | null;
+  // Spec 12.2 — an Agent must NOT see the owner's phone or email.
   isActive: boolean;
   isPinSet: boolean;
   createdAt: string;
@@ -122,11 +121,9 @@ export class AgentPortalService {
     };
 
     if (query.search) {
-      where.OR = [
-        { name: { contains: query.search, ...INSENSITIVE } },
-        { phone: { contains: query.search, ...INSENSITIVE } },
-        { email: { contains: query.search, ...INSENSITIVE } },
-      ];
+      // Spec 12.2 — search by business name only; Agents must not be able to
+      // probe owner phone/email.
+      where.OR = [{ name: { contains: query.search, ...INSENSITIVE } }];
     }
 
     if (query.status === 'active') where.isActive = true;
@@ -179,8 +176,6 @@ export class AgentPortalService {
         return {
           id: b.id,
           name: b.name,
-          phone: b.phone,
-          email: b.email,
           isActive: b.isActive,
           isPinSet: b.isPinSet,
           createdAt: b.createdAt.toISOString(),
@@ -247,8 +242,7 @@ export class AgentPortalService {
     return {
       id: business.id,
       name: business.name,
-      phone: business.phone,
-      email: business.email,
+      // Spec 12.2 — no owner contact details exposed to the Agent.
       isActive: business.isActive,
       isPinSet: business.isPinSet,
       createdAt: business.createdAt,

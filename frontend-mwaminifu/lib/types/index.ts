@@ -49,8 +49,7 @@ export interface AgentStats {
 export interface AgentBusiness {
   id: string;
   name: string;
-  phone: string;
-  email: string | null;
+  // Spec 12.2 — Agents never receive owner phone/email.
   isActive: boolean;
   isPinSet: boolean;
   createdAt: string;

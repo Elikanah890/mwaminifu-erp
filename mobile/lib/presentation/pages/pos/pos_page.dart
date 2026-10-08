@@ -24,6 +24,9 @@ class _PosPageState extends State<PosPage> {
   final List<CartItem> _cart = [];
   String _shopId = '';
   Map<String, dynamic>? _customer;
+  // Spec 8.8.1 — employees must open their shift before selling.
+  bool _shiftRequired = false;
+  bool _shiftOpen = true;
 
   @override
   void initState() {
@@ -39,8 +42,21 @@ class _PosPageState extends State<PosPage> {
     }
     if (shopId == null || shopId.isEmpty) return;
     _shopId = shopId;
+    final auth = context.read<AuthBloc>();
+    _shiftRequired = auth.currentUser?.isEmployee ?? false;
+    if (_shiftRequired) await _refreshShiftStatus();
     if (mounted) {
       context.read<ProductBloc>().add(LoadProducts(_shopId));
+    }
+  }
+
+  Future<void> _refreshShiftStatus() async {
+    try {
+      final res = await ApiClient().get('/shifts/active');
+      if (!mounted) return;
+      setState(() => _shiftOpen = res['data'] != null);
+    } catch (_) {
+      // Offline / unknown: do not block locally — the server still enforces it.
     }
   }
 
@@ -88,6 +104,28 @@ class _PosPageState extends State<PosPage> {
 
   Future<void> _checkout() async {
     if (_cart.isEmpty || _shopId.isEmpty) return;
+    // Spec 8.8.1 — block selling until the employee's shift is open.
+    if (_shiftRequired && !_shiftOpen) {
+      await _refreshShiftStatus();
+      if (!_shiftOpen) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Open your shift first'),
+            content: const Text(
+              'You must enter your Opening Cash Drawer Balance before recording a sale. '
+              'Open your shift, then try again.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) return;
     final l10n = AppLocalizations.of(context);
     final userId = context.read<AuthBloc>().currentUser?.id;
     final result = await _showPaymentSheet();

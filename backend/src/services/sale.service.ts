@@ -20,7 +20,8 @@ export class SaleService {
       clientId?: string;
       isOffline?: boolean;
       allowNegativeStock?: boolean;
-    }
+    },
+    opts: { requireOpenShift?: boolean } = {}
   ) {
     await shopService.verifyShopAccess(shopId, userId);
 
@@ -36,6 +37,16 @@ export class SaleService {
 
     if (data.suspended) {
       return this.suspendSale(shopId, userId, data);
+    }
+
+    // Spec 8.8.1 — a cashier must open their shift (opening drawer balance)
+    // before any sale can be recorded. Owners are not gated by default.
+    const openShift = await prisma.shift.findFirst({
+      where: { userId, shopId, isActive: true, status: 'OPEN' },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (opts.requireOpenShift && !openShift) {
+      throw { status: 422, code: 'SHIFT_REQUIRED', message: 'Open your shift first' };
     }
 
     const sale = await prisma.$transaction(async (tx) => {
@@ -174,6 +185,7 @@ export class SaleService {
           notes: data.notes,
           clientId: data.clientId ?? null,
           isOffline: data.isOffline ?? false,
+          shiftId: openShift?.id ?? null,
           syncStatus: 'SYNCED',
           items: {
             create: saleItems,

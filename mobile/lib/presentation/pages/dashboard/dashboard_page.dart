@@ -253,7 +253,7 @@ class _DashboardPageState extends State<DashboardPage> {
     if (auth.hasPermission(Permission.expensesWrite)) {
       actions.add(_QuickAction(l10n.dashboardAddExpense, Icons.money_off, AppTheme.teal, () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.dashboardAddExpense)))));
     }
-    if (auth.hasPermission(Permission.reportsRead)) {
+    if (auth.canViewReports) {
       actions.add(_QuickAction(l10n.dashboardReports, Icons.bar_chart, AppTheme.navy, () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Navigation to Reports disabled")))));
     }
 

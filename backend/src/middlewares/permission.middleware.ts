@@ -140,7 +140,7 @@ export function requirePermission(permission: string) {
 
     // Agent has limited permissions - only general operational ones
     if (req.user.role === 'AGENT') {
-      const agentAllowed = ['pos:write', 'inventory:read', 'reports:read'];
+      const agentAllowed = ['pos:write', 'inventory:read', 'reports:sales'];
       if (agentAllowed.includes(permission)) {
         next();
         return;
@@ -172,6 +172,34 @@ export function requirePermission(permission: string) {
     }
 
     next();
+  };
+}
+
+/**
+ * Owner-only guard for General Reports and Finance Overview (Spec 8.6 / 15).
+ * These are never grantable to employees, so this cannot be satisfied by any
+ * employee permission string.
+ */
+export function requireOwnerOnly() {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    if (req.user.role === 'SYSTEM_OWNER' || req.user.role === 'BUSINESS_OWNER') {
+      next();
+      return;
+    }
+    logger.warn(`Owner-only access denied for user ${req.user.userId} with role ${req.user.role}`);
+    res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'This report is available to the owner only' },
+      timestamp: new Date().toISOString(),
+    });
   };
 }
 

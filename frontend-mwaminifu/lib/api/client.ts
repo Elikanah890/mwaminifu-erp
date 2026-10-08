@@ -82,6 +82,7 @@ function sanitizeCustomers(resp: ApiPayload): ApiPayload {
       name: c.name,
       phone: c.phone,
       email: c.email,
+      creditLimit: c.creditLimit,
       outstandingBalance: c.outstandingBalance,
     })),
   };

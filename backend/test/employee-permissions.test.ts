@@ -14,13 +14,20 @@ describe('Employee V1 default permissions', () => {
       'inventory:write',
       'expenses:write',
       'credit:write',
-      'reports:read',
+      'reports:sales',
+      'reports:inventory',
+      'reports:credit',
     ]);
+  });
+
+  it('never includes the non-grantable General/Finance reports', () => {
+    expect(FULL_OPERATIONAL_PERMISSIONS).not.toContain('reports:general');
+    expect(FULL_OPERATIONAL_PERMISSIONS).not.toContain('reports:finance_overview');
   });
 
   it('is not mutated when read', () => {
     const snapshot = [...FULL_OPERATIONAL_PERMISSIONS];
     FULL_OPERATIONAL_PERMISSIONS.length = 0;
-    expect(snapshot).toHaveLength(8);
+    expect(snapshot).toHaveLength(10);
   });
 });

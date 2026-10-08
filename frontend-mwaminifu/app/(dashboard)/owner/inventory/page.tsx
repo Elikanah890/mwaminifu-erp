@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, ApiErrorException } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { Product, Category } from '@/lib/types';
@@ -103,30 +103,42 @@ export default function OwnerInventoryPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    // Spec 8.4.1 — selling price must be > cost. The Owner may explicitly
+    // override after a confirmation step.
+    const buildBody = (priceOverride: boolean) => ({
+      name: form.name,
+      sku: form.sku || undefined,
+      barcode: form.barcode || undefined,
+      categoryId: form.categoryId || undefined,
+      brand: form.brand || undefined,
+      supplier: form.supplier || undefined,
+      costPrice: Number(form.costPrice) || 0,
+      sellingPrice: Number(form.sellingPrice) || 0,
+      taxRate: Number(form.taxRate) || 0,
+      stockQuantity: Number(form.stockQuantity) || 0,
+      unit: form.unit,
+      reorderLevel: Number(form.reorderLevel) || 10,
+      description: form.description || undefined,
+      images,
+      ...(priceOverride ? { priceOverride: true } : {}),
+    });
+    const save = async (priceOverride: boolean) => {
+      if (editing) await apiClient.put(`/products/${editing.id}`, buildBody(priceOverride));
+      else await apiClient.post(`/shops/${activeShopId}/products`, buildBody(priceOverride));
+    };
     try {
-      const body = {
-        name: form.name,
-        sku: form.sku || undefined,
-        barcode: form.barcode || undefined,
-        categoryId: form.categoryId || undefined,
-        brand: form.brand || undefined,
-        supplier: form.supplier || undefined,
-        costPrice: Number(form.costPrice) || 0,
-        sellingPrice: Number(form.sellingPrice) || 0,
-        taxRate: Number(form.taxRate) || 0,
-        stockQuantity: Number(form.stockQuantity) || 0,
-        unit: form.unit,
-        reorderLevel: Number(form.reorderLevel) || 10,
-        description: form.description || undefined,
-        images,
-      };
-      if (editing) {
-        await apiClient.put(`/products/${editing.id}`, body);
-        toast(t('update'), 'success');
-      } else {
-        await apiClient.post(`/shops/${activeShopId}/products`, body);
-        toast(t('addProduct'), 'success');
+      try {
+        await save(false);
+      } catch (err) {
+        if (err instanceof ApiErrorException && err.code === 'PRICE_BELOW_COST') {
+          const proceed = window.confirm(`${err.message}\n\nSave anyway? This is an owner override.`);
+          if (!proceed) return;
+          await save(true);
+        } else {
+          throw err;
+        }
       }
+      toast(editing ? t('update') : t('addProduct'), 'success');
       setModalOpen(false);
       load();
     } catch (err) {

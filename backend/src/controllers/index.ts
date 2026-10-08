@@ -87,7 +87,9 @@ export class ShopController {
 export class SaleController {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const sale = await saleService.createSale(req.params.shopId, req.user!.userId, req.body);
+      const sale = await saleService.createSale(req.params.shopId, req.user!.userId, req.body, {
+        requireOpenShift: req.user!.role === 'EMPLOYEE',
+      });
       res.status(201).json({ success: true, data: sale, message: 'Sale completed', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -194,16 +196,23 @@ export class InventoryController {
     } catch (error) { next(error); }
   }
 
+  async priceReview(req: Request, res: Response, next: NextFunction) {
+    try {
+      const products = await inventoryService.listPriceReviewProducts(req.params.shopId);
+      res.json({ success: true, data: products, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const product = await inventoryService.createProduct(req.params.shopId, req.user!.userId, req.body);
+      const product = await inventoryService.createProduct(req.params.shopId, req.user!.userId, req.body, { isOwner: req.user!.role === 'BUSINESS_OWNER' });
       res.status(201).json({ success: true, data: product, message: 'Product created', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 
   async update(req: Request, res: Response, next: NextFunction) {
     try {
-      const product = await inventoryService.updateProduct(req.params.id, req.body);
+      const product = await inventoryService.updateProduct(req.params.id, req.body, { isOwner: req.user!.role === 'BUSINESS_OWNER' });
       res.json({ success: true, data: product, message: 'Product updated', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -1127,6 +1136,22 @@ export class AdminController {
     try {
       const stats = await adminService.getPlatformStats();
       res.json({ success: true, data: stats, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  // Spec 4.3 — active sessions for the AGAC Owner (limit 2).
+  async sessions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sessions = await prisma.refreshToken.findMany({
+        where: { userId: req.user!.userId, isRevoked: false, expiresAt: { gt: new Date() } },
+        select: { id: true, deviceId: true, ipAddress: true, createdAt: true, expiresAt: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({
+        success: true,
+        data: { count: sessions.length, max: 2, sessions },
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) { next(error); }
   }
 }

@@ -15,6 +15,52 @@ function generateEan13(): string {
   return [...digits, check].join('');
 }
 
+const PRICE_EPSILON = 0.001;
+
+/**
+ * Spec 8.4.1 — a unit's selling price must be STRICTLY greater than its cost.
+ * Cost is tracked per base unit, so a unit configuration's equivalent cost is
+ * `costPrice * baseUnits`.
+ */
+function isAtOrBelowCost(costPerBaseUnit: number, price: number, baseUnits = 1): boolean {
+  if (costPerBaseUnit <= 0) return false; // no meaningful cost to compare against
+  return price <= costPerBaseUnit * baseUnits + PRICE_EPSILON;
+}
+
+function priceErrorForProduct(
+  costPrice: number,
+  sellingPrice?: number | null,
+  minPrice?: number | null
+): string | null {
+  if (costPrice <= 0) return null;
+  if (minPrice != null && isAtOrBelowCost(costPrice, minPrice, 1)) {
+    return 'The minimum (fluctuating) price must be strictly greater than the cost price.';
+  }
+  if (sellingPrice != null && isAtOrBelowCost(costPrice, sellingPrice, 1)) {
+    return 'The selling price must be strictly greater than the cost price.';
+  }
+  return null;
+}
+
+function priceErrorForUnit(
+  costPrice: number,
+  cfg: { baseUnits: number; sellingPrice?: number | null; minPrice?: number | null; pricingMode?: string | null }
+): string | null {
+  if (costPrice <= 0) return null;
+  const equivalentCost = Math.round(costPrice * cfg.baseUnits * 100) / 100;
+  if (cfg.pricingMode === 'FLUCTUATING') {
+    if (cfg.minPrice == null) return 'A fluctuating unit needs a minimum price.';
+    if (isAtOrBelowCost(costPrice, cfg.minPrice, cfg.baseUnits)) {
+      return `The minimum price for "${cfg.baseUnits} base units" must be strictly greater than its cost (${equivalentCost}).`;
+    }
+    return null;
+  }
+  if (cfg.sellingPrice == null || isAtOrBelowCost(costPrice, cfg.sellingPrice, cfg.baseUnits)) {
+    return `The price for "${cfg.baseUnits} base units" must be strictly greater than its cost (${equivalentCost}).`;
+  }
+  return null;
+}
+
 export class InventoryService {
   async listProducts(shopId: string, filters: {
     page?: number;
@@ -108,10 +154,20 @@ export class InventoryService {
     baseUnitStock?: number;
     images?: string[];
     barcode?: string;
-  }) {
+    priceOverride?: boolean;
+  }, opts: { isOwner?: boolean } = {}) {
+    // Spec 8.4.1 — reject a selling/min price at or below cost unless the Owner
+    // has explicitly confirmed an override.
+    const priceError = priceErrorForProduct(data.costPrice || 0, data.sellingPrice, data.minPrice);
+    const overrideApproved = Boolean(opts.isOwner && data.priceOverride);
+    if (priceError && !overrideApproved) {
+      throw { status: 422, code: 'PRICE_BELOW_COST', message: priceError };
+    }
+
     return prisma.product.create({
       data: {
         shopId,
+        needsPriceReview: Boolean(priceError && overrideApproved),
         name: data.name,
         sku: data.sku,
         categoryId: data.categoryId,
@@ -158,11 +214,62 @@ export class InventoryService {
     images?: string[];
     barcode?: string;
     isActive?: boolean;
-  }) {
+    priceOverride?: boolean;
+  }, opts: { isOwner?: boolean } = {}) {
+    const existing = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { unitConfigs: true },
+    });
+    if (!existing) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Product not found' };
+    }
+
+    const { priceOverride, ...rest } = data;
+    const nextCost = rest.costPrice ?? existing.costPrice;
+    const nextSelling = rest.sellingPrice !== undefined ? rest.sellingPrice : existing.sellingPrice;
+    const nextMin = rest.minPrice !== undefined ? rest.minPrice : existing.minPrice;
+
+    const priceError = priceErrorForProduct(nextCost, nextSelling, nextMin);
+    const overrideApproved = Boolean(opts.isOwner && priceOverride);
+    // Reject only when the user is deliberately setting a price at/below cost.
+    // A pure cost-price edit is allowed (it just flags the product for review).
+    const priceProvided = rest.sellingPrice !== undefined || rest.minPrice !== undefined;
+    if (priceError && priceProvided && !overrideApproved) {
+      throw { status: 422, code: 'PRICE_BELOW_COST', message: priceError };
+    }
+
+    // Spec 8.4.1 — editing cost is allowed, but if it invalidates any existing
+    // price/range the product is flagged for review (including its unit configs).
+    const priceFieldsTouched =
+      rest.sellingPrice !== undefined || rest.minPrice !== undefined || rest.costPrice !== undefined;
+    let needsPriceReview = existing.needsPriceReview;
+    if (overrideApproved) {
+      needsPriceReview = false;
+    } else if (priceFieldsTouched) {
+      const anyUnitInvalid = existing.unitConfigs.some((cfg) => priceErrorForUnit(nextCost, cfg) != null);
+      needsPriceReview = Boolean(priceError) || anyUnitInvalid;
+    }
+
     return prisma.product.update({
       where: { id: productId },
-      data,
+      data: { ...rest, needsPriceReview },
     });
+  }
+
+  /** Recompute the needs_price_review flag for a product across its unit configs. */
+  async recomputePriceReview(productId: string): Promise<boolean> {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { unitConfigs: true },
+    });
+    if (!product) return false;
+    const review =
+      priceErrorForProduct(product.costPrice, product.sellingPrice, product.minPrice) != null ||
+      product.unitConfigs.some((cfg) => priceErrorForUnit(product.costPrice, cfg) != null);
+    if (review !== product.needsPriceReview) {
+      await prisma.product.update({ where: { id: productId }, data: { needsPriceReview: review } });
+    }
+    return review;
   }
 
   async deleteProduct(productId: string) {
@@ -307,9 +414,24 @@ export class InventoryService {
 
   async createUnitConfig(
     productId: string,
-    data: { unitName: string; baseUnits: number; sellingPrice: number; minPrice?: number; maxPrice?: number; pricingMode?: string; isDefault?: boolean }
+    data: { unitName: string; baseUnits: number; sellingPrice: number; minPrice?: number; maxPrice?: number; pricingMode?: string; isDefault?: boolean; priceOverride?: boolean },
+    opts: { isOwner?: boolean } = {}
   ) {
-    return prisma.productUnitConfig.create({
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { costPrice: true },
+    });
+    if (!product) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Product not found' };
+    }
+
+    const priceError = priceErrorForUnit(product.costPrice, data);
+    const overrideApproved = Boolean(opts.isOwner && data.priceOverride);
+    if (priceError && !overrideApproved) {
+      throw { status: 422, code: 'PRICE_BELOW_COST', message: priceError };
+    }
+
+    const created = await prisma.productUnitConfig.create({
       data: {
         productId,
         unitName: data.unitName,
@@ -321,10 +443,24 @@ export class InventoryService {
         isDefault: data.isDefault ?? false,
       },
     });
+    await this.recomputePriceReview(productId);
+    return created;
   }
 
   async deleteUnitConfig(id: string) {
-    return prisma.productUnitConfig.delete({ where: { id } });
+    const cfg = await prisma.productUnitConfig.findUnique({ where: { id }, select: { productId: true } });
+    const deleted = await prisma.productUnitConfig.delete({ where: { id } });
+    if (cfg) await this.recomputePriceReview(cfg.productId);
+    return deleted;
+  }
+
+  /** Products flagged for price review (cost edit invalidated a price). */
+  async listPriceReviewProducts(shopId: string) {
+    return prisma.product.findMany({
+      where: { shopId, needsPriceReview: true, isActive: true },
+      select: { id: true, name: true, costPrice: true, sellingPrice: true, minPrice: true, unitConfigs: true },
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   async findByBarcode(shopId: string, barcode: string) {
@@ -420,6 +556,9 @@ export class InventoryService {
         where: { id: p.id },
         data: { [field]: rounded },
       });
+      // A cost-bulk change can invalidate existing prices across unit configs,
+      // so re-evaluate the review flag for each affected product.
+      await this.recomputePriceReview(p.id);
     }
 
     return { updated: products.length };

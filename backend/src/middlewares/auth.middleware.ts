@@ -33,6 +33,23 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       }
     }
 
+    // Spec 4.7 — a business owner cannot use the app until their account has
+    // been activated via the registration OTP.
+    if (decoded.role === 'BUSINESS_OWNER') {
+      const owner = await prisma.user.findUnique({
+        where: { id: decoded.sub },
+        select: { isPhoneVerified: true },
+      });
+      if (owner && owner.isPhoneVerified === false) {
+        res.status(403).json({
+          success: false,
+          error: { code: 'ACTIVATION_REQUIRED', message: 'Activate your account with the OTP sent by SMS.' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
     req.user = {
       userId: decoded.sub,
       role: decoded.role,

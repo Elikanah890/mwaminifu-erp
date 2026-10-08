@@ -54,6 +54,7 @@ model User {
   isActive      Boolean   @default(true)
   isPinSet      Boolean   @default(false)
   isPhoneVerified Boolean @default(false)
+  activationOtpVerifiedAt DateTime?
   lastLoginAt   DateTime?
   failedLoginAttempts Int @default(0)
   blockedUntil  DateTime?
@@ -266,6 +267,7 @@ model Product {
   barcode         String?
   isActive        Boolean   @default(true)
   isService       Boolean   @default(false)
+  needsPriceReview Boolean  @default(false)
   saleItems       SaleItem[]
   stockAdjustments StockAdjustment[]
   unitConfigs     ProductUnitConfig[]
@@ -348,6 +350,7 @@ model Sale {
   syncStatus      SyncStatus  @default(SYNCED)
   clientId        String?
   isOffline       Boolean     @default(false)
+  shiftId         String?
   refundReason    String?
   refundedAt      DateTime?
   items           SaleItem[]

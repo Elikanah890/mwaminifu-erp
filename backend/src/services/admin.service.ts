@@ -287,10 +287,24 @@ export class AdminService {
       return { user, shop };
     });
 
+    // Spec 4.7 — send an account-activation OTP (not a welcome message). The
+    // owner enters it on first login to prove the phone number and activate.
+    const activationCode = generateOtp();
+    const activationMinutes = await settingsService.get('otpLifetimeMinutes');
+    const activationAppName = await settingsService.get('appName');
+    await prisma.otp.create({
+      data: {
+        phone: data.phone,
+        code: activationCode,
+        purpose: 'OWNER_ACTIVATION',
+        expiresAt: new Date(Date.now() + activationMinutes * 60 * 1000),
+        userId: result.user.id,
+      },
+    });
     await smsService.send(
       data.phone,
-      `Welcome to Mwaminifu! Your business "${result.shop.name}" has been set up. Download the app and login with your phone number: ${data.phone}`,
-      { purpose: 'OWNER_WELCOME', userId: result.user.id, shopId: result.shop.id }
+      `${activationAppName}: Your "${result.shop.name}" activation code is ${activationCode}. Valid for ${activationMinutes} minutes. Enter it in the app to activate your account.`,
+      { purpose: 'OWNER_ACTIVATION', userId: result.user.id, shopId: result.shop.id }
     );
 
     await auditService.log(createdBy, 'BUSINESS_OWNER_CREATED', {
@@ -1757,10 +1771,23 @@ export class AdminService {
       })),
     });
 
+    // Spec 4.7 — activation OTP on agent-led registration.
+    const onboardCode = generateOtp();
+    const onboardMinutes = await settingsService.get('otpLifetimeMinutes');
+    const onboardAppName = await settingsService.get('appName');
+    await prisma.otp.create({
+      data: {
+        phone: data.phone,
+        code: onboardCode,
+        purpose: 'OWNER_ACTIVATION',
+        expiresAt: new Date(Date.now() + onboardMinutes * 60 * 1000),
+        userId: user.id,
+      },
+    });
     await smsService.send(
       data.phone,
-      `Welcome to Mwaminifu! Your business "${data.shopName}" has been set up. Download the app and login with your phone number: ${data.phone}`,
-      { purpose: 'OWNER_WELCOME', userId: user.id, shopId: shop.id }
+      `${onboardAppName}: Your "${data.shopName}" activation code is ${onboardCode}. Valid for ${onboardMinutes} minutes. Enter it in the app to activate your account.`,
+      { purpose: 'OWNER_ACTIVATION', userId: user.id, shopId: shop.id }
     );
 
     return { user, shop };

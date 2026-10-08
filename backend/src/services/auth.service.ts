@@ -58,8 +58,11 @@ export class AuthService {
   }
 
   async verifyOtp(phone: string, code: string, purpose: 'LOGIN' | 'PIN_RESET' = 'LOGIN') {
+    // A first-time owner logs in with the OWNER_ACTIVATION code sent at
+    // registration (Spec 4.7); accept that alongside the normal LOGIN code.
+    const purposes = purpose === 'LOGIN' ? ['LOGIN', 'OWNER_ACTIVATION'] : [purpose];
     const otp = await prisma.otp.findFirst({
-      where: { phone, purpose, isUsed: false, expiresAt: { gte: new Date() } },
+      where: { phone, purpose: { in: purposes }, isUsed: false, expiresAt: { gte: new Date() } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -80,6 +83,15 @@ export class AuthService {
     const user = await prisma.user.findUnique({ where: { phone } });
     if (!user) {
       throw { status: 404, code: 'NOT_FOUND', message: 'User not found' };
+    }
+
+    // Spec 4.7 — a successful OTP proves phone ownership and activates the
+    // account (records the activation timestamp).
+    if (!user.isPhoneVerified || !user.activationOtpVerifiedAt) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { isPhoneVerified: true, activationOtpVerifiedAt: new Date() },
+      });
     }
 
     const tempToken = signTempToken({
@@ -190,6 +202,15 @@ export class AuthService {
 
     if (!user.isActive) {
       throw { status: 403, code: 'FORBIDDEN', message: 'Account is disabled' };
+    }
+
+    // Spec 4.7 — a business owner must complete OTP activation before signing in.
+    if (user.role === 'BUSINESS_OWNER' && user.isPhoneVerified === false) {
+      throw {
+        status: 403,
+        code: 'ACTIVATION_REQUIRED',
+        message: 'Activate your account with the OTP sent to your phone before signing in.',
+      };
     }
 
     if (user.blockedUntil && user.blockedUntil > new Date()) {
@@ -493,6 +514,18 @@ export class AuthService {
     const isValid = await comparePassword(password, user.passwordHash);
     if (!isValid) {
       throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid credentials' };
+    }
+
+    // Spec 4.3 — the AGAC Owner account is limited to 2 concurrent sessions.
+    const activeSessions = await prisma.refreshToken.count({
+      where: { userId: user.id, isRevoked: false, expiresAt: { gt: new Date() } },
+    });
+    if (user.role === 'SYSTEM_OWNER' && activeSessions >= 2) {
+      throw {
+        status: 409,
+        code: 'SESSION_LIMIT',
+        message: 'Maximum 2 active sessions. Log out on another device first.',
+      };
     }
 
     const accessToken = signAccessToken({ sub: user.id, role: user.role });

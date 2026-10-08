@@ -1,7 +1,8 @@
 /* Mwaminifu ERP service worker.
  *
  * Caching strategy:
- *   - Static assets (/_next/static, /icons, /splash, fonts, images) -> CacheFirst (immutable)
+ *   - Static assets (/_next/static, /icons, /splash, fonts, images) -> CacheFirst (immutable, prod only)
+ *   - Development (`?mode=dev`)                                     -> network-only for build assets
  *   - Navigations (pages)                                            -> NetworkFirst -> cache -> /offline
  *   - Allow-listed GET API responses (products, categories, customers,
  *     last-24h sales, current shift, last-7d stock movements)          -> NetworkFirst -> cache (sanitised, TTL)
@@ -14,6 +15,11 @@
  * plus navigation preload keep navigation fast.
  */
 const VERSION = 'mwaminifu-v6';
+
+// The page registers `/sw.js?mode=dev` during development. In dev we must never
+// serve cached Next.js build chunks, otherwise edits (and even method signatures
+// like `apiClient.loadUser`) appear stale. In production the worker caches them.
+const DEV = new URL(self.location.href).searchParams.get('mode') === 'dev';
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGES_CACHE = `${VERSION}-pages`;
 const API_CACHE = `${VERSION}-api`;
@@ -54,7 +60,8 @@ function sanitizeCustomers(body) {
   return {
     ...body,
     data: body.data.map((c) => ({
-      id: c.id, name: c.name, phone: c.phone, email: c.email, outstandingBalance: c.outstandingBalance,
+      id: c.id, name: c.name, phone: c.phone, email: c.email,
+      creditLimit: c.creditLimit, outstandingBalance: c.outstandingBalance,
     })),
   };
 }
@@ -249,10 +256,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Development: always go straight to the network for build assets and brand
+  // images so a cached chunk can never mask local edits.
+  if (DEV && (url.pathname.startsWith('/_next/') || isStaticAsset(url.pathname))) {
+    return;
+  }
+
   // Page navigations: network-first with offline fallback.
-  // Sensitive portals are never written to cache, but still get the offline page.
+  // Sensitive portals and dev navigations are never written to cache, but still
+  // get the offline page.
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirstPage(event, request, !isSensitivePage(url.pathname)));
+    event.respondWith(networkFirstPage(event, request, !DEV && !isSensitivePage(url.pathname)));
     return;
   }
 

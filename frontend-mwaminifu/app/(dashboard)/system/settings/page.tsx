@@ -7,6 +7,7 @@ import PageWrapper from '@/components/PageWrapper';
 import { SkeletonCard } from '@/components/Spinner';
 import { Stagger, StaggerItem, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
+import ActiveSessionsCard from '@/components/ActiveSessionsCard';
 
 interface SettingField {
   key: string;
@@ -175,6 +176,9 @@ export default function SettingsPage() {
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <Stagger className="space-y-6 max-w-3xl">
+        <StaggerItem>
+          <ActiveSessionsCard />
+        </StaggerItem>
         {SECTIONS.map((section) => {
           const isSaving = savingSection === section.title;
           return (

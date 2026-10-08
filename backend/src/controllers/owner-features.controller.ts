@@ -91,7 +91,7 @@ export class ProductUnitController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await inventoryService.createUnitConfig(req.params.productId, req.body);
+      const data = await inventoryService.createUnitConfig(req.params.productId, req.body, { isOwner: req.user!.role === 'BUSINESS_OWNER' });
       res.status(201).json({ success: true, data, message: 'Unit added', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }

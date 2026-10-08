@@ -112,7 +112,7 @@ export default function AgentDashboardPage() {
                 <li key={b.id} className="py-3 flex items-center justify-between gap-4 transition-colors hover:bg-muted -mx-2 px-2 rounded-lg">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">{b.name}</p>
-                    <p className="text-xs text-subtle-foreground">{b.phone}</p>
+                    <p className="text-xs text-subtle-foreground">{b.ownedShops?.[0]?.address || b.ownedShops?.[0]?.name || '—'}</p>
                   </div>
                   <div className="text-right">
                     <Pill tone={!b.isActive ? 'gray' : b.isPinSet ? 'green' : 'amber'}>
