@@ -95,7 +95,61 @@ Shop subscriptions are enforced by the backend (`requireActiveSubscription`):
 
 ---
 
-## 3. CI/CD (GitHub Actions)
+## 3. Git & collaboration workflow
+
+### Branch strategy
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Production-ready code. Protected. Only receives merges from `develop` (release) or hotfixes. |
+| `develop` | Integration branch. Auto-deploys to **staging**. |
+| `feature/<ticket>-<short-desc>` | New features, branched from `develop`. |
+| `bugfix/<ticket>-<short-desc>` | Non-urgent fixes, branched from `develop`. |
+| `hotfix/<ticket>-<short-desc>` | Urgent production fixes, branched from `main`; merged to both `main` and `develop`. |
+
+Examples: `feature/POS-142-offline-customers`, `bugfix/POS-151-csv-export`, `hotfix/POS-160-login-loop`.
+
+### Pull request process
+
+1. Branch from `develop` (`git checkout develop && git pull && git checkout -b feature/...`).
+2. Commit in small, focused units; keep the tree building.
+3. Push and open a PR **into `develop`**. PRs into `main` come only from `develop` (release) or a hotfix branch.
+4. CI (`.github/workflows/ci.yml`) must be green — backend lint + tests with coverage, frontend lint + typecheck + build, Flutter analyze + test. **A failing check blocks merge.**
+5. Require at least **1 approving review**; resolve all conversations.
+6. Use squash-merge for features/bugfixes; keep a merge commit for `develop → main` releases.
+7. Delete the branch after merge.
+
+### Commit message conventions (Conventional Commits)
+
+```
+<type>(<scope>): <short summary>
+
+[optional body]
+
+[optional footer: BREAKING CHANGE / Refs #123]
+```
+
+Allowed types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `build`, `ci`, `style`, `revert`.
+Example: `fix(auth): block OTP brute-force after 5 attempts`.
+
+### Releasing
+
+- Merge `develop → main` (PR) to release; then run the **Deploy Production** workflow (manual, gated).
+- Tag releases: `git tag -a v1.0.0 -m "Release v1.0.0" && git push origin v1.0.0`.
+
+### Connecting a remote (GitHub)
+
+```bash
+# Create a PRIVATE repo (replace <org>/<name>), then:
+git remote add origin git@github.com:<org>/mwaminifu_app.git
+git push -u origin main
+git push -u origin develop
+# Protect main/develop in Settings → Branches (require PR + status checks).
+```
+
+---
+
+## 4. CI/CD (GitHub Actions)
 
 Workflows live in `.github/workflows/`:
 
@@ -128,7 +182,7 @@ the build if thresholds are not met.
 
 ---
 
-## 4. Quick start
+## 5. Quick start
 
 ```bash
 # Backend
