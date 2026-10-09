@@ -6,6 +6,11 @@ import { auditService, AuditContext } from './audit.service';
 import { getPagination, getSort } from '../utils/pagination.util';
 import { generateOtp } from '../utils/otp.util';
 import { settingsService } from './settings.service';
+import logger from '../utils/logger.util';
+
+function isUniqueConstraintError(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+}
 
 const smsService = new SmsService();
 
@@ -106,47 +111,68 @@ export class AdminService {
       throw { status: 409, code: 'CONFLICT', message: 'Username already exists' };
     }
 
+    if (data.phone) {
+      const phoneUser = await prisma.user.findFirst({ where: { phone: data.phone, deletedAt: null } });
+      const phoneAgent = await prisma.agent.findFirst({ where: { phone: data.phone, deletedAt: null } });
+      if (phoneUser || phoneAgent) {
+        throw { status: 409, code: 'CONFLICT', message: 'Phone number already exists' };
+      }
+    }
+
     const hashedPassword = await hashPassword(data.password);
 
-    const agent = await prisma.$transaction(async (tx) => {
-      const createdAgent = await tx.agent.create({
-        data: {
-          username: data.username,
-          passwordHash: hashedPassword,
-          name: data.name,
-          phone: data.phone,
-          email: data.email,
-          createdBy,
-        },
-      });
+    let agent;
+    try {
+      agent = await prisma.$transaction(async (tx) => {
+        const createdAgent = await tx.agent.create({
+          data: {
+            username: data.username,
+            passwordHash: hashedPassword,
+            name: data.name,
+            phone: data.phone,
+            email: data.email,
+            createdBy,
+          },
+        });
 
-      await tx.user.create({
-        data: {
-          username: data.username,
-          passwordHash: hashedPassword,
-          name: data.name,
-          phone: data.phone,
-          email: data.email,
-          role: 'AGENT',
-          agentId: createdAgent.id,
-        },
-      });
+        await tx.user.create({
+          data: {
+            username: data.username,
+            passwordHash: hashedPassword,
+            name: data.name,
+            phone: data.phone,
+            email: data.email,
+            role: 'AGENT',
+            agentId: createdAgent.id,
+          },
+        });
 
-      return createdAgent;
-    });
+        return createdAgent;
+      });
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw { status: 409, code: 'CONFLICT', message: 'Username or phone already exists' };
+      }
+      throw err;
+    }
 
     await auditService.log(createdBy, 'AGENT_CREATED', {
       agent: { id: agent.id, name: agent.name, username: agent.username },
     }, ctx);
 
-    // Spec 12.1 — deliver the agent's login credentials automatically.
+    // Spec 12.1 — deliver the agent's login credentials automatically. SMS is
+    // best-effort: a gateway/mock failure must never fail agent creation.
     if (agent.phone) {
-      const appName = await settingsService.get('appName');
-      await smsService.send(
-        agent.phone,
-        `${appName}: Your agent account is ready. Username: ${agent.username}  Password: ${data.password}. Open the app, choose "Agent", and sign in.`,
-        { purpose: 'AGENT_WELCOME' }
-      );
+      try {
+        const appName = await settingsService.get('appName');
+        await smsService.send(
+          agent.phone,
+          `${appName}: Your agent account is ready. Username: ${agent.username}  Password: ${data.password}. Open the app, choose "Agent", and sign in.`,
+          { purpose: 'AGENT_WELCOME' }
+        );
+      } catch (err) {
+        logger.error('Failed to send agent welcome SMS', err);
+      }
     }
 
     return agent;
@@ -676,14 +702,18 @@ export class AdminService {
       username: agent.username,
     }, ctx);
 
-    // Send the new password to the agent automatically.
+    // Send the new password to the agent automatically (best-effort).
     if (agent.phone) {
-      const appName = await settingsService.get('appName');
-      await smsService.send(
-        agent.phone,
-        `${appName}: Your agent password was reset. Username: ${agent.username}  New password: ${tempPassword}. Sign in under "Agent".`,
-        { purpose: 'AGENT_PASSWORD_RESET' }
-      );
+      try {
+        const appName = await settingsService.get('appName');
+        await smsService.send(
+          agent.phone,
+          `${appName}: Your agent password was reset. Username: ${agent.username}  New password: ${tempPassword}. Sign in under "Agent".`,
+          { purpose: 'AGENT_PASSWORD_RESET' }
+        );
+      } catch (err) {
+        logger.error('Failed to send agent password reset SMS', err);
+      }
     }
 
     return { username: agent.username, tempPassword };

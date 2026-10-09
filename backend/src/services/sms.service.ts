@@ -42,9 +42,10 @@ export class SmsService {
     let result: GatewayResult;
 
     if (env.MOCK_SMS) {
-      if (isProduction) {
-        // Belt-and-braces: startup already blocks this, but never send OTPs
-        // through the mock path in production.
+      if (isProduction && !env.ALLOW_MOCK_MESSAGING) {
+        // Startup already blocks this combination; kept as a defensive guard.
+        // When ALLOW_MOCK_MESSAGING=true (temporary client-testing mode) the
+        // mock path is allowed so registration/OTP flows do not fail at runtime.
         throw new Error('MOCK_SMS is enabled in production — refusing to send SMS.');
       }
       logger.info(`[SMS][MOCK] to=${phone} purpose=${purpose} segments=${segments} cost=${cost} (${env.SMS_COST_PER_SEGMENT}/segment)`);

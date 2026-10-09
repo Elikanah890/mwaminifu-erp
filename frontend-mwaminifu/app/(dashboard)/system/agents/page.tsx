@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { apiClient } from '@/lib/api/client';
+import { apiClient, ApiErrorException } from '@/lib/api/client';
 import { Agent, AgentDetail, PaginationMeta } from '@/lib/types';
 import { formatDate, formatNumber, formatCurrency, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
@@ -98,7 +98,9 @@ export default function AgentsPage() {
       toast('Agent registered successfully');
       load(1);
     } catch (err) {
-      setFormError(errorMessage(err));
+      const msg = errorMessage(err);
+      setFormError(msg);
+      if (err instanceof ApiErrorException && err.status === 409) toast(msg);
     } finally {
       setSaving(false);
     }
