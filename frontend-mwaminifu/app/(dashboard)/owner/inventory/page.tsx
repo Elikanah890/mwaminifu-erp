@@ -18,6 +18,46 @@ import { PackageMinus, Plus, Search, Pencil, Trash2, Upload, X, Download, Percen
 
 const UNITS = ['piece', 'pack', 'bottle', 'box', 'carton', 'kg', 'gram', 'litre', 'millilitre', 'metre', 'dozen', 'tray', 'loaf', 'tube', 'ream'];
 
+// Bilingual labels (Swahili / English) so shop owners who don't read English
+// can still understand every field. Kept local to this owner-only form.
+const L = {
+  name: 'Jina la Bidhaa / Product Name',
+  category: 'Kategoria / Category',
+  smallestUnit: 'Kipimo Kidogo / Smallest Unit',
+  smallestUnitHelp: 'Kipimo unachohesabu bidhaa (mfano: piece, kg)',
+  costPrice: 'Bei ya Kununua / Cost Price',
+  costPriceHelp: 'Bei unayonunua kwa kipimo kidogo',
+  sellingPrice: 'Bei ya Kuuza / Selling Price',
+  stock: 'Idadi Iliyopo / Stock on hand',
+  reorder: 'Kikomo cha Kuagiza / Reorder Level',
+  reorderHelp: 'Tahadhari utakapofikia idadi hii',
+  image: 'Picha / Image',
+  otherUnits: 'Vipimo Vingine / Other Units',
+  otherUnitsQ: 'Unauza kwa kipimo kingine? (Carton, Box)',
+  unitName: 'Jina la Kipimo / Unit Name',
+  contains: 'Kina vitengo / Contains units',
+  containsHelp: 'Carton moja ina piece ngapi?',
+  defaultLabel: 'Chaguo-msingi / Default',
+  addUnit: 'Ongeza Kipimo / Add Unit',
+  advanced: 'Chaguo Zaidi / Advanced',
+  tax: 'Kodi / Tax',
+  brand: 'Chapa / Brand',
+  supplier: 'Msambazaji / Supplier',
+  barcode: 'Msimbo wa Baa / Barcode',
+  price: 'Bei / Price',
+  pricingMode: 'Aina ya Bei / Pricing Mode',
+  fixed: 'Isiyobadilika / Fixed',
+  fluctuating: 'Inayobadilika / Fluctuating',
+  minPrice: 'Chini / Min',
+  maxPrice: 'Juu / Max',
+  description: 'Maelezo / Description',
+  scanCamera: 'Changanua kwa Kamera / Scan with camera',
+  needOneUnit: 'Ongeza kipimo kimoja angalau (mfano: Carton)',
+  duplicateUnit: 'Kipimo hiki kimejirudia — vitengo vya jina moja haviruhusiwi',
+  unitSameAsBase: 'Jina la kipimo hiki ni sawa na kipimo kidogo',
+  baseUnitsTooSmall: 'Idadi ya vitengo lazima iwe zaidi ya 1',
+};
+
 type UnitConfigForm = {
   unitName: string;
   baseUnits: string;
@@ -29,7 +69,7 @@ type UnitConfigForm = {
 };
 
 const emptyConfig = (): UnitConfigForm => ({
-  unitName: '', baseUnits: '1', sellingPrice: '', pricingMode: 'FIXED', minPrice: '', maxPrice: '', isDefault: false,
+  unitName: '', baseUnits: '', sellingPrice: '', pricingMode: 'FIXED', minPrice: '', maxPrice: '', isDefault: false,
 });
 
 export default function OwnerInventoryPage() {
@@ -51,6 +91,8 @@ export default function OwnerInventoryPage() {
   });
   const [images, setImages] = useState<string[]>([]);
   const [configs, setConfigs] = useState<UnitConfigForm[]>([]);
+  const [hasOtherUnits, setHasOtherUnits] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [adjustForm, setAdjustForm] = useState({ quantityChange: '', reason: '', unitConfigId: '' });
 
@@ -83,7 +125,9 @@ export default function OwnerInventoryPage() {
     setEditing(null);
     setForm({ name: '', sku: '', barcode: '', categoryId: '', brand: '', supplier: '', costPrice: '', sellingPrice: '', taxRate: '', baseStock: '', baseUnitName: 'piece', reorderLevel: '10', description: '' });
     setImages([]);
-    setConfigs([{ ...emptyConfig(), unitName: 'piece', baseUnits: '1', isDefault: true }]);
+    setConfigs([]);
+    setHasOtherUnits(false);
+    setShowAdvanced(false);
     setModalOpen(true);
   };
 
@@ -96,8 +140,9 @@ export default function OwnerInventoryPage() {
       reorderLevel: String(p.reorderLevel), description: (p as unknown as { description?: string }).description ?? '',
     });
     setImages((p as unknown as { images?: string[] }).images ?? []);
-    setConfigs(
-      (p.unitConfigs ?? []).map((c) => ({
+    const otherUnits = (p.unitConfigs ?? [])
+      .filter((c) => c.baseUnits > 1)
+      .map((c) => ({
         unitName: c.unitName,
         baseUnits: String(c.baseUnits),
         sellingPrice: String(c.sellingPrice),
@@ -105,15 +150,26 @@ export default function OwnerInventoryPage() {
         minPrice: c.minPrice != null ? String(c.minPrice) : '',
         maxPrice: c.maxPrice != null ? String(c.maxPrice) : '',
         isDefault: c.isDefault,
-      }))
-    );
+      }));
+    setConfigs(otherUnits);
+    setHasOtherUnits(otherUnits.length > 0);
+    setShowAdvanced(Boolean(p.sku || p.brand || p.supplier || (p as unknown as { taxRate?: number }).taxRate));
     setModalOpen(true);
   };
 
-  const addConfig = () => setConfigs((prev) => [...prev, emptyConfig()]);
+  const addConfig = () =>
+    setConfigs((prev) => [...prev, { ...emptyConfig(), isDefault: prev.length === 0 }]);
   const updateConfig = (i: number, patch: Partial<UnitConfigForm>) =>
     setConfigs((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
-  const removeConfig = (i: number) => setConfigs((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  const removeConfig = (i: number) =>
+    setConfigs((prev) => prev.filter((_, idx) => idx !== i));
+  // Only one unit can be the default per product.
+  const setDefaultConfig = (i: number) =>
+    setConfigs((prev) => prev.map((c, idx) => ({ ...c, isDefault: idx === i })));
+  const toggleOtherUnits = (on: boolean) => {
+    setHasOtherUnits(on);
+    if (on && configs.length === 0) setConfigs([{ ...emptyConfig(), isDefault: true }]);
+  };
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -136,11 +192,27 @@ export default function OwnerInventoryPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // At least one unit configuration is required.
-    const validConfigs = configs.filter((c) => c.unitName.trim() && Number(c.baseUnits) > 0 && c.sellingPrice !== '');
-    if (validConfigs.length === 0) {
-      toast(t('cantDeleteLastUnit'), 'error');
-      return;
+    const baseName = form.baseUnitName.trim() || 'piece';
+
+    // Additional ("other") units are optional. When enabled they must be
+    // complete, unique, larger than the smallest unit, and have one default.
+    let validConfigs: UnitConfigForm[] = [];
+    if (hasOtherUnits) {
+      const incomplete = configs.some((c) => c.unitName.trim() && Number(c.baseUnits) < 2);
+      if (incomplete) { toast(L.baseUnitsTooSmall, 'error'); return; }
+      validConfigs = configs.filter((c) => c.unitName.trim() && Number(c.baseUnits) >= 2);
+      if (validConfigs.length === 0) { toast(L.needOneUnit, 'error'); return; }
+      const names = validConfigs.map((c) => c.unitName.trim().toLowerCase());
+      if (new Set(names).size !== names.length) { toast(L.duplicateUnit, 'error'); return; }
+      if (names.includes(baseName.toLowerCase())) { toast(L.unitSameAsBase, 'error'); return; }
+      // Guarantee exactly one default unit.
+      const hasDefault = validConfigs.some((c) => c.isDefault);
+      let seen = false;
+      validConfigs = validConfigs.map((c, i) => {
+        if (!hasDefault) return { ...c, isDefault: i === 0 };
+        if (c.isDefault && !seen) { seen = true; return c; }
+        return { ...c, isDefault: false };
+      });
     }
     setSubmitting(true);
     // Spec 8.4.1 — selling price must be > cost. The Owner may explicitly
@@ -163,7 +235,8 @@ export default function OwnerInventoryPage() {
       unitConfigs: validConfigs.map((c) => ({
         unitName: c.unitName.trim(),
         baseUnits: Number(c.baseUnits),
-        sellingPrice: Number(c.sellingPrice) || 0,
+        // If no price is entered, derive it from the smallest-unit price.
+        sellingPrice: c.sellingPrice !== '' ? Number(c.sellingPrice) : Number(c.baseUnits) * (Number(form.sellingPrice) || 0),
         pricingMode: c.pricingMode,
         ...(c.pricingMode === 'FLUCTUATING'
           ? { minPrice: Number(c.minPrice) || 0, maxPrice: Number(c.maxPrice) || 0 }
@@ -373,110 +446,143 @@ export default function OwnerInventoryPage() {
 
       <Modal open={modalOpen} title={editing ? t('edit') : t('addProduct')} onClose={() => setModalOpen(false)} wide>
         <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-foreground mb-1">{t('name')}</label>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{L.name}</label>
               <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('sku')}</label>
-              <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="input-field" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{L.category}</label>
+                <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input-field">
+                  <option value="">—</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{L.smallestUnit}</label>
+                <input list="unit-names" value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder="piece / kg" />
+                <p className="mt-1 text-[11px] text-subtle-foreground">{L.smallestUnitHelp}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{L.costPrice}</label>
+                <input required type="number" min={0} value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} className="input-field" />
+                <p className="mt-1 text-[11px] text-subtle-foreground">{L.costPriceHelp}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{L.sellingPrice}</label>
+                <input required type="number" min={0} value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{L.stock}</label>
+                <input type="number" min={0} value={form.baseStock} onChange={(e) => setForm({ ...form, baseStock: e.target.value })} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{L.reorder}</label>
+                <input type="number" min={0} value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} className="input-field" />
+                <p className="mt-1 text-[11px] text-subtle-foreground">{L.reorderHelp}</p>
+              </div>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('barcode')}</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{L.barcode}</label>
               <div className="flex gap-2">
                 <input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="input-field" placeholder="1234567890128" />
-                <button type="button" onClick={() => setScanOpen(true)} className="btn-outline inline-flex items-center gap-1 shrink-0" title={t('scan')}><ScanBarcode size={16} /></button>
+                <button type="button" onClick={() => setScanOpen(true)} className="btn-outline inline-flex items-center gap-1 shrink-0" title={L.scanCamera}><ScanBarcode size={16} /></button>
                 <button type="button" onClick={generateBarcode} className="btn-outline inline-flex items-center gap-1 shrink-0" title={t('generate')}><Wand2 size={16} /></button>
               </div>
+              <p className="mt-1 text-[11px] text-subtle-foreground">{L.scanCamera}</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
-              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input-field">
-                <option value="">—</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('brand')}</label>
-              <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('supplier')}</label>
-              <input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('baseUnitName')}</label>
-              <input list="unit-names" value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder="Bottle" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('costPrice')} <span className="text-subtle-foreground">({t('perBaseUnit')})</span></label>
-              <input required type="number" min={0} value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('sellingPrice')}</label>
-              <input required type="number" min={0} value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('baseStock')}</label>
-              <input type="number" min={0} value={form.baseStock} onChange={(e) => setForm({ ...form, baseStock: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('tax')} (%)</label>
-              <input type="number" min={0} value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('reorderLevel')}</label>
-              <input type="number" min={0} value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} className="input-field" />
-            </div>
+
             <datalist id="unit-names">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
 
-            <div className="col-span-2 border-t border-border pt-3">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-foreground">{t('unitConfigurations')}</label>
-                <button type="button" onClick={addConfig} className="btn-outline inline-flex items-center gap-1 text-xs"><Plus size={14} /> {t('addUnit')}</button>
-              </div>
-              <div className="space-y-2">
-                {configs.map((c, i) => (
-                  <div key={i} className="flex flex-wrap items-end gap-2 border border-border rounded-lg p-2">
-                    <div className="flex-1 min-w-[110px]">
-                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('unitName')}</label>
-                      <input list="unit-names" value={c.unitName} onChange={(e) => updateConfig(i, { unitName: e.target.value })} className="input-field text-sm" placeholder="Carton" />
-                    </div>
-                    <div className="w-20">
-                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('baseUnits')}</label>
-                      <input type="number" min={1} value={c.baseUnits} onChange={(e) => updateConfig(i, { baseUnits: e.target.value })} className="input-field text-sm" />
-                    </div>
-                    <div className="w-24">
-                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('sellingPrice')}</label>
-                      <input type="number" min={0} value={c.sellingPrice} onChange={(e) => updateConfig(i, { sellingPrice: e.target.value })} className="input-field text-sm" />
-                    </div>
-                    <div className="w-28">
-                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('pricingMode')}</label>
-                      <select value={c.pricingMode} onChange={(e) => updateConfig(i, { pricingMode: e.target.value as 'FIXED' | 'FLUCTUATING' })} className="input-field text-sm">
-                        <option value="FIXED">{t('fixedPrice')}</option>
-                        <option value="FLUCTUATING">{t('fluctuating')}</option>
-                      </select>
-                    </div>
-                    {c.pricingMode === 'FLUCTUATING' && (
-                      <>
-                        <div className="w-20">
-                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('minPrice')}</label>
-                          <input type="number" min={0} value={c.minPrice} onChange={(e) => updateConfig(i, { minPrice: e.target.value })} className="input-field text-sm" />
-                        </div>
-                        <div className="w-20">
-                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('maxPrice')}</label>
-                          <input type="number" min={0} value={c.maxPrice} onChange={(e) => updateConfig(i, { maxPrice: e.target.value })} className="input-field text-sm" />
-                        </div>
-                      </>
-                    )}
-                    <label className="flex items-center gap-1 text-xs text-muted-foreground pb-2">
-                      <input type="checkbox" checked={c.isDefault} onChange={(e) => updateConfig(i, { isDefault: e.target.checked })} className="rounded" /> {t('isDefault')}
-                    </label>
-                    <button type="button" disabled={configs.length <= 1} onClick={() => removeConfig(i)} className="p-2 text-danger rounded hover:bg-danger/10 disabled:opacity-40" title={t('cantDeleteLastUnit')}><Trash2 size={14} /></button>
+            <div className="border-t border-border pt-3">
+              <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="flex w-full items-center justify-between text-sm font-medium text-foreground">
+                <span>{L.advanced}</span>
+                <span className="text-subtle-foreground">{showAdvanced ? '−' : '+'}</span>
+              </button>
+              {showAdvanced && (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">{t('sku')}</label>
+                    <input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="input-field" />
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">{L.tax} (%)</label>
+                    <input type="number" min={0} value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">{L.brand}</label>
+                    <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} className="input-field" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">{L.supplier}</label>
+                    <input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="input-field" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border pt-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <input type="checkbox" checked={hasOtherUnits} onChange={(e) => toggleOtherUnits(e.target.checked)} className="rounded" />
+                {L.otherUnitsQ}
+              </label>
+
+              {hasOtherUnits && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">{L.otherUnits}</span>
+                    <button type="button" onClick={addConfig} className="btn-outline inline-flex items-center gap-1 text-xs"><Plus size={14} /> {L.addUnit}</button>
+                  </div>
+
+                  {configs.map((c, i) => (
+                    <div key={i} className="border border-border rounded-lg p-3 space-y-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="col-span-2 sm:col-span-1">
+                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.unitName}</label>
+                          <input list="unit-names" value={c.unitName} onChange={(e) => updateConfig(i, { unitName: e.target.value })} className="input-field text-sm" placeholder="Carton" />
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.contains} (× {form.baseUnitName || 'piece'})</label>
+                          <input type="number" min={2} value={c.baseUnits} onChange={(e) => updateConfig(i, { baseUnits: e.target.value })} className="input-field text-sm" placeholder="24" />
+                          <p className="mt-1 text-[11px] text-subtle-foreground">{L.containsHelp}</p>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.price}</label>
+                          <input type="number" min={0} value={c.sellingPrice} onChange={(e) => updateConfig(i, { sellingPrice: e.target.value })} className="input-field text-sm" placeholder={String((Number(c.baseUnits) || 0) * (Number(form.sellingPrice) || 0))} />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.pricingMode}</label>
+                          <select value={c.pricingMode} onChange={(e) => updateConfig(i, { pricingMode: e.target.value as 'FIXED' | 'FLUCTUATING' })} className="input-field text-sm">
+                            <option value="FIXED">{L.fixed}</option>
+                            <option value="FLUCTUATING">{L.fluctuating}</option>
+                          </select>
+                        </div>
+                        {c.pricingMode === 'FLUCTUATING' && (
+                          <>
+                            <div>
+                              <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.minPrice}</label>
+                              <input type="number" min={0} value={c.minPrice} onChange={(e) => updateConfig(i, { minPrice: e.target.value })} className="input-field text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.maxPrice}</label>
+                              <input type="number" min={0} value={c.maxPrice} onChange={(e) => updateConfig(i, { maxPrice: e.target.value })} className="input-field text-sm" />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input type="radio" name="unit-default" checked={c.isDefault} onChange={() => setDefaultConfig(i)} className="rounded-full" /> {L.defaultLabel}
+                        </label>
+                        <button type="button" disabled={configs.length <= 1} onClick={() => removeConfig(i)} className="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline disabled:opacity-40" title={t('delete')}><Trash2 size={14} /> {t('delete')}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium text-foreground mb-1">{t('description')}</label>

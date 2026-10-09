@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Modal from '@/components/Modal';
 import { useI18n } from '@/lib/context/I18nContext';
 import { useBarcodeWedge } from '@/lib/hooks/useBarcodeWedge';
-import { ScanBarcode, Camera, Keyboard } from 'lucide-react';
+import { ScanBarcode, Camera, Keyboard, Upload } from 'lucide-react';
 
 export default function BarcodeScanner({
   open,
@@ -64,35 +64,63 @@ export default function BarcodeScanner({
       try {
         const mod = await import('html5-qrcode');
         Html5Qrcode = mod.Html5Qrcode;
-        const scanner = new Html5Qrcode('barcode-reader-region', { verbose: false });
-        scannerRef.current = scanner;
 
-        // Pick the best available camera. On desktop PCs this is the webcam;
-        // `facingMode: 'environment'` alone fails when there is no rear camera.
-        let cameraConfig: { facingMode?: string; deviceId?: string } = { facingMode: 'environment' };
-        try {
-          const devices = await Html5Qrcode.getCameras();
-          if (devices && devices.length) {
-            cameraConfig = { deviceId: devices[0].id };
-          }
-        } catch {
-          // fall back to environment constraint below
-        }
+        const makeScanner = () =>
+          // Prefer the browser's native BarcodeDetector when available (best on
+          // modern Android/Chrome); it degrades gracefully elsewhere.
+          new Html5Qrcode('barcode-reader-region', {
+            verbose: false,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+          });
 
         const onSuccess = (decodedText: string) => {
           if (scannedRef.current) return;
           submit(decodedText);
-          stop(scanner);
+          stop(scannerRef.current);
         };
 
-        await scanner.start(
-          cameraConfig,
-          { fps: 10, qrbox: { width: 260, height: 180 } },
-          onSuccess,
-          () => {}
-        );
+        // Enumerate cameras and prefer a back/rear camera; fall back to every
+        // available device, then to generic facingMode constraints. This makes
+        // scanning work across many phone models, not just the first camera.
+        let devices: Array<{ id: string; label: string }> = [];
+        try {
+          devices = (await Html5Qrcode.getCameras()) ?? [];
+        } catch {
+          devices = [];
+        }
+        const back = devices.find((d) => /back|rear|environment/i.test(d.label));
+        const ordered = back ? [back, ...devices.filter((d) => d.id !== back.id)] : devices;
 
-        if (!cancelled) setCameraState('ready');
+        const candidates: MediaTrackConstraints[] = [
+          ...ordered.map((d) => ({ deviceId: { exact: d.id } }) as MediaTrackConstraints),
+          { facingMode: { ideal: 'environment' } },
+          { facingMode: 'user' },
+        ];
+
+        let started = false;
+        let lastErr = '';
+        for (const cfg of candidates) {
+          if (cancelled) return;
+          try {
+            const scanner = makeScanner();
+            scannerRef.current = scanner;
+            await scanner.start(cfg, { fps: 10, qrbox: { width: 260, height: 180 } }, onSuccess, () => {});
+            started = true;
+            break;
+          } catch (e) {
+            lastErr = e instanceof Error ? e.message : 'Camera unavailable';
+            await stop(scannerRef.current);
+            scannerRef.current = null;
+          }
+        }
+
+        if (!cancelled) {
+          if (started) setCameraState('ready');
+          else {
+            setCameraState('failed');
+            setError(lastErr);
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           setCameraState('failed');
@@ -115,6 +143,34 @@ export default function BarcodeScanner({
     submit(manual);
   };
 
+  // Fallback for any phone/browser without live camera support: decode a photo.
+  const onPickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const mod = await import('html5-qrcode');
+      const tmp = document.createElement('div');
+      tmp.id = 'barcode-file-tmp';
+      tmp.style.display = 'none';
+      document.body.appendChild(tmp);
+      const scanner = new mod.Html5Qrcode('barcode-file-tmp', { verbose: false });
+      try {
+        const text = await scanner.scanFile(file, false);
+        submit(text);
+      } finally {
+        try {
+          scanner.clear();
+        } catch {
+          // ignore
+        }
+        tmp.remove();
+      }
+    } catch {
+      setError(t('barcodePhotoFailed'));
+    }
+  };
+
   return (
     <Modal open={open} title={t('scan')} onClose={onClose}>
       <div className="space-y-4">
@@ -130,17 +186,24 @@ export default function BarcodeScanner({
           </div>
         )}
 
-        <div className="bg-muted-2 border border-border-strong rounded-lg p-3 text-sm text-primary flex items-start gap-2">
-          <Keyboard size={16} className="mt-0.5 shrink-0" />
-          <span>{t('usbScannerHint')}</span>
-        </div>
-
         {error && cameraState === 'failed' && (
           <div className="bg-warning/10 border border-warning/25 rounded-lg p-3 text-sm text-warning flex items-start gap-2">
             <Camera size={16} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
+
+        <div className="bg-muted-2 border border-border-strong rounded-lg p-3 text-sm text-primary flex items-start gap-2">
+          <Keyboard size={16} className="mt-0.5 shrink-0" />
+          <span>{t('usbScannerHint')}</span>
+        </div>
+
+        {/* Works on any phone: decode a photo of the barcode if the live camera
+            is unavailable or refuses permission. */}
+        <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border-strong px-4 py-2.5 text-sm text-muted-foreground hover:border-secondary">
+          <Upload size={16} /> {t('barcodePhotoUpload')}
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickFile} />
+        </label>
 
         <form onSubmit={submitManual} className="space-y-2">
           <label className="block text-sm font-medium text-foreground">{t('barcode')}</label>
