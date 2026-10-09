@@ -169,8 +169,8 @@ export const createAgentSchema = z.object({
   username: z.string().min(3),
   password: z.string().min(6),
   name: z.string().min(1),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
+  phone: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  email: z.preprocess((v) => (v === '' ? undefined : v), z.string().email().optional()),
 });
 
 export const sendSmsSchema = z.object({

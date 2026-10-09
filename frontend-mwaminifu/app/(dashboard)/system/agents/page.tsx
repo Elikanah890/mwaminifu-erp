@@ -90,8 +90,8 @@ export default function AgentsPage() {
         username: form.username.trim(),
         password: form.password,
         name: form.name.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
       });
       setShowCreate(false);
       setCreatedCreds({ username: form.username.trim(), password: form.password, phone: form.phone.trim() || undefined });
