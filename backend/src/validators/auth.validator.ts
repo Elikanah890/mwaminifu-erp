@@ -18,6 +18,11 @@ export const changePinSchema = z.object({
   pin: z.string().length(6),
 });
 
+export const changeAdminPasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(128),
+});
+
 export const loginSchema = z.object({
   phone: z.string().min(10).max(15),
   pin: z.string().length(6),

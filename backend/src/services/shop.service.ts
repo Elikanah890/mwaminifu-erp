@@ -1,5 +1,75 @@
 import prisma from '../config/database';
 
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function pctChange(current: number, previous: number): number {
+  if (previous === 0) return current === 0 ? 0 : 100;
+  return Math.round(((current - previous) / Math.abs(previous)) * 1000) / 10;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type TrendBucket = { start: Date; end: Date; label: string };
+
+/**
+ * Builds continuous time buckets for the sales trend so the chart never shows
+ * gaps (every day/hour/month in the range is present, zero-filled).
+ */
+function buildTrendBuckets(range: string, from?: string, to?: string): TrendBucket[] {
+  const now = new Date();
+  const buckets: TrendBucket[] = [];
+  const labelDay = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  if (range === 'today') {
+    const start = startOfDay(now);
+    for (let h = 0; h < 24; h++) {
+      const s = new Date(start); s.setHours(h);
+      const e = new Date(start); e.setHours(h + 1);
+      buckets.push({ start: s, end: e, label: `${String(h).padStart(2, '0')}:00` });
+    }
+    return buckets;
+  }
+
+  if (range === 'year') {
+    const base = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    for (let i = 0; i < 12; i++) {
+      const s = new Date(base.getFullYear(), base.getMonth() + i, 1);
+      const e = new Date(base.getFullYear(), base.getMonth() + i + 1, 1);
+      buckets.push({ start: s, end: e, label: s.toLocaleDateString('en-US', { month: 'short' }) });
+    }
+    return buckets;
+  }
+
+  if (range === 'custom') {
+    const f = from && !isNaN(new Date(from).getTime()) ? startOfDay(new Date(from)) : addDays(startOfDay(now), -29);
+    const t = to && !isNaN(new Date(to).getTime()) ? startOfDay(new Date(to)) : startOfDay(now);
+    const total = Math.max(1, Math.min(180, Math.round((t.getTime() - f.getTime()) / DAY_MS) + 1));
+    for (let i = 0; i < total; i++) {
+      const s = addDays(f, i);
+      buckets.push({ start: s, end: addDays(s, 1), label: labelDay(s) });
+    }
+    return buckets;
+  }
+
+  const days = range === '30d' ? 30 : range === '3m' ? 90 : 7;
+  const startDay = addDays(startOfDay(now), -(days - 1));
+  for (let i = 0; i < days; i++) {
+    const s = addDays(startDay, i);
+    buckets.push({ start: s, end: addDays(s, 1), label: labelDay(s) });
+  }
+  return buckets;
+}
+
 export class ShopService {
   async listShops(userId: string) {
     const shops = await prisma.shop.findMany({
@@ -105,50 +175,100 @@ export class ShopService {
     });
   }
 
-  async getDashboard(shopId: string, ownerId: string) {
+  async getDashboard(
+    shopId: string,
+    ownerId: string,
+    opts: { range?: string; from?: string; to?: string } = {}
+  ) {
     await this.verifyShopAccess(shopId, ownerId);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const now = new Date();
+    const today = startOfDay(now);
+    const tomorrow = addDays(today, 1);
+    const yesterday = addDays(today, -1);
+    const weekAgo = addDays(today, -6);
+    const twoWeeksAgo = addDays(today, -14);
+    const sevenDaysFromNow = addDays(today, 7);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const range = opts.range || '7d';
 
-    const [todaySales, todayExpenses, lowStockCount, activeLoansCount, customerCount,
-      transactionsToday, stockValue, outstandingCredit, unclosedShifts, pendingExpenses] = await Promise.all([
-      prisma.sale.aggregate({
-        where: { shopId, status: 'COMPLETED', saleDate: { gte: today, lt: tomorrow } },
-        _sum: { grandTotal: true },
-      }),
-      prisma.expense.aggregate({
-        where: { shopId, expenseDate: { gte: today, lt: tomorrow } },
-        _sum: { amount: true },
-      }),
+    const [
+      lowStockCount, activeLoansCount, customerCount, stockItemsAgg,
+      outstandingCredit, unclosedShifts, pendingExpenses, stockValueComputed,
+      sales14, items14, expenses14, cashAgg, loanOutstandingAgg,
+    ] = await Promise.all([
       prisma.product.count({
         where: { shopId, isActive: true, stockQuantity: { lte: prisma.product.fields.reorderLevel } },
       }),
       prisma.loan.count({ where: { shopId, status: 'ACTIVE' } }),
       prisma.customer.count({ where: { shopId, isArchived: false } }),
-      prisma.sale.count({
-        where: { shopId, status: 'COMPLETED', saleDate: { gte: today, lt: tomorrow } },
-      }),
-      prisma.product.aggregate({
-        where: { shopId, isActive: true },
-        _sum: { stockQuantity: true },
-      }),
-      prisma.customer.aggregate({
-        where: { shopId, isArchived: false },
-        _sum: { outstandingBalance: true },
-      }),
+      prisma.product.aggregate({ where: { shopId, isActive: true }, _sum: { stockQuantity: true } }),
+      prisma.customer.aggregate({ where: { shopId, isArchived: false }, _sum: { outstandingBalance: true } }),
       prisma.shift.count({ where: { shopId, isActive: true } }),
       prisma.expense.count({ where: { shopId, approvalStatus: 'PENDING' } }),
+      prisma.product.findMany({ where: { shopId, isActive: true }, select: { costPrice: true, stockQuantity: true } }),
+      prisma.sale.findMany({
+        where: { shopId, status: 'COMPLETED', saleDate: { gte: twoWeeksAgo, lt: tomorrow } },
+        select: { grandTotal: true, saleDate: true },
+      }),
+      prisma.saleItem.findMany({
+        where: { sale: { shopId, status: 'COMPLETED', saleDate: { gte: twoWeeksAgo, lt: tomorrow } } },
+        select: { quantity: true, costPrice: true, baseUnitsPerConfig: true, sale: { select: { saleDate: true } } },
+      }),
+      prisma.expense.findMany({
+        where: { shopId, approvalStatus: { not: 'REJECTED' }, expenseDate: { gte: twoWeeksAgo, lt: tomorrow } },
+        select: { amount: true, expenseDate: true },
+      }),
+      prisma.cashTransaction.aggregate({ where: { shopId }, _sum: { amount: true } }),
+      prisma.loan.aggregate({ where: { shopId, status: 'ACTIVE' }, _sum: { remainingBalance: true } }),
     ]);
 
-    // Stock valuation (cost price × quantity)
-    const productsForValuation = await prisma.product.findMany({
-      where: { shopId, isActive: true },
-      select: { costPrice: true, stockQuantity: true },
+    const stockValue = stockValueComputed.reduce((s, p) => s + p.costPrice * p.stockQuantity, 0);
+    const customerCreditReceivable = outstandingCredit._sum.outstandingBalance || 0;
+    const businessLoansOutstanding = loanOutstandingAgg._sum.remainingBalance || 0;
+
+    // Capital injections/drawings are not part of the cash ledger, so add their net.
+    const capitalTx = await prisma.ownerCapitalTransaction.findMany({
+      where: { shopId },
+      select: { type: true, amount: true, createdAt: true },
     });
-    const stockValueComputed = productsForValuation.reduce((s, p) => s + p.costPrice * p.stockQuantity, 0);
+    const capitalNet = capitalTx.reduce(
+      (s, t) => s + (t.type === 'INJECTION' ? t.amount : -t.amount),
+      0
+    );
+    const cashBalance = (cashAgg._sum.amount || 0) + capitalNet;
+
+    const netBusinessValue = stockValue + cashBalance + customerCreditReceivable - businessLoansOutstanding;
+
+    // ---- Windowed sales / cogs / expenses (today, yesterday, week, prev week) ----
+    const sumIn = <T,>(arr: T[], at: (t: T) => Date, val: (t: T) => number, start: Date, end: Date) =>
+      arr.filter((t) => { const d = at(t); return d >= start && d < end; }).reduce((s, t) => s + val(t), 0);
+
+    const salesOn = (start: Date, end: Date) => sumIn(sales14, (s) => s.saleDate, (s) => s.grandTotal, start, end);
+    const cogsOn = (start: Date, end: Date) =>
+      sumIn(items14, (i) => i.sale.saleDate, (i) => (i.costPrice || 0) * i.quantity * (i.baseUnitsPerConfig || 1), start, end);
+    const expOn = (start: Date, end: Date) => sumIn(expenses14, (e) => e.expenseDate, (e) => e.amount, start, end);
+
+    const todaySales = salesOn(today, tomorrow);
+    const yesterdaySales = salesOn(yesterday, today);
+    const weekSales = salesOn(weekAgo, tomorrow);
+    const prevWeekSales = salesOn(twoWeeksAgo, weekAgo);
+
+    const cogs = cogsOn(today, tomorrow);
+    const yesterdayCogs = cogsOn(yesterday, today);
+    const weekCogs = cogsOn(weekAgo, tomorrow);
+    const prevWeekCogs = cogsOn(twoWeeksAgo, weekAgo);
+
+    const todayExpensesAmount = expOn(today, tomorrow);
+    const yesterdayExpenses = expOn(yesterday, today);
+    const weekExpenses = expOn(weekAgo, tomorrow);
+    const prevWeekExpenses = expOn(twoWeeksAgo, weekAgo);
+
+    const grossProfitToday = todaySales - cogs;
+    const netProfitToday = grossProfitToday - todayExpensesAmount;
+    const yesterdayProfit = yesterdaySales - yesterdayCogs - yesterdayExpenses;
+    const weekProfit = weekSales - weekCogs - weekExpenses;
+    const prevWeekProfit = prevWeekSales - prevWeekCogs - prevWeekExpenses;
 
     const creditGivenToday = await prisma.sale.aggregate({
       where: {
@@ -160,77 +280,195 @@ export class ShopService {
       _sum: { grandTotal: true },
     });
 
-    // COGS for today's sales (cost snapshot on each sale item)
-    const todayItems = await prisma.saleItem.findMany({
-      where: { sale: { shopId, status: 'COMPLETED', saleDate: { gte: today, lt: tomorrow } } },
-      select: { quantity: true, costPrice: true, unitPrice: true },
+    // ---- Comparisons (% vs yesterday / last week) ----
+    const ledger7 = await prisma.creditLedgerEntry.findMany({
+      where: { customer: { shopId }, createdAt: { gte: weekAgo } },
+      select: { type: true, amount: true },
     });
-    const cogs = todayItems.reduce((s, i) => s + (i.costPrice || 0) * i.quantity, 0);
+    const charged7 = ledger7.filter((e) => e.type === 'CHARGE').reduce((s, e) => s + e.amount, 0);
+    const repaid7 = ledger7
+      .filter((e) => e.type === 'REPAYMENT' || e.type === 'WRITE_OFF')
+      .reduce((s, e) => s + e.amount, 0);
+    const creditPrev = customerCreditReceivable - charged7 + repaid7;
 
-    // Sales trend (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sales = await prisma.sale.findMany({
-      where: { shopId, status: 'COMPLETED', saleDate: { gte: sevenDaysAgo } },
-      orderBy: { saleDate: 'asc' },
-      select: { grandTotal: true, saleDate: true },
+    // Net cash movement over the last 7 days (ledger + capital).
+    const cashNet7 = (await prisma.cashTransaction.aggregate({
+      where: { shopId, createdAt: { gte: weekAgo } },
+      _sum: { amount: true },
+    }))._sum.amount || 0;
+    const capitalNet7 = capitalTx
+      .filter((t) => t.createdAt >= weekAgo)
+      .reduce((s, t) => s + (t.type === 'INJECTION' ? t.amount : -t.amount), 0);
+    const cash7Ago = cashBalance - (cashNet7 + capitalNet7);
+
+    const comparisons = {
+      sales: { yesterday: pctChange(todaySales, yesterdaySales), week: pctChange(weekSales, prevWeekSales) },
+      profit: { yesterday: pctChange(netProfitToday, yesterdayProfit), week: pctChange(weekProfit, prevWeekProfit) },
+      expenses: { yesterday: pctChange(todayExpensesAmount, yesterdayExpenses), week: pctChange(weekExpenses, prevWeekExpenses) },
+      cash: { week: pctChange(cashBalance, cash7Ago) },
+      credit: { week: pctChange(customerCreditReceivable, creditPrev) },
+      stock: { week: 0 },
+      loans: { week: 0 },
+    };
+
+    // ---- Sales trend (continuous buckets for the selected range) ----
+    const buckets = buildTrendBuckets(range, opts.from, opts.to);
+    const trendStart = buckets[0].start;
+    const trendEnd = buckets[buckets.length - 1].end;
+    const trendSales = trendStart
+      ? await prisma.sale.findMany({
+          where: { shopId, status: 'COMPLETED', saleDate: { gte: trendStart, lt: trendEnd } },
+          select: { grandTotal: true, saleDate: true },
+        })
+      : [];
+    const salesTrend = buckets.map((b) => ({
+      date: b.label,
+      total: trendSales.filter((s) => s.saleDate >= b.start && s.saleDate < b.end).reduce((x, s) => x + s.grandTotal, 0),
+    }));
+
+    // ---- Valuation trend (last 30 days, running cash + constant assets/liabilities) ----
+    const valStart = addDays(today, -29);
+    const [cashOpening, cashWindow, capitalOpening, capitalWindow] = await Promise.all([
+      prisma.cashTransaction.aggregate({ where: { shopId, createdAt: { lt: valStart } }, _sum: { amount: true } }),
+      prisma.cashTransaction.findMany({ where: { shopId, createdAt: { gte: valStart } }, select: { amount: true, createdAt: true } }),
+      prisma.ownerCapitalTransaction.findMany({ where: { shopId, createdAt: { lt: valStart } }, select: { type: true, amount: true } }),
+      prisma.ownerCapitalTransaction.findMany({ where: { shopId, createdAt: { gte: valStart } }, select: { type: true, amount: true, createdAt: true } }),
+    ]);
+    const capitalNetBefore = capitalOpening.reduce((s, t) => s + (t.type === 'INJECTION' ? t.amount : -t.amount), 0);
+    const cashBase = (cashOpening._sum.amount || 0) + capitalNetBefore;
+    const valuationTrend = Array.from({ length: 30 }).map((_, i) => {
+      const dayStart = addDays(valStart, i);
+      const dayEnd = addDays(dayStart, 1);
+      const cashTo = cashBase
+        + cashWindow.filter((t) => t.createdAt < dayEnd).reduce((s, t) => s + t.amount, 0)
+        + capitalWindow.filter((t) => t.createdAt < dayEnd).reduce((s, t) => s + (t.type === 'INJECTION' ? t.amount : -t.amount), 0);
+      return {
+        date: dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        iso: dayStart.toISOString().slice(0, 10),
+        total: Math.round(stockValue + cashTo + customerCreditReceivable - businessLoansOutstanding),
+      };
     });
 
-    // Top products
-    const topProducts = await prisma.saleItem.groupBy({
-      by: ['productId'],
-      where: { sale: { shopId, status: 'COMPLETED' } },
-      _sum: { quantity: true },
-      orderBy: { _sum: { quantity: 'desc' } },
-      take: 5,
-    });
+    // ---- Top products (quantity, revenue, profit, 7d trend) ----
+    const topRows = await prisma.$queryRaw<Array<{
+      productId: string; name: string; quantity: number; revenue: number; profit: number;
+      current_qty: number; prev_qty: number;
+    }>>`
+      SELECT si."productId", p.name,
+        COALESCE(SUM(si.quantity * si."baseUnitsPerConfig"), 0)::float8 AS quantity,
+        COALESCE(SUM(si.total), 0)::float8 AS revenue,
+        COALESCE(SUM(si.total - si."costPrice" * si.quantity * si."baseUnitsPerConfig"), 0)::float8 AS profit,
+        COALESCE(SUM(CASE WHEN s."saleDate" >= ${weekAgo} THEN si.quantity * si."baseUnitsPerConfig" ELSE 0 END), 0)::float8 AS current_qty,
+        COALESCE(SUM(CASE WHEN s."saleDate" >= ${twoWeeksAgo} AND s."saleDate" < ${weekAgo} THEN si.quantity * si."baseUnitsPerConfig" ELSE 0 END), 0)::float8 AS prev_qty
+      FROM "SaleItem" si
+      JOIN "Sale" s ON s.id = si."saleId"
+      JOIN "Product" p ON p.id = si."productId"
+      WHERE s."shopId" = ${shopId} AND s.status = 'COMPLETED' AND s."deletedAt" IS NULL
+      GROUP BY si."productId", p.name
+      ORDER BY quantity DESC
+      LIMIT 5
+    `;
+    const topProducts = topRows.map((r) => ({
+      productId: r.productId,
+      name: r.name,
+      quantity: Number(r.quantity),
+      revenue: Number(r.revenue),
+      profit: Number(r.profit),
+      trend: pctChange(Number(r.current_qty), Number(r.prev_qty)),
+    }));
 
-    const productIds = topProducts.map((p) => p.productId);
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true, name: true },
-    });
+    // ---- This month at a glance ----
+    const [monthSalesAgg, monthItems, monthExpAgg, topCustomerGroup, bestProductGroup] = await Promise.all([
+      prisma.sale.aggregate({ where: { shopId, status: 'COMPLETED', saleDate: { gte: monthStart } }, _sum: { grandTotal: true } }),
+      prisma.saleItem.findMany({
+        where: { sale: { shopId, status: 'COMPLETED', saleDate: { gte: monthStart } } },
+        select: { quantity: true, costPrice: true, baseUnitsPerConfig: true },
+      }),
+      prisma.expense.aggregate({ where: { shopId, approvalStatus: { not: 'REJECTED' }, expenseDate: { gte: monthStart } }, _sum: { amount: true } }),
+      prisma.sale.groupBy({
+        by: ['customerId'],
+        where: { shopId, status: 'COMPLETED', saleDate: { gte: monthStart }, customerId: { not: null } },
+        _sum: { grandTotal: true },
+        orderBy: { _sum: { grandTotal: 'desc' } },
+        take: 1,
+      }),
+      prisma.$queryRaw<Array<{ productId: string; qty: number }>>`
+        SELECT si."productId", COALESCE(SUM(si.quantity * si."baseUnitsPerConfig"), 0)::float8 AS qty
+        FROM "SaleItem" si
+        JOIN "Sale" s ON s.id = si."saleId"
+        WHERE s."shopId" = ${shopId} AND s.status = 'COMPLETED' AND s."saleDate" >= ${monthStart}
+        GROUP BY si."productId"
+        ORDER BY qty DESC
+        LIMIT 1
+      `,
+    ]);
+    const monthRevenue = monthSalesAgg._sum.grandTotal || 0;
+    const monthCogs = monthItems.reduce((s, i) => s + (i.costPrice || 0) * i.quantity * (i.baseUnitsPerConfig || 1), 0);
+    const monthExpenses = monthExpAgg._sum.amount || 0;
+    const topCustomerId = topCustomerGroup[0]?.customerId ?? null;
+    const bestProductId = bestProductGroup[0]?.productId ?? null;
+    const [topCustomer, bestProduct] = await Promise.all([
+      topCustomerId ? prisma.customer.findUnique({ where: { id: topCustomerId }, select: { name: true } }) : null,
+      bestProductId ? prisma.product.findUnique({ where: { id: bestProductId }, select: { name: true } }) : null,
+    ]);
+    const monthGlance = {
+      sales: monthRevenue,
+      profit: monthRevenue - monthCogs - monthExpenses,
+      topCustomer: topCustomer?.name ?? null,
+      topCustomerAmount: topCustomerGroup[0]?._sum.grandTotal ?? 0,
+      bestProduct: bestProduct?.name ?? null,
+      bestProductQuantity: Number(bestProductGroup[0]?.qty ?? 0),
+    };
 
-    const salesTrend = this.aggregateSalesByDay(sales);
-
-    const todayRevenue = todaySales._sum.grandTotal || 0;
-    const todayExpensesAmount = todayExpenses._sum.amount || 0;
-    const grossProfitToday = todayRevenue - cogs;
-    const netProfitToday = grossProfitToday - todayExpensesAmount;
+    // ---- Action required ----
+    const [payablesDue, loansDue, subscriptionsExpiring, customersWithDebt] = await Promise.all([
+      prisma.purchase.count({ where: { shopId, deletedAt: null, paymentStatus: { in: ['UNPAID', 'PARTIAL'] }, dueDate: { not: null, lte: sevenDaysFromNow } } }),
+      prisma.loan.count({ where: { shopId, status: 'ACTIVE', dueDate: { not: null, lte: sevenDaysFromNow } } }),
+      prisma.subscription.count({ where: { shopId, isActive: true, endDate: { not: null, lte: addDays(today, 14) } } }),
+      prisma.customer.count({ where: { shopId, isArchived: false, outstandingBalance: { gt: 0 } } }),
+    ]);
 
     const actionItems: Array<{ type: string; label: string; count: number; severity: string }> = [];
     if (lowStockCount > 0) actionItems.push({ type: 'low_stock', label: 'Low stock items', count: lowStockCount, severity: 'warning' });
     if (unclosedShifts > 0) actionItems.push({ type: 'open_shifts', label: 'Unclosed shifts', count: unclosedShifts, severity: 'warning' });
     if (pendingExpenses > 0) actionItems.push({ type: 'pending_expenses', label: 'Expenses awaiting approval', count: pendingExpenses, severity: 'info' });
-    const overdueCredit = await prisma.customer.count({ where: { shopId, isArchived: false, outstandingBalance: { gt: 0 } } });
-    if (overdueCredit > 0) actionItems.push({ type: 'overdue_credit', label: 'Customers with outstanding credit', count: overdueCredit, severity: 'warning' });
+    if (customersWithDebt > 0) actionItems.push({ type: 'overdue_credit', label: 'Customers with outstanding credit', count: customersWithDebt, severity: 'warning' });
+    if (payablesDue > 0) actionItems.push({ type: 'payables_due', label: 'Payables due soon', count: payablesDue, severity: 'warning' });
+    if (loansDue > 0) actionItems.push({ type: 'loans_due', label: 'Loan repayments due soon', count: loansDue, severity: 'warning' });
+    if (subscriptionsExpiring > 0) actionItems.push({ type: 'subscription_expiring', label: 'Subscription expiring', count: subscriptionsExpiring, severity: 'info' });
 
     return {
-      todaySales: todayRevenue,
+      todaySales,
       todayProfit: netProfitToday,
       todayGrossProfit: grossProfitToday,
       todayCogs: cogs,
       todayExpenses: todayExpensesAmount,
-      transactionsToday,
-      cashInHand: 0,
+      transactionsToday: sales14.filter((s) => s.saleDate >= today && s.saleDate < tomorrow).length,
+      cashInHand: cashBalance,
       mobileMoneyReceived: 0,
       creditGivenToday: creditGivenToday._sum.grandTotal || 0,
       expensesToday: todayExpensesAmount,
       lowStockItems: lowStockCount,
-      outstandingCredit: outstandingCredit._sum.outstandingBalance || 0,
-      stockValue: stockValueComputed,
-      stockItems: stockValue._sum.stockQuantity || 0,
+      outstandingCredit: customerCreditReceivable,
+      stockValue,
+      stockItems: stockItemsAgg._sum.stockQuantity || 0,
       pendingOrders: 0,
       totalCustomers: customerCount,
       activeLoans: activeLoansCount,
       subscriptionStatus: 'active',
       lastSyncStatus: 'synced',
       salesTrend,
-      topProducts: topProducts.map((p) => ({
-        name: products.find((prod) => prod.id === p.productId)?.name || 'Unknown',
-        quantity: p._sum.quantity || 0,
-      })),
+      topProducts,
       actionItems,
+      // Extended (Spec 8.6 / 8.6a)
+      cashBalance,
+      customerCreditReceivable,
+      businessLoansOutstanding,
+      netBusinessValue,
+      valuationTrend,
+      comparisons,
+      monthGlance,
+      range,
     };
   }
 
@@ -315,14 +553,6 @@ export class ShopService {
     return shop;
   }
 
-  private aggregateSalesByDay(sales: Array<{ grandTotal: number; saleDate: Date }>) {
-    const grouped: Record<string, number> = {};
-    for (const sale of sales) {
-      const day = sale.saleDate.toISOString().split('T')[0];
-      grouped[day] = (grouped[day] || 0) + sale.grandTotal;
-    }
-    return Object.entries(grouped).map(([date, total]) => ({ date, total }));
-  }
 }
 
 export const shopService = new ShopService();

@@ -150,6 +150,37 @@ export class AuthController {
     }
   }
 
+  // Fresh permission set (always read from the DB, never from the JWT).
+  async permissions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const prisma = (await import('../config/database')).default;
+      const { ALL_PERMISSIONS, expandPermissions } = await import('../config/permissions');
+      const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { role: true } });
+      if (user?.role === 'EMPLOYEE') {
+        const employee = await prisma.employee.findFirst({
+          where: { userId: req.user!.userId, isActive: true },
+          select: { permissions: true, shopId: true },
+        });
+        // Expand legacy strings so the client's canonical `can()` checks match
+        // exactly what the backend `requirePermission` enforces.
+        const effective = Array.from(expandPermissions((employee?.permissions as string[]) || []));
+        res.json({
+          success: true,
+          data: { role: user.role, permissions: effective, shopId: employee?.shopId ?? null },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+      res.json({
+        success: true,
+        data: { role: user?.role, permissions: ALL_PERMISSIONS, shopId: req.user!.shopId ?? null },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async updateProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const prisma = (await import('../config/database')).default;

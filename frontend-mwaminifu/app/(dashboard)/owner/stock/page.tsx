@@ -5,7 +5,7 @@ import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { StockValuation, Product } from '@/lib/types';
-import { formatCurrency, formatNumber, errorMessage } from '@/lib/format';
+import { formatCurrency, formatNumber, errorMessage, formatStockWithUnits } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
@@ -95,7 +95,7 @@ export default function StockPage() {
             <p className="text-xs text-subtle-foreground">{scannedProduct.barcode} · {scannedProduct.sku ?? '-'}</p>
           </div>
           <div className="flex gap-6 text-center">
-            <div><p className="text-xs text-subtle-foreground">{t('stock')}</p><p className="text-xl font-bold text-primary">{scannedProduct.stockQuantity}</p></div>
+            <div><p className="text-xs text-subtle-foreground">{t('stock')}</p><p className="text-sm font-bold text-primary">{formatStockWithUnits(scannedProduct)}</p></div>
             <div><p className="text-xs text-subtle-foreground">{t('sellingPrice')}</p><p className="text-xl font-bold text-secondary">{formatCurrency(scannedProduct.sellingPrice)}</p></div>
             <div>
               <p className="text-xs text-subtle-foreground">{t('status')}</p>
@@ -122,7 +122,7 @@ export default function StockPage() {
                     <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
                     <p className="text-xs text-subtle-foreground">{t('reorderLevel')}: {p.reorderLevel}</p>
                   </div>
-                  <Pill tone="amber"><AlertTriangle size={12} className="inline mr-1" />{p.stockQuantity}</Pill>
+                  <Pill tone="amber"><AlertTriangle size={12} className="inline mr-1" />{formatStockWithUnits(p)}</Pill>
                 </li>
               ))}
             </ul>

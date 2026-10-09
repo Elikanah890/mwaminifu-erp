@@ -101,6 +101,9 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
     role === 'AGENT' ? '/agent/notifications' : role === 'SYSTEM_OWNER' ? '/system/notifications' : undefined;
   const filteredLinks = QUICK_LINKS[role].filter((link) => t(link.label).toLowerCase().includes(search.toLowerCase()));
   const showResults = searchFocused && search.length > 0;
+  // Spec 15 — the AGAC/System Owner account is labelled by role, not the raw
+  // seeded display name.
+  const displayName = role === 'SYSTEM_OWNER' ? t('systemOwner') : (user?.name ?? '');
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
@@ -222,7 +225,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
               </span>
               <span className="hidden text-left sm:block">
                 <span className="block text-sm font-semibold leading-tight text-foreground" suppressHydrationWarning>
-                  {isClient ? user?.name ?? '' : ''}
+                  {isClient ? displayName : ''}
                 </span>
                 <span className="block text-xs text-subtle-foreground">{t(ROLE_LABEL_KEYS[role])}</span>
               </span>
@@ -239,7 +242,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
                   className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-border bg-card shadow-xl"
                 >
                   <div className="border-b border-border px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">{user?.name ?? t(ROLE_LABEL_KEYS[role])}</p>
+                    <p className="text-sm font-semibold text-foreground">{displayName || t(ROLE_LABEL_KEYS[role])}</p>
                     <p className="text-xs text-subtle-foreground">{t(ROLE_LABEL_KEYS[role])}</p>
                   </div>
                   <button

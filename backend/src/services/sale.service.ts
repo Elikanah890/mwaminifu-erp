@@ -11,7 +11,7 @@ export class SaleService {
     userId: string,
     data: {
       customerId?: string;
-      items: Array<{ productId: string; quantity: number; unit?: string; unitPrice?: number; baseUnits?: number; discount?: number; tax?: number }>;
+      items: Array<{ productId: string; quantity: number; unit?: string; unitPrice?: number; baseUnits?: number; unitConfigId?: string; unitName?: string; baseUnitsPerConfig?: number; discount?: number; tax?: number }>;
       discount?: number;
       tax?: number;
       payments: Array<{ method: string; amount: number }>;
@@ -60,6 +60,9 @@ export class SaleService {
         tax: number;
         total: number;
         unit?: string;
+        unitConfigId?: string | null;
+        unitName?: string | null;
+        baseUnitsPerConfig: number;
       }> = [];
 
       for (const item of data.items) {
@@ -71,22 +74,49 @@ export class SaleService {
           throw { status: 404, code: 'NOT_FOUND', message: `Product ${item.productId} not found` };
         }
 
-        const baseUnits = item.baseUnits ?? 1;
-        const totalBaseUnits = item.quantity * baseUnits;
+        // Resolve the sold unit configuration (must belong to this product/shop).
+        let baseUnitsPerConfig = item.baseUnitsPerConfig ?? item.baseUnits ?? 1;
+        let unitName = item.unitName ?? item.unit ?? product.unit;
+        let unitPrice = item.unitPrice;
+
+        if (item.unitConfigId) {
+          const cfg = await tx.productUnitConfig.findFirst({
+            where: { id: item.unitConfigId, productId: product.id },
+          });
+          if (!cfg) {
+            throw {
+              status: 422,
+              code: 'VALIDATION_ERROR',
+              message: `Unit configuration not found for "${product.name}"`,
+            };
+          }
+          baseUnitsPerConfig = cfg.baseUnits;
+          unitName = cfg.unitName;
+          if (unitPrice == null) unitPrice = cfg.sellingPrice;
+          if (cfg.pricingMode === 'FLUCTUATING') {
+            if (cfg.minPrice != null && unitPrice < cfg.minPrice) unitPrice = cfg.minPrice;
+            if (cfg.maxPrice != null && unitPrice > cfg.maxPrice) unitPrice = cfg.maxPrice;
+          }
+        } else {
+          // Product-level price bounds apply only to the base unit.
+          if (unitPrice == null) unitPrice = product.sellingPrice;
+          if (product.minPrice != null && unitPrice < product.minPrice) unitPrice = product.minPrice;
+          if (product.maxPrice != null && unitPrice > product.maxPrice) unitPrice = product.maxPrice;
+        }
+
+        const totalBaseUnits = item.quantity * baseUnitsPerConfig;
+        const resolvedUnitPrice = unitPrice ?? product.sellingPrice;
 
         if (!data.allowNegativeStock && product.stockQuantity < totalBaseUnits && product.isActive) {
           throw {
             status: 422,
             code: 'BUSINESS_RULE_VIOLATION',
-            message: `Insufficient stock for "${product.name}". Available: ${product.stockQuantity}`,
+            message: `Insufficient stock for "${product.name}". Available: ${product.stockQuantity} ${product.baseUnitName || ''}`.trim(),
           };
         }
 
-        let unitPrice = item.unitPrice ?? product.sellingPrice;
-        if (product.minPrice != null && unitPrice < product.minPrice) unitPrice = product.minPrice;
-        if (product.maxPrice != null && unitPrice > product.maxPrice) unitPrice = product.maxPrice;
         const itemDiscount = item.discount || 0;
-        const itemTotal = item.quantity * unitPrice - itemDiscount;
+        const itemTotal = item.quantity * resolvedUnitPrice - itemDiscount;
         const itemTax = item.tax || 0;
 
         totalAmount += itemTotal;
@@ -94,19 +124,22 @@ export class SaleService {
         saleItems.push({
           productId: item.productId,
           quantity: item.quantity,
-          unitPrice,
+          unitPrice: resolvedUnitPrice,
           costPrice: product.costPrice || 0,
           discount: itemDiscount,
           tax: itemTax,
           total: itemTotal,
-          unit: item.unit || product.unit,
+          unit: unitName,
+          unitConfigId: item.unitConfigId ?? null,
+          unitName,
+          baseUnitsPerConfig,
         });
 
         if (!product.isService) {
           const newStock = product.stockQuantity - totalBaseUnits;
           await tx.product.update({
             where: { id: product.id },
-            data: { stockQuantity: { decrement: totalBaseUnits } },
+            data: { stockQuantity: newStock, baseUnitStock: newStock },
           });
 
           await tx.stockAdjustment.create({
@@ -265,7 +298,7 @@ export class SaleService {
     userId: string,
     data: {
       customerId?: string;
-      items: Array<{ productId: string; quantity: number; unit?: string; unitPrice?: number; discount?: number }>;
+      items: Array<{ productId: string; quantity: number; unit?: string; unitPrice?: number; baseUnits?: number; unitConfigId?: string; unitName?: string; baseUnitsPerConfig?: number; discount?: number }>;
       discount?: number;
       payments: Array<{ method: string; amount: number }>;
       notes?: string;
@@ -279,6 +312,9 @@ export class SaleService {
       discount: number;
       total: number;
       unit?: string;
+      unitConfigId?: string | null;
+      unitName?: string | null;
+      baseUnitsPerConfig: number;
     }> = [];
 
     for (const item of data.items) {
@@ -297,7 +333,10 @@ export class SaleService {
         unitPrice,
         discount: itemDiscount,
         total: itemTotal,
-        unit: item.unit || product?.unit || 'piece',
+        unit: item.unitName || item.unit || product?.unit || 'piece',
+        unitConfigId: item.unitConfigId ?? null,
+        unitName: item.unitName || item.unit || product?.unit || 'piece',
+        baseUnitsPerConfig: item.baseUnitsPerConfig ?? item.baseUnits ?? 1,
       });
     }
 
@@ -379,9 +418,12 @@ export class SaleService {
 
     return prisma.$transaction(async (tx) => {
       for (const item of sale.items) {
+        const baseUnits = item.quantity * (item.baseUnitsPerConfig || 1);
+        const product = await tx.product.findUnique({ where: { id: item.productId }, select: { stockQuantity: true } });
+        const newStock = (product?.stockQuantity ?? 0) - baseUnits;
         await tx.product.update({
           where: { id: item.productId },
-          data: { stockQuantity: { decrement: item.quantity } },
+          data: { stockQuantity: newStock, baseUnitStock: newStock },
         });
       }
 

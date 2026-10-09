@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
-import { Subscription, SubscriptionPlan } from '@/lib/types';
+import { Subscription, SubscriptionPlan, AdminDashboard } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDate, errorMessage } from '@/lib/format';
 import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
@@ -21,6 +21,7 @@ function monthlyFactor(cycle: string): number {
 export default function RevenuePage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [money, setMoney] = useState<AdminDashboard['money'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -34,12 +35,14 @@ export default function RevenuePage() {
     setLoading(true);
     setError('');
     try {
-      const [subsRes, plansRes] = await Promise.all([
+      const [subsRes, plansRes, dashRes] = await Promise.all([
         apiClient.get<Subscription[]>('/admin/subscriptions?limit=1000'),
         apiClient.get<SubscriptionPlan[]>('/admin/subscriptions/plans'),
+        apiClient.get<AdminDashboard>('/admin/dashboard?granularity=monthly'),
       ]);
       if (subsRes.data) setSubscriptions(subsRes.data);
       if (plansRes.data) setPlans(plansRes.data);
+      if (dashRes.data?.money) setMoney(dashRes.data.money);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -118,8 +121,8 @@ export default function RevenuePage() {
           <Stagger className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StaggerItem><StatsCard title="Total Subscriptions" value={formatNumber(active.length)} tone="navy" sub="active subscriptions" /></StaggerItem>
             <StaggerItem><StatsCard title="Total AGAC Revenue" value={formatCurrency(agacRevenue)} tone="teal" sub="monthly subscription revenue" /></StaggerItem>
-            <StaggerItem><StatsCard title="Total Commissions" value="—" tone="gold" sub="commission engine not enabled" /></StaggerItem>
-            <StaggerItem><StatsCard title="Net AGAC Income" value={formatCurrency(agacRevenue)} tone="navy" sub="revenue less commissions" /></StaggerItem>
+            <StaggerItem><StatsCard title="Commissions Paid" value={formatCurrency(money?.commissionsPaid ?? 0)} tone="gold" sub="paid to agents" /></StaggerItem>
+            <StaggerItem><StatsCard title="Net AGAC Income" value={formatCurrency(money?.netIncome ?? agacRevenue)} tone="navy" sub="revenue less commissions" /></StaggerItem>
           </Stagger>
 
           <Reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

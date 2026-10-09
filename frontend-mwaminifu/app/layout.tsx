@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ToastProvider } from '@/components/Toast';
 import { I18nProvider } from '@/lib/context/I18nContext';
+import { AppConfigProvider } from '@/lib/context/AppConfigContext';
 import { PwaProvider } from '@/lib/context/PwaContext';
 import { SyncProvider } from '@/lib/context/SyncContext';
 import PwaPrompts from '@/components/pwa/PwaPrompts';
@@ -111,6 +112,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider>
           <I18nProvider initialLocale={savedLocale}>
             <ToastProvider>
+              <AppConfigProvider>
               <PwaProvider>
                 <SyncProvider>
                   {children}
@@ -120,6 +122,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <ConflictDialog />
                 </SyncProvider>
               </PwaProvider>
+              </AppConfigProvider>
             </ToastProvider>
           </I18nProvider>
         </ThemeProvider>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api/client';
 import { AgentStats, AgentProfile, AgentBusiness } from '@/lib/types';
-import { formatNumber, formatDate, errorMessage } from '@/lib/format';
+import { formatNumber, formatCurrency, formatDate, errorMessage } from '@/lib/format';
 import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -67,6 +67,13 @@ export default function AgentDashboardPage() {
         <StaggerItem><StatsCard title="Active Customers" value={formatNumber(stats?.activeBusinesses ?? 0)} tone="teal" sub={`${stats?.inactiveBusinesses ?? 0} inactive`} /></StaggerItem>
         <StaggerItem><StatsCard title="New This Month" value={formatNumber(stats?.businessesThisMonth ?? 0)} tone="teal" /></StaggerItem>
         <StaggerItem><StatsCard title="Total Shops" value={formatNumber(stats?.totalShops ?? 0)} tone="navy" icon={<Store size={20} />} /></StaggerItem>
+      </Stagger>
+
+      <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StaggerItem><StatsCard title="Commission Earned" value={formatCurrency(stats?.commissionEarned ?? 0)} tone="gold" icon={<HandCoins size={20} />} sub={stats?.agentCode || undefined} /></StaggerItem>
+        <StaggerItem><StatsCard title="Paid" value={formatCurrency(stats?.commissionPaid ?? 0)} tone="teal" /></StaggerItem>
+        <StaggerItem><StatsCard title="Pending" value={formatCurrency(stats?.commissionPending ?? 0)} tone="gold" /></StaggerItem>
+        <StaggerItem><StatsCard title="This Month" value={formatCurrency(stats?.commissionThisMonth ?? 0)} tone="green" /></StaggerItem>
       </Stagger>
 
       <Reveal className="flex flex-wrap gap-3 mb-6">

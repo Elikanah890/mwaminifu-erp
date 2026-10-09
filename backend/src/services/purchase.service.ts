@@ -6,6 +6,9 @@ export type PurchaseItem = {
   productId: string;
   quantity: number;
   unitCost: number;
+  unitConfigId?: string;
+  unitName?: string;
+  baseUnits?: number;
   tax?: number;
   discount?: number;
   receivedQuantity?: number;
@@ -143,7 +146,7 @@ export class PurchaseService {
   async receivePurchase(
     purchaseId: string,
     userId: string,
-    data: { items?: Array<{ productId: string; quantity: number }>; receivedAll?: boolean }
+    data: { items?: Array<{ productId: string; quantity: number; unitConfigId?: string; baseUnits?: number }>; receivedAll?: boolean }
   ) {
     const purchase = await prisma.purchase.findUnique({ where: { id: purchaseId } });
     if (!purchase) {
@@ -157,11 +160,24 @@ export class PurchaseService {
     }
 
     const items = this.parseItems(purchase.items);
-    const receiveMap = new Map<string, number>();
+    // Received quantities are accumulated in the requested unit, together with
+    // the baseUnits that unit represents (defaults to the purchase line's unit).
+    const receiveMap = new Map<string, { qty: number; baseUnits?: number }>();
     if (data.receivedAll) {
-      for (const i of items) receiveMap.set(i.productId, (i.quantity || 0) - (i.receivedQuantity || 0));
+      for (const i of items) {
+        receiveMap.set(i.productId, {
+          qty: (i.quantity || 0) - (i.receivedQuantity || 0),
+          baseUnits: i.baseUnits || 1,
+        });
+      }
     } else if (data.items) {
-      for (const r of data.items) receiveMap.set(r.productId, (receiveMap.get(r.productId) || 0) + (r.quantity || 0));
+      for (const r of data.items) {
+        const prev = receiveMap.get(r.productId);
+        receiveMap.set(r.productId, {
+          qty: (prev?.qty || 0) + (r.quantity || 0),
+          baseUnits: r.baseUnits ?? prev?.baseUnits,
+        });
+      }
     }
 
     if (receiveMap.size === 0) {
@@ -169,22 +185,27 @@ export class PurchaseService {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      for (const [productId, qty] of receiveMap.entries()) {
+      for (const [productId, entry] of receiveMap.entries()) {
         const item = items.find((i) => i.productId === productId);
         if (!item) continue;
-        if (qty <= 0) continue;
-        const remaining = (item.quantity || 0) - (item.receivedQuantity || 0);
-        if (qty > remaining) {
-          throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: `Receive quantity for product exceeds remaining (${remaining})` };
+        if (entry.qty <= 0) continue;
+        const purchaseBaseUnits = item.baseUnits || 1;
+        const reqBaseUnits = entry.baseUnits || purchaseBaseUnits;
+        const requestedBase = entry.qty * reqBaseUnits;
+        const remainingBase = ((item.quantity || 0) - (item.receivedQuantity || 0)) * purchaseBaseUnits;
+        if (requestedBase > remainingBase) {
+          throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: `Receive quantity for product exceeds remaining (${remainingBase / purchaseBaseUnits} units)` };
         }
 
         const product = await tx.product.findFirst({ where: { id: productId, shopId: purchase.shopId } });
         if (!product) continue;
 
-        const newStock = product.stockQuantity + qty;
+        const newStock = product.stockQuantity + requestedBase;
+        // unitCost is per purchase unit → derive per-base-unit cost.
+        const baseCost = item.unitCost ? item.unitCost / purchaseBaseUnits : product.costPrice;
         await tx.product.update({
           where: { id: productId },
-          data: { stockQuantity: newStock, costPrice: item.unitCost || product.costPrice },
+          data: { stockQuantity: newStock, baseUnitStock: newStock, costPrice: baseCost },
         });
 
         await tx.stockMovement.create({
@@ -192,7 +213,7 @@ export class PurchaseService {
             shopId: purchase.shopId,
             productId,
             type: 'PURCHASE',
-            quantity: qty,
+            quantity: requestedBase,
             balanceAfter: newStock,
             reference: purchase.invoiceNo || purchase.id,
             userId,
@@ -200,7 +221,7 @@ export class PurchaseService {
           },
         });
 
-        item.receivedQuantity = (item.receivedQuantity || 0) + qty;
+        item.receivedQuantity = (item.receivedQuantity || 0) + requestedBase / purchaseBaseUnits;
       }
 
       const allReceived = items.every((i) => (i.receivedQuantity || 0) >= (i.quantity || 0));

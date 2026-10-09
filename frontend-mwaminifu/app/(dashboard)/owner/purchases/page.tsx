@@ -32,7 +32,7 @@ export default function PurchasesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({ supplierId: '', invoiceNo: '', tax: '', discount: '' });
-  const [lines, setLines] = useState<Array<{ productId: string; quantity: string; unitCost: string }>>([]);
+  const [lines, setLines] = useState<Array<{ productId: string; quantity: string; unitCost: string; unitConfigId: string }>>([]);
 
   const [receiveTarget, setReceiveTarget] = useState<Purchase | null>(null);
   const [receiveAll, setReceiveAll] = useState(true);
@@ -59,7 +59,13 @@ export default function PurchasesPage() {
 
   useEffect(() => { load();   }, [activeShopId]);
 
-  const addLine = () => setLines((prev) => [...prev, { productId: '', quantity: '1', unitCost: '' }]);
+  const addLine = () => setLines((prev) => [...prev, { productId: '', quantity: '1', unitCost: '', unitConfigId: '' }]);
+
+  const productById = (id: string) => products.find((p) => p.id === id);
+  const baseUnitsFor = (productId: string, unitConfigId: string) => {
+    const cfg = productById(productId)?.unitConfigs?.find((c) => c.id === unitConfigId);
+    return cfg ? cfg.baseUnits : 1;
+  };
 
   const handleScan = async (barcode: string) => {
     setScanOpen(false);
@@ -67,7 +73,7 @@ export default function PurchasesPage() {
     try {
       const res = await apiClient.get<Product>(`/shops/${activeShopId}/products/by-barcode/${encodeURIComponent(barcode)}`);
       if (res.data) {
-        setLines((prev) => [...prev, { productId: res.data!.id, quantity: '1', unitCost: String(res.data!.costPrice ?? 0) }]);
+        setLines((prev) => [...prev, { productId: res.data!.id, quantity: '1', unitCost: String(res.data!.costPrice ?? 0), unitConfigId: '' }]);
         toast(res.data.name, 'success');
       } else {
         toast(t('noResults'), 'error');
@@ -89,7 +95,13 @@ export default function PurchasesPage() {
       await apiClient.post(`/shops/${activeShopId}/purchases`, {
         supplierId: form.supplierId || undefined,
         invoiceNo: form.invoiceNo || undefined,
-        items: validLines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) || 0 })),
+        items: validLines.map((l) => ({
+          productId: l.productId,
+          quantity: Number(l.quantity),
+          unitCost: Number(l.unitCost) || 0,
+          unitConfigId: l.unitConfigId || undefined,
+          baseUnits: baseUnitsFor(l.productId, l.unitConfigId),
+        })),
         tax: Number(form.tax) || 0,
         discount: Number(form.discount) || 0,
         status: 'ORDERED',
@@ -229,17 +241,44 @@ export default function PurchasesPage() {
             </div>
             {lines.length === 0 && <p className="text-xs text-subtle-foreground">{t('emptyCart')}</p>}
             <div className="space-y-2">
-              {lines.map((l, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2">
-                  <select className="input-field col-span-6" value={l.productId} onChange={(e) => setLines((prev) => prev.map((x, j) => (j === i ? { ...x, productId: e.target.value } : x)))}>
+              {lines.map((l, i) => {
+                const prod = productById(l.productId);
+                const configs = prod?.unitConfigs ?? [];
+                return (
+                <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                  <select
+                    className="input-field col-span-4"
+                    value={l.productId}
+                    onChange={(e) => {
+                      const p = productById(e.target.value);
+                      setLines((prev) => prev.map((x, j) => (j === i ? { ...x, productId: e.target.value, unitConfigId: '', unitCost: p ? String(p.costPrice ?? 0) : x.unitCost } : x)));
+                    }}
+                  >
                     <option value="">—</option>
                     {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
+                  {configs.length > 0 ? (
+                    <select
+                      className="input-field col-span-3"
+                      value={l.unitConfigId}
+                      onChange={(e) => {
+                        const cfg = configs.find((c) => c.id === e.target.value);
+                        const cost = cfg ? (prod?.costPrice ?? 0) * cfg.baseUnits : (prod?.costPrice ?? 0);
+                        setLines((prev) => prev.map((x, j) => (j === i ? { ...x, unitConfigId: e.target.value, unitCost: String(cost) } : x)));
+                      }}
+                    >
+                      <option value="">{prod?.baseUnitName ?? prod?.unit} (1×)</option>
+                      {configs.map((c) => <option key={c.id} value={c.id}>{c.unitName} ({c.baseUnits}×)</option>)}
+                    </select>
+                  ) : (
+                    <div className="col-span-3 text-xs text-subtle-foreground self-center px-2">{prod?.baseUnitName ?? prod?.unit ?? ''}</div>
+                  )}
                   <input type="number" min={1} placeholder={t('quantity')} className="input-field col-span-2" value={l.quantity} onChange={(e) => setLines((prev) => prev.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))} />
-                  <input type="number" min={0} placeholder={t('costPrice')} className="input-field col-span-3" value={l.unitCost} onChange={(e) => setLines((prev) => prev.map((x, j) => (j === i ? { ...x, unitCost: e.target.value } : x)))} />
+                  <input type="number" min={0} placeholder={t('costPrice')} className="input-field col-span-2" value={l.unitCost} onChange={(e) => setLines((prev) => prev.map((x, j) => (j === i ? { ...x, unitCost: e.target.value } : x)))} />
                   <button type="button" onClick={() => setLines((prev) => prev.filter((_, j) => j !== i))} className="col-span-1 text-danger">×</button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

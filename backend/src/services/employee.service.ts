@@ -3,30 +3,11 @@ import { hashPin } from '../utils/bcrypt.util';
 import { generateTempPin } from '../utils/otp.util';
 import { shopService } from './shop.service';
 import { SmsService } from './sms.service';
+import { FULL_OPERATIONAL_PERMISSIONS } from '../config/permissions';
 
 const smsService = new SmsService();
 
-/**
- * Standard V1 operational permission set for a newly created shop employee.
- * The Business Owner is NOT required to configure permissions in V1 — every
- * employee is a full operational employee for their assigned shop.
- * (Owner capabilities are not affected; this only seeds defaults.)
- */
-export const FULL_OPERATIONAL_PERMISSIONS = [
-  'pos:write',
-  'pos:refund',
-  'pos:void',
-  'inventory:read',
-  'inventory:write',
-  'expenses:write',
-  'credit:write',
-  // Spec 9.8.1 — reporting is split. These three are on for a full employee;
-  // activity log, loans, valuation and communications remain off by default
-  // but grantable. General Reports / Finance Overview are never grantable.
-  'reports:sales',
-  'reports:inventory',
-  'reports:credit',
-];
+export { FULL_OPERATIONAL_PERMISSIONS };
 
 export class EmployeeService {
   async listEmployees(shopId: string, ownerId: string) {

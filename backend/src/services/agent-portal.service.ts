@@ -50,6 +50,11 @@ export interface AgentStats {
   businessesThisYear: number;
   shopsThisMonth: number;
   shopsThisYear: number;
+  commissionEarned: number;
+  commissionPaid: number;
+  commissionPending: number;
+  commissionThisMonth: number;
+  agentCode: string;
 }
 
 export class AgentPortalService {
@@ -97,6 +102,16 @@ export class AgentPortalService {
       }),
     ]);
 
+    const [earnedAgg, paidAgg, pendingAgg, monthAgg, agent] = await Promise.all([
+      prisma.commission.aggregate({ where: { agentId }, _sum: { amount: true } }),
+      prisma.commission.aggregate({ where: { agentId, status: 'PAID' }, _sum: { amount: true } }),
+      prisma.commission.aggregate({ where: { agentId, status: 'PENDING' }, _sum: { amount: true } }),
+      prisma.commission.aggregate({ where: { agentId, createdAt: { gte: startOfMonth } }, _sum: { amount: true } }),
+      prisma.agent.findUnique({ where: { id: agentId }, select: { username: true } }),
+    ]);
+
+    const round2 = (n: number) => Math.round((n || 0) * 100) / 100;
+
     return {
       totalBusinesses,
       activeBusinesses,
@@ -107,7 +122,39 @@ export class AgentPortalService {
       businessesThisYear,
       shopsThisMonth,
       shopsThisYear,
+      commissionEarned: round2(earnedAgg._sum.amount || 0),
+      commissionPaid: round2(paidAgg._sum.amount || 0),
+      commissionPending: round2(pendingAgg._sum.amount || 0),
+      commissionThisMonth: round2(monthAgg._sum.amount || 0),
+      agentCode: agent?.username ? `AGAC-${agent.username}` : '',
     };
+  }
+
+  async listAgentCommissions(agentId: string, query: AgentPortalListQuery = {}) {
+    const { page, limit, skip } = getPagination(query);
+    const where: Record<string, unknown> = { agentId };
+    if (query.status) where.status = query.status;
+    const [total, rows] = await Promise.all([
+      prisma.commission.count({ where }),
+      prisma.commission.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        // Spec 12.2 — no owner contact details for the agent.
+        include: { owner: { select: { id: true, name: true } }, payout: { select: { id: true, reference: true } } },
+      }),
+    ]);
+    return { commissions: rows, total, page, limit };
+  }
+
+  async listAgentPayouts(agentId: string, query: AgentPortalListQuery = {}) {
+    const { page, limit, skip } = getPagination(query);
+    const [total, rows] = await Promise.all([
+      prisma.payout.count({ where: { agentId } }),
+      prisma.payout.findMany({ where: { agentId }, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+    ]);
+    return { payouts: rows, total, page, limit };
   }
 
   async listAgentBusinesses(agentId: string, query: AgentPortalListQuery = {}) {

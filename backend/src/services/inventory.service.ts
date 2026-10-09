@@ -152,22 +152,60 @@ export class InventoryService {
     unitConversion?: number;
     baseUnitName?: string;
     baseUnitStock?: number;
+    unitConfigs?: Array<{
+      unitName: string;
+      baseUnits: number;
+      sellingPrice: number;
+      minPrice?: number;
+      maxPrice?: number;
+      pricingMode?: string;
+      isDefault?: boolean;
+      priceOverride?: boolean;
+    }>;
     images?: string[];
     barcode?: string;
     priceOverride?: boolean;
   }, opts: { isOwner?: boolean } = {}) {
     // Spec 8.4.1 — reject a selling/min price at or below cost unless the Owner
     // has explicitly confirmed an override.
-    const priceError = priceErrorForProduct(data.costPrice || 0, data.sellingPrice, data.minPrice);
+    const costPrice = data.costPrice || 0;
+    const priceError = priceErrorForProduct(costPrice, data.sellingPrice, data.minPrice);
     const overrideApproved = Boolean(opts.isOwner && data.priceOverride);
     if (priceError && !overrideApproved) {
       throw { status: 422, code: 'PRICE_BELOW_COST', message: priceError };
     }
 
+    // Validate every unit configuration against the base-unit cost.
+    const configs = data.unitConfigs ?? [];
+    let configOverrideUsed = false;
+    for (const cfg of configs) {
+      const err = priceErrorForUnit(costPrice, cfg);
+      if (!err) continue;
+      if (opts.isOwner && cfg.priceOverride) {
+        configOverrideUsed = true;
+      } else {
+        throw { status: 422, code: 'PRICE_BELOW_COST', message: err };
+      }
+    }
+
+    // Barcodes are unique per shop — reject a clash with a clear message.
+    if (data.barcode) {
+      const duplicate = await prisma.product.findFirst({
+        where: { shopId, barcode: data.barcode },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw { status: 409, code: 'DUPLICATE_BARCODE', message: `Barcode "${data.barcode}" is already used by another product in this shop` };
+      }
+    }
+
+    const baseStock = data.baseUnitStock ?? data.stockQuantity ?? 0;
+    const baseUnitName = data.baseUnitName || data.unit || 'piece';
+
     return prisma.product.create({
       data: {
         shopId,
-        needsPriceReview: Boolean(priceError && overrideApproved),
+        needsPriceReview: Boolean((priceError && overrideApproved) || configOverrideUsed),
         name: data.name,
         sku: data.sku,
         categoryId: data.categoryId,
@@ -177,19 +215,35 @@ export class InventoryService {
         description: data.description,
         taxRate: data.taxRate || 0,
         status: data.status || 'ACTIVE',
-        costPrice: data.costPrice || 0,
+        costPrice,
         sellingPrice: data.sellingPrice || 0,
         minPrice: data.minPrice,
         maxPrice: data.maxPrice,
         reorderLevel: data.reorderLevel || 10,
-        stockQuantity: data.stockQuantity || 0,
-        unit: data.unit || 'piece',
+        stockQuantity: baseStock,
+        unit: data.unit || baseUnitName,
         unitConversion: data.unitConversion,
-        baseUnitName: data.baseUnitName || data.unit || 'piece',
-        baseUnitStock: data.baseUnitStock ?? data.stockQuantity ?? 0,
+        baseUnitName,
+        baseUnitStock: baseStock,
         images: data.images || [],
         barcode: data.barcode,
+        ...(configs.length
+          ? {
+              unitConfigs: {
+                create: configs.map((c) => ({
+                  unitName: c.unitName,
+                  baseUnits: c.baseUnits,
+                  sellingPrice: c.sellingPrice,
+                  minPrice: c.minPrice,
+                  maxPrice: c.maxPrice,
+                  pricingMode: c.pricingMode || 'FIXED',
+                  isDefault: c.isDefault ?? false,
+                })),
+              },
+            }
+          : {}),
       },
+      include: { unitConfigs: true },
     });
   }
 
@@ -211,6 +265,18 @@ export class InventoryService {
     stockQuantity?: number;
     unit?: string;
     unitConversion?: number;
+    baseUnitName?: string;
+    baseUnitStock?: number;
+    unitConfigs?: Array<{
+      unitName: string;
+      baseUnits: number;
+      sellingPrice: number;
+      minPrice?: number;
+      maxPrice?: number;
+      pricingMode?: string;
+      isDefault?: boolean;
+      priceOverride?: boolean;
+    }>;
     images?: string[];
     barcode?: string;
     isActive?: boolean;
@@ -224,7 +290,17 @@ export class InventoryService {
       throw { status: 404, code: 'NOT_FOUND', message: 'Product not found' };
     }
 
-    const { priceOverride, ...rest } = data;
+    if (data.barcode) {
+      const duplicate = await prisma.product.findFirst({
+        where: { shopId: existing.shopId, barcode: data.barcode, NOT: { id: productId } },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw { status: 409, code: 'DUPLICATE_BARCODE', message: `Barcode "${data.barcode}" is already used by another product in this shop` };
+      }
+    }
+
+    const { priceOverride, unitConfigs, baseUnitStock, baseUnitName, ...rest } = data;
     const nextCost = rest.costPrice ?? existing.costPrice;
     const nextSelling = rest.sellingPrice !== undefined ? rest.sellingPrice : existing.sellingPrice;
     const nextMin = rest.minPrice !== undefined ? rest.minPrice : existing.minPrice;
@@ -238,6 +314,17 @@ export class InventoryService {
       throw { status: 422, code: 'PRICE_BELOW_COST', message: priceError };
     }
 
+    // Validate any incoming unit configurations against the (possibly new) cost.
+    let configOverrideUsed = false;
+    if (unitConfigs) {
+      for (const cfg of unitConfigs) {
+        const err = priceErrorForUnit(nextCost, cfg);
+        if (!err) continue;
+        if (opts.isOwner && cfg.priceOverride) configOverrideUsed = true;
+        else throw { status: 422, code: 'PRICE_BELOW_COST', message: err };
+      }
+    }
+
     // Spec 8.4.1 — editing cost is allowed, but if it invalidates any existing
     // price/range the product is flagged for review (including its unit configs).
     const priceFieldsTouched =
@@ -245,14 +332,40 @@ export class InventoryService {
     let needsPriceReview = existing.needsPriceReview;
     if (overrideApproved) {
       needsPriceReview = false;
-    } else if (priceFieldsTouched) {
-      const anyUnitInvalid = existing.unitConfigs.some((cfg) => priceErrorForUnit(nextCost, cfg) != null);
+    } else if (priceFieldsTouched || unitConfigs) {
+      const effectiveConfigs = unitConfigs ?? existing.unitConfigs;
+      const anyUnitInvalid = effectiveConfigs.some((cfg) => priceErrorForUnit(nextCost, cfg) != null);
       needsPriceReview = Boolean(priceError) || anyUnitInvalid;
     }
+    if (configOverrideUsed) needsPriceReview = false;
 
-    return prisma.product.update({
-      where: { id: productId },
-      data: { ...rest, needsPriceReview },
+    const updateData: Prisma.ProductUncheckedUpdateInput = { ...rest, needsPriceReview };
+    if (baseUnitName !== undefined) updateData.baseUnitName = baseUnitName;
+    if (baseUnitStock !== undefined) {
+      updateData.baseUnitStock = baseUnitStock;
+      updateData.stockQuantity = baseUnitStock;
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({ where: { id: productId }, data: updateData });
+      if (unitConfigs) {
+        await tx.productUnitConfig.deleteMany({ where: { productId } });
+        if (unitConfigs.length) {
+          await tx.productUnitConfig.createMany({
+            data: unitConfigs.map((c) => ({
+              productId,
+              unitName: c.unitName,
+              baseUnits: c.baseUnits,
+              sellingPrice: c.sellingPrice,
+              minPrice: c.minPrice,
+              maxPrice: c.maxPrice,
+              pricingMode: c.pricingMode || 'FIXED',
+              isDefault: c.isDefault ?? false,
+            })),
+          });
+        }
+      }
+      return updated;
     });
   }
 
@@ -279,7 +392,7 @@ export class InventoryService {
     });
   }
 
-  async adjustStock(productId: string, shopId: string, userId: string, data: { quantityChange: number; reason: string }) {
+  async adjustStock(productId: string, shopId: string, userId: string, data: { quantityChange: number; reason: string; unitConfigId?: string; baseUnits?: number }) {
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({
         where: { id: productId, shopId },
@@ -289,20 +402,33 @@ export class InventoryService {
         throw { status: 404, code: 'NOT_FOUND', message: 'Product not found' };
       }
 
-      const newQuantity = product.stockQuantity + data.quantityChange;
+      // Adjustments may be expressed in a unit configuration (e.g. +1 carton).
+      let units = data.baseUnits && data.baseUnits > 0 ? data.baseUnits : 1;
+      if (data.unitConfigId) {
+        const cfg = await tx.productUnitConfig.findFirst({
+          where: { id: data.unitConfigId, productId },
+        });
+        if (!cfg) {
+          throw { status: 422, code: 'VALIDATION_ERROR', message: 'Unit configuration not found for this product' };
+        }
+        units = cfg.baseUnits;
+      }
+      const baseChange = data.quantityChange * units;
+
+      const newQuantity = product.stockQuantity + baseChange;
       if (newQuantity < 0) {
         throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Stock cannot be negative' };
       }
 
       await tx.product.update({
         where: { id: productId },
-        data: { stockQuantity: newQuantity },
+        data: { stockQuantity: newQuantity, baseUnitStock: newQuantity },
       });
 
       await tx.stockAdjustment.create({
         data: {
           productId,
-          quantityChange: data.quantityChange,
+          quantityChange: baseChange,
           reason: data.reason,
           performedBy: userId,
           shopId,
@@ -319,7 +445,7 @@ export class InventoryService {
         );
       }
 
-      return { productId, previousStock: product.stockQuantity, newQuantity, change: data.quantityChange };
+      return { productId, previousStock: product.stockQuantity, newQuantity, change: baseChange };
     });
   }
 

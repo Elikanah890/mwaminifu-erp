@@ -87,7 +87,7 @@ export class AnalyticsService {
     });
 
     const totalRevenue = sales.reduce((s, x) => s + x.grandTotal, 0);
-    const totalItems = sales.reduce((s, x) => s + x.items.reduce((i, it) => i + it.quantity, 0), 0);
+    const totalItems = sales.reduce((s, x) => s + x.items.reduce((i, it) => i + it.quantity * (it.baseUnitsPerConfig || 1), 0), 0);
     const totalDiscounts = sales.reduce((s, x) => s + x.discount, 0);
     const totalTransactions = sales.length;
     const customers = new Set(sales.map((x) => x.customerId).filter(Boolean)).size;
@@ -118,19 +118,19 @@ export class AnalyticsService {
         if (!productMap[key]) {
           productMap[key] = { name: it.product.name, category: it.product.category?.name ?? 'Uncategorized', quantity: 0, revenue: 0, cogs: 0 };
         }
-        productMap[key].quantity += it.quantity;
+        productMap[key].quantity += it.quantity * (it.baseUnitsPerConfig || 1);
         productMap[key].revenue += it.total;
-        productMap[key].cogs += (it.costPrice || 0) * it.quantity;
+        productMap[key].cogs += (it.costPrice || 0) * it.quantity * (it.baseUnitsPerConfig || 1);
       }
     }
 
     // Previous period for trend comparison
     const prevItems = await prisma.saleItem.findMany({
       where: { sale: { shopId, status: 'COMPLETED', saleDate: { gte: prevFrom, lt: fromDate } } },
-      select: { productId: true, quantity: true },
+      select: { productId: true, quantity: true, baseUnitsPerConfig: true },
     });
     const prevQtyMap: Record<string, number> = {};
-    for (const i of prevItems) prevQtyMap[i.productId] = (prevQtyMap[i.productId] || 0) + i.quantity;
+    for (const i of prevItems) prevQtyMap[i.productId] = (prevQtyMap[i.productId] || 0) + i.quantity * (i.baseUnitsPerConfig || 1);
 
     const perProduct = Object.entries(productMap)
       .map(([productId, p]) => {
@@ -243,7 +243,7 @@ export class AnalyticsService {
       }),
       prisma.saleItem.findMany({
         where: { sale: { shopId, status: 'COMPLETED', saleDate: { gte: fromDate, lte: toDate } } },
-        select: { quantity: true, costPrice: true, total: true, productId: true, product: { select: { name: true, category: { select: { name: true } } } } },
+        select: { quantity: true, costPrice: true, total: true, baseUnitsPerConfig: true, productId: true, product: { select: { name: true, category: { select: { name: true } } } } },
       }),
       prisma.expense.findMany({
         where: { shopId, expenseDate: { gte: fromDate, lte: toDate } },
@@ -253,7 +253,7 @@ export class AnalyticsService {
 
     const totalRevenue = sales.reduce((s, x) => s + x.grandTotal, 0);
     const totalDiscounts = sales.reduce((s, x) => s + x.discount, 0);
-    const cogs = saleItems.reduce((s, i) => s + (i.costPrice || 0) * i.quantity, 0);
+    const cogs = saleItems.reduce((s, i) => s + (i.costPrice || 0) * i.quantity * (i.baseUnitsPerConfig || 1), 0);
     const grossProfit = totalRevenue - cogs;
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
     const netProfit = grossProfit - totalExpenses;
@@ -275,8 +275,8 @@ export class AnalyticsService {
       const key = i.productId;
       if (!prodMap[key]) prodMap[key] = { name: i.product.name, category: i.product.category?.name ?? 'Uncategorized', revenue: 0, cogs: 0, quantity: 0 };
       prodMap[key].revenue += i.total;
-      prodMap[key].cogs += (i.costPrice || 0) * i.quantity;
-      prodMap[key].quantity += i.quantity;
+      prodMap[key].cogs += (i.costPrice || 0) * i.quantity * (i.baseUnitsPerConfig || 1);
+      prodMap[key].quantity += i.quantity * (i.baseUnitsPerConfig || 1);
     }
     const perProduct = Object.entries(prodMap)
       .map(([productId, p]) => ({

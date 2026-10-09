@@ -64,6 +64,22 @@ export class AgentPortalController {
     } catch (error) { next(error); }
   }
 
+  async listCommissions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { agentId } = await this.getAgentIds(req);
+      const result = await agentPortalService.listAgentCommissions(agentId, asQuery(req.query));
+      res.json({ success: true, data: result.commissions, pagination: { page: result.page, limit: result.limit, total: result.total }, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  async listPayouts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { agentId } = await this.getAgentIds(req);
+      const result = await agentPortalService.listAgentPayouts(agentId, asQuery(req.query));
+      res.json({ success: true, data: result.payouts, pagination: { page: result.page, limit: result.limit, total: result.total }, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
   async getAgentProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const { agentId } = await this.getAgentIds(req);

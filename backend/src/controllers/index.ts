@@ -10,6 +10,7 @@ import { reportService } from '../services/report.service';
 import { reportExportService } from '../services/report-export.service';
 import { syncService } from '../services/sync.service';
 import { adminService } from '../services/admin.service';
+import { authService } from '../services/auth.service';
 import { auditService } from '../services/audit.service';
 import { toCsv, downloadHeaders } from '../utils/csv.util';
 import prisma from '../config/database';
@@ -53,7 +54,8 @@ export class ShopController {
 
   async dashboard(req: Request, res: Response, next: NextFunction) {
     try {
-      const data = await shopService.getDashboard(req.params.id, req.user!.userId);
+      const { range, from, to } = req.query as { range?: string; from?: string; to?: string };
+      const data = await shopService.getDashboard(req.params.id, req.user!.userId, { range, from, to });
       res.json({ success: true, data, timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -700,6 +702,13 @@ export class NotificationController {
         res.status(502).json({ success: false, error: { code: 'SMS_FAILED', message: 'SMS gateway rejected the message' }, timestamp: new Date().toISOString() });
         return;
       }
+      await auditService.logDetailed({
+        shopId: req.body.shopId || '',
+        userId: req.user!.userId,
+        action: 'SMS_SENT',
+        entity: 'SmsLog',
+        newValue: { phone: req.body.phone, purpose: 'PROMOTIONAL' },
+      });
       res.json({ success: true, message: 'SMS sent', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -760,6 +769,13 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
+  async resetAgentPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.resetAgentPassword(req.params.id, req.user!.userId, this.ctx(req));
+      res.json({ success: true, data: result, message: 'Agent password reset', timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
   async createBusinessOwner(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await adminService.createBusinessOwner(req.body, req.user!.userId, this.ctx(req));
@@ -792,6 +808,21 @@ export class AdminController {
     try {
       const result = await adminService.resetBusinessOwnerPin(req.params.id, req.user!.userId, this.ctx(req));
       res.json({ success: true, data: result, message: result.message, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  // Reset a business owner's access credential (sends a PIN-reset OTP).
+  async resetBusinessOwnerPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.resetBusinessOwnerPin(req.params.id, req.user!.userId, this.ctx(req));
+      res.json({ success: true, data: result, message: 'Password reset code sent to the owner phone', timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  async deleteBusinessOwner(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.deleteBusinessOwner(req.params.id, req.user!.userId, this.ctx(req));
+      res.json({ success: true, data: result, message: 'Business owner removed', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 
@@ -1139,6 +1170,47 @@ export class AdminController {
     } catch (error) { next(error); }
   }
 
+  async listCommissions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.listCommissions(asQuery(req.query));
+      res.json({ success: true, data: result.commissions, pagination: { page: result.page, limit: result.limit, total: result.total }, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  async listPayouts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.listPayouts(asQuery(req.query));
+      res.json({ success: true, data: result.payouts, pagination: { page: result.page, limit: result.limit, total: result.total }, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  async payoutAgent(req: Request, res: Response, next: NextFunction) {
+    try {
+      const payout = await adminService.payoutAgent(req.params.id, req.body || {}, req.user!.userId, this.ctx(req));
+      res.status(201).json({ success: true, data: payout, message: 'Agent paid out', timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  async ownerOtp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await adminService.generateOwnerOtp(req.params.id, req.user!.userId, this.ctx(req));
+      res.json({ success: true, data: result, message: 'Fresh OTP generated and sent by SMS', timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  // Spec 15.1 — comprehensive System Owner dashboard (subscription revenue only).
+  async dashboard(req: Request, res: Response, next: NextFunction) {
+    try {
+      const requested = String(req.query.granularity || 'daily').toLowerCase();
+      const allowed = ['daily', 'weekly', 'monthly', 'yearly'] as const;
+      const granularity = (allowed as readonly string[]).includes(requested)
+        ? (requested as (typeof allowed)[number])
+        : 'daily';
+      const data = await adminService.getDashboard(granularity);
+      res.json({ success: true, data, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
   // Spec 4.3 — active sessions for the AGAC Owner (limit 2).
   async sessions(req: Request, res: Response, next: NextFunction) {
     try {
@@ -1152,6 +1224,19 @@ export class AdminController {
         data: { count: sessions.length, max: 2, sessions },
         timestamp: new Date().toISOString(),
       });
+    } catch (error) { next(error); }
+  }
+
+  // Change the System Owner's own password (username/password account).
+  async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await authService.changeAdminPassword(
+        req.user!.userId,
+        req.body.currentPassword,
+        req.body.newPassword
+      );
+      await auditService.log(req.user!.userId, 'PASSWORD_CHANGED', {}, this.ctx(req));
+      res.json({ success: true, data: result, message: result.message, timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 }

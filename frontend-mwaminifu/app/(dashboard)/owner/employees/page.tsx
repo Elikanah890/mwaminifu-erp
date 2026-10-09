@@ -17,25 +17,78 @@ import { Plus, KeyRound, ShieldCheck, Activity } from 'lucide-react';
 // Spec 9.8.1 — reporting is split into individually-grantable permissions.
 // General Reports and Finance Overview are OWNER-ONLY and intentionally absent
 // here (they can never be granted to an employee).
-const PERMISSIONS: Array<{ id: string; label: string }> = [
-  { id: 'pos:write', label: 'Record sale' },
-  { id: 'pos:refund', label: 'Process refund' },
-  { id: 'pos:void', label: 'Void sale' },
-  { id: 'inventory:read', label: 'View inventory' },
-  { id: 'inventory:write', label: 'Edit inventory' },
-  { id: 'expenses:write', label: 'Record expenses' },
-  { id: 'credit:write', label: 'Manage credit' },
-  { id: 'reports:sales', label: 'View sales report' },
-  { id: 'reports:inventory', label: 'View inventory report' },
-  { id: 'reports:credit', label: 'View credit (deni) report' },
-  { id: 'reports:activity_log', label: 'View staff activity log' },
-  { id: 'reports:loans', label: 'View business loans report' },
-  { id: 'reports:valuation', label: 'View stock value / business valuation' },
-  { id: 'reports:communications', label: 'Send SMS / WhatsApp (Premium)' },
-  { id: 'loans:read', label: 'View loans' },
-  { id: 'loans:write', label: 'Manage loans' },
-  { id: 'cash:read', label: 'View cash' },
-  { id: 'cash:write', label: 'Manage cash' },
+// Canonical grantable permissions (matches backend config/permissions.ts).
+// General Reports and Finance Overview are owner-only and intentionally absent.
+const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label: string }> }> = [
+  { title: 'Sales', items: [
+    { id: 'sales:create', label: 'Record sale' },
+    { id: 'sales:view', label: 'View sales' },
+    { id: 'sales:refund', label: 'Process refund' },
+    { id: 'sales:cancel', label: 'Void/cancel sale' },
+  ] },
+  { title: 'Products & Inventory', items: [
+    { id: 'products:view', label: 'View products' },
+    { id: 'products:create', label: 'Add product' },
+    { id: 'products:update', label: 'Edit product' },
+    { id: 'products:delete', label: 'Delete product' },
+    { id: 'inventory:view', label: 'View stock' },
+    { id: 'inventory:adjust', label: 'Adjust stock' },
+  ] },
+  { title: 'Customers & Credit', items: [
+    { id: 'customers:view', label: 'View customers' },
+    { id: 'customers:create', label: 'Add customer' },
+    { id: 'customers:update', label: 'Edit customer' },
+    { id: 'credit:create', label: 'Issue credit (deni)' },
+    { id: 'credit:collect', label: 'Collect repayments' },
+    { id: 'credit:read', label: 'View credit balances' },
+    { id: 'credit:writeoff', label: 'Write off bad debt' },
+  ] },
+  { title: 'Expenses & Purchases', items: [
+    { id: 'expenses:create', label: 'Record expenses' },
+    { id: 'expenses:read', label: 'View expenses' },
+    { id: 'expenses:approve', label: 'Approve expenses' },
+    { id: 'purchases:view', label: 'View purchases' },
+    { id: 'purchases:create', label: 'Create purchases' },
+    { id: 'purchases:approve', label: 'Approve purchases' },
+  ] },
+  { title: 'Shifts', items: [
+    { id: 'shift:open', label: 'Open shift' },
+    { id: 'shift:close', label: 'Close shift' },
+    { id: 'shift:view', label: 'View shifts' },
+  ] },
+  { title: 'Reports', items: [
+    { id: 'reports:sales', label: 'Sales report' },
+    { id: 'reports:inventory', label: 'Inventory report' },
+    { id: 'reports:credit', label: 'Credit (deni) report' },
+    { id: 'reports:activity_log', label: 'Staff activity log' },
+    { id: 'reports:loans', label: 'Business loans report' },
+    { id: 'reports:valuation', label: 'Stock value / valuation' },
+    { id: 'reports:communications', label: 'Send SMS / WhatsApp (Premium)' },
+  ] },
+  { title: 'Financial Controls', items: [
+    { id: 'loans:read', label: 'View loans' },
+    { id: 'loans:write', label: 'Manage loans' },
+    { id: 'cash:read', label: 'View cash' },
+    { id: 'cash:write', label: 'Manage cash' },
+    { id: 'finance:read', label: 'View payables / capital' },
+  ] },
+  { title: 'Staff', items: [
+    { id: 'employees:view', label: 'View employees' },
+  ] },
+];
+
+// Canonical default for a new full-operational employee (mirrors the backend
+// FULL_OPERATIONAL_PERMISSIONS). Never send legacy strings like "pos:write" —
+// the backend rejects unknown/non-grantable permissions.
+const DEFAULT_EMPLOYEE_PERMISSIONS = [
+  'sales:create', 'sales:view', 'sales:refund',
+  'products:view', 'products:create', 'products:update', 'products:delete',
+  'inventory:view', 'inventory:adjust',
+  'customers:view', 'customers:create', 'customers:update',
+  'credit:create', 'credit:collect',
+  'expenses:create',
+  'reports:sales', 'reports:inventory', 'reports:credit',
+  'shift:open', 'shift:close', 'shift:view',
 ];
 
 export default function OwnerEmployeesPage() {
@@ -51,7 +104,7 @@ export default function OwnerEmployeesPage() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', role: 'Cashier' });
-  const [selectedPerms, setSelectedPerms] = useState<string[]>(['pos:write']);
+  const [selectedPerms, setSelectedPerms] = useState<string[]>(DEFAULT_EMPLOYEE_PERMISSIONS);
 
   const load = () => {
     if (!activeShopId) return;
@@ -81,7 +134,7 @@ export default function OwnerEmployeesPage() {
       toast('Employee added. SMS sent with temp PIN.', 'success');
       setAddOpen(false);
       setForm({ name: '', phone: '', role: 'Cashier' });
-      setSelectedPerms(['pos:write']);
+      setSelectedPerms(DEFAULT_EMPLOYEE_PERMISSIONS);
       load();
     } catch (err) {
       toast(errorMessage(err), 'error');
@@ -142,7 +195,7 @@ export default function OwnerEmployeesPage() {
       description={t('employees')}
       breadcrumb={['Owner', t('people'), t('employees')]}
       actions={
-        <button onClick={() => { setAddOpen(true); setSelectedPerms(['pos:write']); }} className="btn-navy inline-flex items-center gap-2">
+        <button onClick={() => { setAddOpen(true); setSelectedPerms(DEFAULT_EMPLOYEE_PERMISSIONS); }} className="btn-navy inline-flex items-center gap-2">
           <Plus size={16} /> {t('add')}
         </button>
       }
@@ -216,12 +269,19 @@ export default function OwnerEmployeesPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">Permissions</label>
-            <div className="space-y-2">
-              {PERMISSIONS.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <input type="checkbox" checked={selectedPerms.includes(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
-                  {p.label}
-                </label>
+            <div className="space-y-4">
+              {PERMISSION_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{group.title}</p>
+                  <div className="space-y-2">
+                    {group.items.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <input type="checkbox" checked={selectedPerms.includes(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
+                        {p.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -232,12 +292,19 @@ export default function OwnerEmployeesPage() {
       </Modal>
 
       <Modal open={!!permTarget} title={`Permissions — ${permTarget?.user?.name ?? ''}`} onClose={() => setPermTarget(null)}>
-        <div className="space-y-2 mb-4">
-          {PERMISSIONS.map((p) => (
-            <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input type="checkbox" checked={selectedPerms.includes(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
-              {p.label}
-            </label>
+        <div className="space-y-4 mb-4">
+          {PERMISSION_GROUPS.map((group) => (
+            <div key={group.title}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{group.title}</p>
+              <div className="space-y-2">
+              {group.items.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input type="checkbox" checked={selectedPerms.includes(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
+                  {p.label}
+                </label>
+              ))}
+              </div>
+            </div>
           ))}
         </div>
         <button onClick={savePermissions} disabled={submitting} className="btn-navy w-full">

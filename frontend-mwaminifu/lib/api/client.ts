@@ -200,6 +200,16 @@ function subscriptionBlockedIfNeeded(status: number, data: unknown): void {
   );
 }
 
+function permissionDeniedIfNeeded(status: number, data: unknown): void {
+  if (status !== 403 || typeof window === 'undefined') return;
+  const error = (data as ApiError | null)?.error;
+  window.dispatchEvent(
+    new CustomEvent('permission:denied', {
+      detail: { code: error?.code, message: error?.message },
+    })
+  );
+}
+
 async function request<T>(endpoint: string, options: { method?: string; body?: unknown } = {}): Promise<ApiResponse<T>> {
   const method = (options.method || 'GET').toUpperCase();
 
@@ -211,6 +221,7 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
       if (!response.ok) {
         await authExpiredIfNeeded(response.status);
         subscriptionBlockedIfNeeded(response.status, data);
+        permissionDeniedIfNeeded(response.status, data);
         throw toApiError(response.status, data);
       }
       const rule = offlineCacheRuleFor(endpoint);
@@ -253,6 +264,7 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
     if (!response.ok) {
       await authExpiredIfNeeded(response.status);
       subscriptionBlockedIfNeeded(response.status, data);
+      permissionDeniedIfNeeded(response.status, data);
       throw toApiError(response.status, data);
     }
     return data as ApiResponse<T>;
@@ -416,6 +428,27 @@ class ApiClient {
       return currentUser;
     } catch {
       return currentUser;
+    }
+  }
+
+  /**
+   * Fetch the current user's permissions fresh from the server. Used by the
+   * employee portal to reflect owner grants/revocations on the next load/focus.
+   */
+  async loadPermissions(): Promise<{ permissions: string[]; role: string | null; shopId: string | null }> {
+    if (typeof window === 'undefined') return { permissions: [], role: null, shopId: null };
+    try {
+      const response = await fetch('/api/auth/permissions', { cache: 'no-store' });
+      if (!response.ok) return { permissions: [], role: null, shopId: null };
+      const payload = (await response.json()) as { data?: { permissions?: string[]; role?: string; shopId?: string | null } };
+      const data = payload?.data ?? {};
+      return {
+        permissions: Array.isArray(data.permissions) ? data.permissions : [],
+        role: data.role ?? null,
+        shopId: data.shopId ?? null,
+      };
+    } catch {
+      return { permissions: [], role: null, shopId: null };
     }
   }
 

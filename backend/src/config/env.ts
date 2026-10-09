@@ -16,6 +16,19 @@ export const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
   TRUST_PROXY: parseInt(process.env.TRUST_PROXY || '0', 10),
 
+  // Seed / test account credentials (used only by `prisma/seed.ts`). In
+  // production these MUST be supplied explicitly — the seed refuses to run with
+  // the insecure defaults when NODE_ENV=production.
+  SYSTEM_OWNER_USERNAME: process.env.SYSTEM_OWNER_USERNAME || '',
+  SYSTEM_OWNER_PASSWORD: process.env.SYSTEM_OWNER_PASSWORD || '',
+  AGENT_TEST_USERNAME: process.env.AGENT_TEST_USERNAME || '',
+  AGENT_TEST_PASSWORD: process.env.AGENT_TEST_PASSWORD || '',
+
+  // Explicit opt-in to allow mocked SMS/FCM outside local development (used for
+  // free-VPS client testing where a real SMS gateway is not wired up). Keep this
+  // UNSET for real production.
+  ALLOW_MOCK_MESSAGING: process.env.ALLOW_MOCK_MESSAGING === 'true',
+
   // SMS gateway configuration. In production MOCK_SMS must be false and a real
   // provider must be configured; see SmsService for provider implementations.
   SMS_PROVIDER: process.env.SMS_PROVIDER || (process.env.MOCK_SMS === 'true' ? 'mock' : 'http'),
@@ -40,12 +53,18 @@ export function validateProductionConfig(): void {
   if (!isProduction) return;
 
   const problems: string[] = [];
+  const allowMock = env.ALLOW_MOCK_MESSAGING;
 
-  if (env.MOCK_SMS) {
-    problems.push('MOCK_SMS must be false in production (OTPs would be fixed to 123456).');
+  if (env.MOCK_SMS && !allowMock) {
+    problems.push('MOCK_SMS must be false in production (OTPs would be fixed to 123456). Set ALLOW_MOCK_MESSAGING=true only for temporary client testing.');
   }
-  if (env.MOCK_FCM) {
-    problems.push('MOCK_FCM must be false in production.');
+  if (env.MOCK_FCM && !allowMock) {
+    problems.push('MOCK_FCM must be false in production. Set ALLOW_MOCK_MESSAGING=true only for temporary client testing.');
+  }
+  if (allowMock) {
+    // Loud warning so this is never left on unnoticed.
+    // eslint-disable-next-line no-console
+    console.warn('[SECURITY] ALLOW_MOCK_MESSAGING=true — mocked SMS/FCM is enabled in production. Disable for real launch.');
   }
   if (!env.MOCK_SMS) {
     if (env.SMS_PROVIDER === 'mock') {

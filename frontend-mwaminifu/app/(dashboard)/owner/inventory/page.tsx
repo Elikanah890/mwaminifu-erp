@@ -6,7 +6,7 @@ import { apiClient, ApiErrorException } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { Product, Category } from '@/lib/types';
-import { formatCurrency, errorMessage } from '@/lib/format';
+import { formatCurrency, errorMessage, formatStockWithUnits } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -17,6 +17,20 @@ import { useToast } from '@/components/Toast';
 import { PackageMinus, Plus, Search, Pencil, Trash2, Upload, X, Download, Percent, ScanBarcode, Wand2 } from 'lucide-react';
 
 const UNITS = ['piece', 'pack', 'bottle', 'box', 'carton', 'kg', 'gram', 'litre', 'millilitre', 'metre', 'dozen', 'tray', 'loaf', 'tube', 'ream'];
+
+type UnitConfigForm = {
+  unitName: string;
+  baseUnits: string;
+  sellingPrice: string;
+  pricingMode: 'FIXED' | 'FLUCTUATING';
+  minPrice: string;
+  maxPrice: string;
+  isDefault: boolean;
+};
+
+const emptyConfig = (): UnitConfigForm => ({
+  unitName: '', baseUnits: '1', sellingPrice: '', pricingMode: 'FIXED', minPrice: '', maxPrice: '', isDefault: false,
+});
 
 export default function OwnerInventoryPage() {
   const { activeShopId, loading: shopLoading } = useShop();
@@ -33,11 +47,12 @@ export default function OwnerInventoryPage() {
 
   const [form, setForm] = useState({
     name: '', sku: '', barcode: '', categoryId: '', brand: '', supplier: '',
-    costPrice: '', sellingPrice: '', taxRate: '', stockQuantity: '', unit: 'piece', reorderLevel: '10', description: '',
+    costPrice: '', sellingPrice: '', taxRate: '', baseStock: '', baseUnitName: 'piece', reorderLevel: '10', description: '',
   });
   const [images, setImages] = useState<string[]>([]);
+  const [configs, setConfigs] = useState<UnitConfigForm[]>([]);
 
-  const [adjustForm, setAdjustForm] = useState({ quantityChange: '', reason: '' });
+  const [adjustForm, setAdjustForm] = useState({ quantityChange: '', reason: '', unitConfigId: '' });
 
   const [importOpen, setImportOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -66,8 +81,9 @@ export default function OwnerInventoryPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', sku: '', barcode: '', categoryId: '', brand: '', supplier: '', costPrice: '', sellingPrice: '', taxRate: '', stockQuantity: '', unit: 'piece', reorderLevel: '10', description: '' });
+    setForm({ name: '', sku: '', barcode: '', categoryId: '', brand: '', supplier: '', costPrice: '', sellingPrice: '', taxRate: '', baseStock: '', baseUnitName: 'piece', reorderLevel: '10', description: '' });
     setImages([]);
+    setConfigs([{ ...emptyConfig(), unitName: 'piece', baseUnits: '1', isDefault: true }]);
     setModalOpen(true);
   };
 
@@ -75,11 +91,29 @@ export default function OwnerInventoryPage() {
     setEditing(p);
     setForm({
       name: p.name, sku: p.sku ?? '', barcode: p.barcode ?? '', categoryId: p.categoryId ?? '', brand: p.brand ?? '', supplier: p.supplier ?? '',
-      costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), taxRate: String((p as unknown as { taxRate?: number }).taxRate ?? 0), stockQuantity: String(p.stockQuantity), unit: p.unit, reorderLevel: String(p.reorderLevel), description: (p as unknown as { description?: string }).description ?? '',
+      costPrice: String(p.costPrice), sellingPrice: String(p.sellingPrice), taxRate: String((p as unknown as { taxRate?: number }).taxRate ?? 0),
+      baseStock: String(p.baseUnitStock ?? p.stockQuantity), baseUnitName: p.baseUnitName ?? p.unit ?? 'piece',
+      reorderLevel: String(p.reorderLevel), description: (p as unknown as { description?: string }).description ?? '',
     });
     setImages((p as unknown as { images?: string[] }).images ?? []);
+    setConfigs(
+      (p.unitConfigs ?? []).map((c) => ({
+        unitName: c.unitName,
+        baseUnits: String(c.baseUnits),
+        sellingPrice: String(c.sellingPrice),
+        pricingMode: (c.pricingMode as 'FIXED' | 'FLUCTUATING') ?? 'FIXED',
+        minPrice: c.minPrice != null ? String(c.minPrice) : '',
+        maxPrice: c.maxPrice != null ? String(c.maxPrice) : '',
+        isDefault: c.isDefault,
+      }))
+    );
     setModalOpen(true);
   };
+
+  const addConfig = () => setConfigs((prev) => [...prev, emptyConfig()]);
+  const updateConfig = (i: number, patch: Partial<UnitConfigForm>) =>
+    setConfigs((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  const removeConfig = (i: number) => setConfigs((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -102,6 +136,12 @@ export default function OwnerInventoryPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // At least one unit configuration is required.
+    const validConfigs = configs.filter((c) => c.unitName.trim() && Number(c.baseUnits) > 0 && c.sellingPrice !== '');
+    if (validConfigs.length === 0) {
+      toast(t('cantDeleteLastUnit'), 'error');
+      return;
+    }
     setSubmitting(true);
     // Spec 8.4.1 — selling price must be > cost. The Owner may explicitly
     // override after a confirmation step.
@@ -115,11 +155,22 @@ export default function OwnerInventoryPage() {
       costPrice: Number(form.costPrice) || 0,
       sellingPrice: Number(form.sellingPrice) || 0,
       taxRate: Number(form.taxRate) || 0,
-      stockQuantity: Number(form.stockQuantity) || 0,
-      unit: form.unit,
+      baseUnitName: form.baseUnitName || 'piece',
+      baseUnitStock: Number(form.baseStock) || 0,
       reorderLevel: Number(form.reorderLevel) || 10,
       description: form.description || undefined,
       images,
+      unitConfigs: validConfigs.map((c) => ({
+        unitName: c.unitName.trim(),
+        baseUnits: Number(c.baseUnits),
+        sellingPrice: Number(c.sellingPrice) || 0,
+        pricingMode: c.pricingMode,
+        ...(c.pricingMode === 'FLUCTUATING'
+          ? { minPrice: Number(c.minPrice) || 0, maxPrice: Number(c.maxPrice) || 0 }
+          : {}),
+        isDefault: c.isDefault,
+        ...(priceOverride ? { priceOverride: true } : {}),
+      })),
       ...(priceOverride ? { priceOverride: true } : {}),
     });
     const save = async (priceOverride: boolean) => {
@@ -164,10 +215,14 @@ export default function OwnerInventoryPage() {
     if (!adjustTarget) return;
     setSubmitting(true);
     try {
-      await apiClient.post(`/products/${adjustTarget.id}/adjust-stock`, { quantityChange: Number(adjustForm.quantityChange), reason: adjustForm.reason });
+      await apiClient.post(`/products/${adjustTarget.id}/adjust-stock`, {
+        quantityChange: Number(adjustForm.quantityChange),
+        reason: adjustForm.reason,
+        unitConfigId: adjustForm.unitConfigId || undefined,
+      });
       toast(t('adjust'), 'success');
       setAdjustTarget(null);
-      setAdjustForm({ quantityChange: '', reason: '' });
+      setAdjustForm({ quantityChange: '', reason: '', unitConfigId: '' });
       load();
     } catch (err) {
       toast(errorMessage(err), 'error');
@@ -294,13 +349,16 @@ export default function OwnerInventoryPage() {
                     <td className="px-4 py-3 text-muted-foreground">{p.category?.name ?? '-'}</td>
                     <td className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(p.costPrice)}</td>
                     <td className="px-4 py-3 text-right font-medium text-foreground">{formatCurrency(p.sellingPrice)}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{p.stockQuantity}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="font-semibold">{p.stockQuantity}</span>
+                      <span className="block text-xs text-subtle-foreground">{formatStockWithUnits(p)}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge active={p.stockQuantity > p.reorderLevel} activeLabel={t('inStock')} inactiveLabel={t('lowStock')} />
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-3">
-                        <button onClick={() => { setAdjustTarget(p); setAdjustForm({ quantityChange: '', reason: '' }); }} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><PackageMinus size={14} /></button>
+                        <button onClick={() => { setAdjustTarget(p); setAdjustForm({ quantityChange: '', reason: '', unitConfigId: '' }); }} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><PackageMinus size={14} /></button>
                         <button onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><Pencil size={14} /></button>
                         <button onClick={() => remove(p)} className="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline"><Trash2 size={14} /></button>
                       </div>
@@ -348,13 +406,11 @@ export default function OwnerInventoryPage() {
               <input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} className="input-field" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('unit')}</label>
-              <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="input-field">
-                {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('baseUnitName')}</label>
+              <input list="unit-names" value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder="Bottle" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('costPrice')}</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('costPrice')} <span className="text-subtle-foreground">({t('perBaseUnit')})</span></label>
               <input required type="number" min={0} value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} className="input-field" />
             </div>
             <div>
@@ -362,16 +418,65 @@ export default function OwnerInventoryPage() {
               <input required type="number" min={0} value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="input-field" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('baseStock')}</label>
+              <input type="number" min={0} value={form.baseStock} onChange={(e) => setForm({ ...form, baseStock: e.target.value })} className="input-field" />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('tax')} (%)</label>
               <input type="number" min={0} value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="input-field" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('stock')}</label>
-              <input type="number" min={0} value={form.stockQuantity} onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })} className="input-field" />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('reorderLevel')}</label>
               <input type="number" min={0} value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} className="input-field" />
+            </div>
+            <datalist id="unit-names">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
+
+            <div className="col-span-2 border-t border-border pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-foreground">{t('unitConfigurations')}</label>
+                <button type="button" onClick={addConfig} className="btn-outline inline-flex items-center gap-1 text-xs"><Plus size={14} /> {t('addUnit')}</button>
+              </div>
+              <div className="space-y-2">
+                {configs.map((c, i) => (
+                  <div key={i} className="flex flex-wrap items-end gap-2 border border-border rounded-lg p-2">
+                    <div className="flex-1 min-w-[110px]">
+                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('unitName')}</label>
+                      <input list="unit-names" value={c.unitName} onChange={(e) => updateConfig(i, { unitName: e.target.value })} className="input-field text-sm" placeholder="Carton" />
+                    </div>
+                    <div className="w-20">
+                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('baseUnits')}</label>
+                      <input type="number" min={1} value={c.baseUnits} onChange={(e) => updateConfig(i, { baseUnits: e.target.value })} className="input-field text-sm" />
+                    </div>
+                    <div className="w-24">
+                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('sellingPrice')}</label>
+                      <input type="number" min={0} value={c.sellingPrice} onChange={(e) => updateConfig(i, { sellingPrice: e.target.value })} className="input-field text-sm" />
+                    </div>
+                    <div className="w-28">
+                      <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('pricingMode')}</label>
+                      <select value={c.pricingMode} onChange={(e) => updateConfig(i, { pricingMode: e.target.value as 'FIXED' | 'FLUCTUATING' })} className="input-field text-sm">
+                        <option value="FIXED">{t('fixedPrice')}</option>
+                        <option value="FLUCTUATING">{t('fluctuating')}</option>
+                      </select>
+                    </div>
+                    {c.pricingMode === 'FLUCTUATING' && (
+                      <>
+                        <div className="w-20">
+                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('minPrice')}</label>
+                          <input type="number" min={0} value={c.minPrice} onChange={(e) => updateConfig(i, { minPrice: e.target.value })} className="input-field text-sm" />
+                        </div>
+                        <div className="w-20">
+                          <label className="block text-[11px] text-subtle-foreground mb-0.5">{t('maxPrice')}</label>
+                          <input type="number" min={0} value={c.maxPrice} onChange={(e) => updateConfig(i, { maxPrice: e.target.value })} className="input-field text-sm" />
+                        </div>
+                      </>
+                    )}
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground pb-2">
+                      <input type="checkbox" checked={c.isDefault} onChange={(e) => updateConfig(i, { isDefault: e.target.checked })} className="rounded" /> {t('isDefault')}
+                    </label>
+                    <button type="button" disabled={configs.length <= 1} onClick={() => removeConfig(i)} className="p-2 text-danger rounded hover:bg-danger/10 disabled:opacity-40" title={t('cantDeleteLastUnit')}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium text-foreground mb-1">{t('description')}</label>
@@ -407,7 +512,18 @@ export default function OwnerInventoryPage() {
 
       <Modal open={!!adjustTarget} title={`${t('adjust')} — ${adjustTarget?.name ?? ''}`} onClose={() => setAdjustTarget(null)}>
         <form onSubmit={submitAdjustment} className="space-y-4">
-          <p className="text-sm text-muted-foreground">{t('stock')}: <span className="font-semibold text-foreground">{adjustTarget?.stockQuantity}</span></p>
+          <p className="text-sm text-muted-foreground">{t('stock')}: <span className="font-semibold text-foreground">{adjustTarget ? formatStockWithUnits(adjustTarget) : ''}</span></p>
+          {(adjustTarget?.unitConfigs?.length ?? 0) > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('chooseUnit')}</label>
+              <select value={adjustForm.unitConfigId} onChange={(e) => setAdjustForm({ ...adjustForm, unitConfigId: e.target.value })} className="input-field">
+                <option value="">{adjustTarget?.baseUnitName ?? adjustTarget?.unit} (1)</option>
+                {(adjustTarget?.unitConfigs ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.unitName} ({c.baseUnits})</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">{t('quantity')} (+ / -)</label>
             <input required type="number" value={adjustForm.quantityChange} onChange={(e) => setAdjustForm({ ...adjustForm, quantityChange: e.target.value })} className="input-field" />

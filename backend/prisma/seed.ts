@@ -3,6 +3,29 @@ import { hashPassword, hashPin } from '../src/utils/bcrypt.util';
 
 const prisma = new PrismaClient();
 
+// Test/demo credentials. In production they MUST be provided explicitly; the
+// seed refuses to run with insecure defaults when NODE_ENV=production unless
+// SEED_ALLOW_PRODUCTION=true is set (destructive: it wipes existing data).
+const isProd = process.env.NODE_ENV === 'production';
+if (isProd && process.env.SEED_ALLOW_PRODUCTION !== 'true') {
+  console.error(
+    'Refusing to seed: NODE_ENV=production wipes all data. Set SEED_ALLOW_PRODUCTION=true to proceed.'
+  );
+  process.exit(1);
+}
+
+const SYSTEM_OWNER_USERNAME = process.env.SYSTEM_OWNER_USERNAME || 'admin';
+const SYSTEM_OWNER_PASSWORD = process.env.SYSTEM_OWNER_PASSWORD || 'admin123';
+const AGENT_USERNAME = process.env.AGENT_TEST_USERNAME || 'agent1';
+const AGENT_PASSWORD = process.env.AGENT_TEST_PASSWORD || 'agent123';
+const OWNER_PHONE = process.env.OWNER_TEST_PHONE || '0754000000';
+const OWNER_PIN = process.env.OWNER_TEST_PIN || '123456';
+
+if (isProd && (!process.env.SYSTEM_OWNER_PASSWORD || !process.env.AGENT_TEST_PASSWORD)) {
+  console.error('Refusing to seed: set SYSTEM_OWNER_PASSWORD and AGENT_TEST_PASSWORD in production.');
+  process.exit(1);
+}
+
 async function main() {
   console.log('Seeding Mwaminifu database...');
 
@@ -36,8 +59,8 @@ async function main() {
   // Create System Owner
   const systemOwner = await prisma.user.create({
     data: {
-      username: 'admin',
-      passwordHash: await hashPassword('admin123'),
+      username: SYSTEM_OWNER_USERNAME,
+      passwordHash: await hashPassword(SYSTEM_OWNER_PASSWORD),
       name: 'System Administrator',
       email: 'admin@mwaminifu.com',
       role: 'SYSTEM_OWNER',
@@ -49,8 +72,8 @@ async function main() {
   // Create Agent
   const agentUser = await prisma.user.create({
     data: {
-      username: 'agent1',
-      passwordHash: await hashPassword('agent123'),
+      username: AGENT_USERNAME,
+      passwordHash: await hashPassword(AGENT_PASSWORD),
       name: 'Agent One',
       phone: '255712345670',
       email: 'agent1@mwaminifu.com',
@@ -61,8 +84,8 @@ async function main() {
 
   const agent = await prisma.agent.create({
     data: {
-      username: 'agent1',
-      passwordHash: await hashPassword('agent123'),
+      username: AGENT_USERNAME,
+      passwordHash: await hashPassword(AGENT_PASSWORD),
       name: 'Agent One',
       phone: '255712345670',
       email: 'agent1@mwaminifu.com',
@@ -80,11 +103,11 @@ async function main() {
   // Create Business Owner
   const businessOwner = await prisma.user.create({
     data: {
-      phone: '0754000000',
+      phone: OWNER_PHONE,
       name: 'John Business',
       email: 'john@shop.com',
       role: 'BUSINESS_OWNER',
-      pinHash: await hashPin('123456'),
+      pinHash: await hashPin(OWNER_PIN),
       isPinSet: true,
       isPhoneVerified: true,
       agentId: agent.id,
@@ -221,11 +244,36 @@ async function main() {
   }
   console.log(`Created ${customers.length} customers`);
 
-  // Create Employees (3)
+  // Create Employees (Manager + Cashier) with canonical permissions.
   const employeeData = [
-    { name: 'Mary Cashier', phone: '0754111111', role: 'Cashier', permissions: ['pos:write', 'inventory:read'], pin: '1234' },
-    { name: 'Peter Sales', phone: '255712345692', role: 'Sales Assistant', permissions: ['pos:write', 'credit:write'], pin: '123456' },
-    { name: 'Anna Store', phone: '255712345693', role: 'Store Keeper', permissions: ['pos:write', 'inventory:write', 'expenses:write'], pin: '123456' },
+    {
+      name: 'Mary Manager',
+      phone: '0754111111',
+      role: 'Manager',
+      pin: '111111',
+      permissions: [
+        'sales:create', 'sales:view', 'sales:refund',
+        'products:view', 'products:create', 'products:update',
+        'inventory:view', 'inventory:adjust',
+        'customers:view', 'customers:create', 'customers:update',
+        'credit:create', 'credit:collect', 'credit:read',
+        'expenses:create', 'expenses:read', 'expenses:approve',
+        'purchases:view', 'purchases:create',
+        'reports:sales', 'reports:inventory', 'reports:credit', 'reports:activity_log',
+        'shift:open', 'shift:close', 'shift:view', 'employees:view',
+      ],
+    },
+    {
+      name: 'Mary Cashier',
+      phone: '0754222222',
+      role: 'Cashier',
+      pin: '222222',
+      permissions: [
+        'sales:create', 'sales:view', 'products:view', 'inventory:view',
+        'customers:view', 'customers:create', 'credit:create', 'credit:collect',
+        'shift:open', 'shift:close', 'shift:view', 'reports:sales',
+      ],
+    },
   ];
 
   for (const emp of employeeData) {
@@ -407,25 +455,24 @@ async function main() {
   console.log('\nLogin Credentials:');
   console.log('------------------------------------------');
   console.log('System Owner:');
-  console.log('  Username: admin');
-  console.log('  Password: admin123');
+  console.log(`  Username: ${SYSTEM_OWNER_USERNAME}`);
+  console.log(`  Password: ${SYSTEM_OWNER_PASSWORD}`);
   console.log('');
   console.log('Agent:');
-  console.log('  Username: agent1');
-  console.log('  Password: agent123');
+  console.log(`  Username: ${AGENT_USERNAME}`);
+  console.log(`  Password: ${AGENT_PASSWORD}`);
   console.log('');
   console.log('Business Owner:');
-  console.log('  Phone:    0754000000');
-  console.log('  OTP:      123456');
-  console.log('  PIN:      123456');
+  console.log(`  Phone:    ${OWNER_PHONE}`);
+  console.log('  OTP:      123456 (mocked)');
+  console.log(`  PIN:      ${OWNER_PIN}`);
   console.log('  Shop:     John\'s Grocery');
   console.log('');
   console.log('Employees:');
-  console.log('  Mary Cashier:  0754111111 / PIN: 1234');
-  console.log('  Peter Sales:   255712345692 / PIN: 123456');
-  console.log('  Anna Store:    255712345693 / PIN: 123456');
+  console.log('  Mary Manager:  0754111111 / PIN: 111111');
+  console.log('  Mary Cashier:  0754222222 / PIN: 222222');
   console.log('------------------------------------------');
-  console.log('OTP for testing: always 123456');
+  console.log('OTP for testing: always 123456 (when MOCK_SMS=true)');
   console.log('========================================\n');
 }
 

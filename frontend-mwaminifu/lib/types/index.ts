@@ -17,21 +17,52 @@ export interface Agent {
   createdBy: string;
   createdAt: string;
   _count?: { onboardedUsers: number };
+  commissionEarned?: number;
+  commissionPaid?: number;
 }
 
 export interface PlatformStats {
   totalBusinesses: number;
   totalAgents: number;
-  totalSales: number;
+  activeAgents: number;
+  deactivatedAgents: number;
   totalShops: number;
-  totalRevenue: number;
-  totalEmployees: number;
-  totalProducts: number;
-  todayRevenue: number;
-  todaySales: number;
-  todayNewOwners: number;
+  totalSubscriptions: number;
+  activeSubscriptions: number;
+  totalSubscriptionRevenue: number;
+  monthlySubscriptionRevenue: number;
   pendingTickets: number;
-  revenueSeries: Array<{ date: string; orders: number; revenue: number }>;
+}
+
+export type RevenueGranularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface AdminDashboard {
+  platform: {
+    totalBusinessOwners: number;
+    totalAgents: number;
+    activeAgents: number;
+    deactivatedAgents: number;
+    totalShops: number;
+    activeSubscriptions: number;
+    totalSubscriptions: number;
+  };
+  money: {
+    totalRevenue: number;
+    monthlyRevenue: number;
+    commissionsPaid: number;
+    netIncome: number;
+  };
+  revenueTrend: { granularity: RevenueGranularity; points: Array<{ date: string; revenue: number }> };
+  actionRequired: {
+    expiringSoon: number;
+    gracePeriod: number;
+    pendingPayouts: number;
+    failedPayments: number;
+  };
+  breakdown: { basic: number; premium: number; monthly: number; weekly: number; daily: number; yearly: number };
+  health: { active: number; grace: number; lapsed: number; total: number; churnRate: number };
+  recentActivity: Array<{ id: string; type: string; title: string; subtitle: string; at: string }>;
+  generatedAt: string;
 }
 
 export interface AgentStats {
@@ -44,6 +75,11 @@ export interface AgentStats {
   businessesThisYear: number;
   shopsThisMonth: number;
   shopsThisYear: number;
+  commissionEarned?: number;
+  commissionPaid?: number;
+  commissionPending?: number;
+  commissionThisMonth?: number;
+  agentCode?: string;
 }
 
 export interface AgentBusiness {
@@ -90,7 +126,9 @@ export interface PaginationMeta {
 
 export interface AgentDetail extends Agent {
   onboardedUsers: Array<{ id: string; name: string; phone: string | null; isActive: boolean; createdAt: string }>;
-  stats: { onboardedUsers: number; activeUsers: number; transactions: number; revenue: number };
+  commissions?: Array<{ id: string; amount: number; status: string; createdAt: string; owner?: { name: string } | null; payout?: { reference?: string | null } | null }>;
+  payouts?: Array<{ id: string; amount: number; method: string; reference?: string | null; status: string; createdAt: string }>;
+  stats: { onboardedUsers: number; activeUsers: number; transactions: number; revenue: number; commissionEarned?: number; commissionPaid?: number };
 }
 
 export interface BusinessOwner {
@@ -129,8 +167,6 @@ export interface Business {
   isActive: boolean;
   agentName?: string | null;
   shopCount: number;
-  transactions: number;
-  revenue: number;
   lastLoginAt?: string | null;
   createdAt: string;
   ownedShops?: Array<{ id: string; name: string; createdAt: string }>;
@@ -343,6 +379,8 @@ export interface AgentDetail extends Agent {
     activeUsers: number;
     transactions: number;
     revenue: number;
+    commissionEarned?: number;
+    commissionPaid?: number;
   };
 }
 
@@ -538,6 +576,34 @@ export interface Shift {
   closedAt?: string | null;
 }
 
+export interface TopProduct {
+  productId?: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+  profit: number;
+  trend: number;
+}
+
+export interface DashboardComparisons {
+  sales: { yesterday: number; week: number };
+  profit: { yesterday: number; week: number };
+  expenses: { yesterday: number; week: number };
+  cash: { week: number };
+  credit: { week: number };
+  stock: { week: number };
+  loans: { week: number };
+}
+
+export interface MonthGlance {
+  sales: number;
+  profit: number;
+  topCustomer: string | null;
+  topCustomerAmount: number;
+  bestProduct: string | null;
+  bestProductQuantity: number;
+}
+
 export interface ShopDashboard {
   todaySales: number;
   todayProfit: number;
@@ -559,8 +625,17 @@ export interface ShopDashboard {
   subscriptionStatus: string;
   lastSyncStatus: string;
   salesTrend: Array<{ date: string; total: number }>;
-  topProducts: Array<{ name: string; quantity: number }>;
+  topProducts: TopProduct[];
   actionItems?: Array<{ type: string; label: string; count: number; severity: string }>;
+  // Spec 8.6 / 8.6a — business valuation, cash and comparisons
+  cashBalance?: number;
+  customerCreditReceivable?: number;
+  businessLoansOutstanding?: number;
+  netBusinessValue?: number;
+  valuationTrend?: Array<{ date: string; total: number; iso?: string }>;
+  comparisons?: DashboardComparisons;
+  monthGlance?: MonthGlance;
+  range?: string;
 }
 
 export interface SalesReport {

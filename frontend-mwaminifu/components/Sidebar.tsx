@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useAppConfig } from '@/lib/context/AppConfigContext';
 import {
   LayoutDashboard,
   UserCog,
@@ -41,8 +42,9 @@ import {
 } from 'lucide-react';
 import { apiClient, PublicUser } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
+import { usePermissions } from '@/lib/context/PermissionsContext';
 
-export type NavItem = { href: string; label: string; icon: React.ReactNode };
+export type NavItem = { href: string; label: string; icon: React.ReactNode; permission?: string };
 export type NavGroup = { section?: string; items: NavItem[] };
 
 export type PortalRole = 'SYSTEM_OWNER' | 'AGENT' | 'BUSINESS_OWNER' | 'EMPLOYEE';
@@ -60,7 +62,6 @@ const SYSTEM_NAV: NavItem[] = [
   { href: '/system/businesses', label: 'businesses', icon: <Building2 size={18} /> },
   { href: '/system/revenue', label: 'revenue', icon: <Wallet size={18} /> },
   { href: '/system/subscriptions', label: 'subscriptions', icon: <CreditCard size={18} /> },
-  { href: '/system/pricing', label: 'pricing', icon: <DollarSign size={18} /> },
   { href: '/system/regions', label: 'regions', icon: <Map size={18} /> },
   { href: '/system/settings', label: 'settings', icon: <Settings size={18} /> },
 ];
@@ -127,8 +128,13 @@ const OWNER_NAV: NavGroup[] = [
       { href: '/owner/reports/valuation', label: 'valuation', icon: <Calculator size={18} /> },
     ],
   },
-  { items: [{ href: '/owner/audit', label: 'auditLog', icon: <FileClock size={18} /> }] },
-  { section: 'settings', items: [{ href: '/owner/settings', label: 'settings', icon: <Settings size={18} /> }] },
+  {
+    section: 'settings',
+    items: [
+      { href: '/owner/settings', label: 'settings', icon: <Settings size={18} /> },
+      { href: '/owner/audit', label: 'auditLog', icon: <FileClock size={18} /> },
+    ],
+  },
 ];
 
 const EMPLOYEE_NAV: NavGroup[] = [
@@ -136,14 +142,14 @@ const EMPLOYEE_NAV: NavGroup[] = [
   {
     section: 'sales',
     items: [
-      { href: '/employee/sales', label: 'pos', icon: <ShoppingCart size={18} /> },
-      { href: '/employee/activity', label: 'mySales', icon: <History size={18} /> },
+      { href: '/employee/sales', label: 'pos', icon: <ShoppingCart size={18} />, permission: 'sales:create' },
+      { href: '/employee/activity', label: 'mySales', icon: <History size={18} />, permission: 'sales:view' },
     ],
   },
-  { section: 'inventory', items: [{ href: '/employee/inventory', label: 'stockLookup', icon: <Package size={18} /> }] },
-  { section: 'customers', items: [{ href: '/employee/customers', label: 'customers', icon: <Users size={18} /> }] },
-  { section: 'shifts', items: [{ href: '/employee/shift', label: 'currentShift', icon: <Clock size={18} /> }] },
-  { section: 'myActivity', items: [{ href: '/employee/reports', label: 'myActivity', icon: <BarChart3 size={18} /> }] },
+  { section: 'inventory', items: [{ href: '/employee/inventory', label: 'stockLookup', icon: <Package size={18} />, permission: 'inventory:view' }] },
+  { section: 'customers', items: [{ href: '/employee/customers', label: 'customers', icon: <Users size={18} />, permission: 'customers:view' }] },
+  { section: 'shifts', items: [{ href: '/employee/shift', label: 'currentShift', icon: <Clock size={18} />, permission: 'shift:view' }] },
+  { section: 'myActivity', items: [{ href: '/employee/reports', label: 'myActivity', icon: <BarChart3 size={18} />, permission: 'reports:sales' }] },
   { section: 'profilePortalLabel', items: [{ href: '/employee/profile', label: 'profile', icon: <UserRound size={18} /> }] },
 ];
 
@@ -185,7 +191,14 @@ export default function Sidebar({
     });
   };
 
-  const groups = navFor(role);
+  const { can } = usePermissions();
+  const groups = navFor(role)
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.permission || role !== 'EMPLOYEE' || can(item.permission)),
+    }))
+    .filter((group) => group.items.length > 0);
+  const { appName } = useAppConfig();
   const portalLabel = t(ROLE_LABEL_KEYS[role]);
   const roleDisplay = user?.role ? t(ROLE_LABEL_KEYS[user.role]) : portalLabel;
 
@@ -236,7 +249,7 @@ export default function Sidebar({
                 transition={{ duration: 0.15 }}
                 className="min-w-0 flex-1"
               >
-                <h2 className="truncate text-sm font-semibold">Mwaminifu</h2>
+                <h2 className="truncate text-sm font-semibold">{appName}</h2>
                 <p className="truncate text-[11px] text-white/50">{portalLabel}</p>
               </motion.div>
             )}
@@ -316,12 +329,12 @@ export default function Sidebar({
         <div className="border-t border-white/10 p-3" suppressHydrationWarning>
           <div className={`mb-2 flex items-center gap-2 ${collapsed ? 'justify-center' : ''}`}>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
-              {(isClient ? user?.name ?? portalLabel : portalLabel).slice(0, 1).toUpperCase()}
+              {(isClient ? (role === 'SYSTEM_OWNER' ? t('systemOwner') : user?.name ?? portalLabel) : portalLabel).slice(0, 1).toUpperCase()}
             </span>
             <AnimatePresence initial={false}>
               {!collapsed && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-w-0">
-                  <p className="truncate text-sm font-medium text-white/90">{isClient ? user?.name ?? portalLabel : portalLabel}</p>
+                  <p className="truncate text-sm font-medium text-white/90">{isClient ? (role === 'SYSTEM_OWNER' ? t('systemOwner') : user?.name ?? portalLabel) : portalLabel}</p>
                   <p className="truncate text-[11px] text-white/40">{isClient ? roleDisplay : portalLabel}</p>
                 </motion.div>
               )}

@@ -91,8 +91,9 @@ describe('subscriptionService lifecycle', () => {
 
   it('seeds default plans when none exist', async () => {
     mockPrisma.subscriptionPlan.count.mockResolvedValue(0);
-    mockPrisma.subscriptionPlan.createMany.mockResolvedValue({ count: 2 });
+    mockPrisma.subscriptionPlan.findUnique.mockResolvedValue(null);
+    mockPrisma.subscriptionPlan.create.mockResolvedValue({});
     await subscriptionService.ensureDefaultPlans();
-    expect(mockPrisma.subscriptionPlan.createMany).toHaveBeenCalled();
+    expect(mockPrisma.subscriptionPlan.create).toHaveBeenCalledTimes(2);
   });
 });

@@ -8,6 +8,7 @@ import { SkeletonCard } from '@/components/Spinner';
 import { Stagger, StaggerItem, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
 import ActiveSessionsCard from '@/components/ActiveSessionsCard';
+import ChangePasswordCard from '@/components/ChangePasswordCard';
 
 interface SettingField {
   key: string;
@@ -152,6 +153,8 @@ export default function SettingsPage() {
       await apiClient.put('/admin/settings', body);
       toast(`${section.title} saved`);
       await load();
+      // Reflect an app-name change immediately in the shell / document title.
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('appconfig:refresh'));
     } catch (err) {
       toast(errorMessage(err), 'error');
       setError(errorMessage(err));
@@ -178,6 +181,9 @@ export default function SettingsPage() {
       <Stagger className="space-y-6 max-w-3xl">
         <StaggerItem>
           <ActiveSessionsCard />
+        </StaggerItem>
+        <StaggerItem>
+          <ChangePasswordCard />
         </StaggerItem>
         {SECTIONS.map((section) => {
           const isSaving = savingSection === section.title;

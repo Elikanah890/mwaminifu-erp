@@ -2,7 +2,12 @@
 
 import { ReactNode } from 'react';
 import DashboardShell from '@/components/DashboardShell';
+import { PermissionsProvider } from '@/lib/context/PermissionsContext';
 
 export default function EmployeeLayout({ children }: { children: ReactNode }) {
-  return <DashboardShell role="EMPLOYEE">{children}</DashboardShell>;
+  return (
+    <PermissionsProvider role="EMPLOYEE">
+      <DashboardShell role="EMPLOYEE">{children}</DashboardShell>
+    </PermissionsProvider>
+  );
 }

@@ -75,7 +75,7 @@ describe('requirePermission', () => {
   });
 
   it('limits agents to the operational allow-list', () => {
-    expect(runSync(requirePermission('pos:write'), { user: { userId: 'a', role: 'AGENT', permissions: [] } }).next).toHaveBeenCalled();
+    expect(runSync(requirePermission('sales:create'), { user: { userId: 'a', role: 'AGENT', permissions: [] } }).next).toHaveBeenCalled();
     expect(runSync(requirePermission('loans:write'), { user: { userId: 'a', role: 'AGENT', permissions: [] } }).res.status).toHaveBeenCalledWith(403);
   });
 });

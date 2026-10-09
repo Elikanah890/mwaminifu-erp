@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { GRANTABLE_PERMISSIONS } from '../config/permissions';
+
+const permissionName = z.string().refine((p) => GRANTABLE_PERMISSIONS.includes(p), {
+  message: 'Unknown or non-grantable permission',
+});
 
 export const createShopSchema = z.object({
   name: z.string().min(2).max(100),
@@ -25,6 +30,9 @@ export const createSaleSchema = z.object({
     unit: z.string().optional(),
     unitPrice: z.number().min(0).optional(),
     baseUnits: z.number().positive().optional(),
+    unitConfigId: z.string().optional(),
+    unitName: z.string().optional(),
+    baseUnitsPerConfig: z.number().int().positive().optional(),
     discount: z.number().min(0).optional(),
   })),
   discount: z.number().min(0).optional(),
@@ -54,6 +62,18 @@ export const createProductSchema = z.object({
   stockQuantity: z.number().int().min(0).optional(),
   unit: z.string().optional(),
   unitConversion: z.number().positive().optional(),
+  baseUnitName: z.string().optional(),
+  baseUnitStock: z.number().int().min(0).optional(),
+  unitConfigs: z.array(z.object({
+    unitName: z.string().min(1),
+    baseUnits: z.number().int().positive(),
+    sellingPrice: z.number().min(0),
+    minPrice: z.number().min(0).optional(),
+    maxPrice: z.number().min(0).optional(),
+    pricingMode: z.enum(['FIXED', 'FLUCTUATING']).optional(),
+    isDefault: z.boolean().optional(),
+    priceOverride: z.boolean().optional(),
+  })).optional(),
   images: z.array(z.string()).optional(),
   barcode: z.string().optional(),
   // Spec 8.4.1 — explicit Owner-only override when saving at/below cost.
@@ -63,6 +83,9 @@ export const createProductSchema = z.object({
 export const adjustStockSchema = z.object({
   quantityChange: z.number().int(),
   reason: z.string().min(1),
+  // Optional: express the adjustment in a unit configuration (e.g. +1 carton).
+  unitConfigId: z.string().optional(),
+  baseUnits: z.number().int().positive().optional(),
 });
 
 export const createExpenseSchema = z.object({
@@ -108,19 +131,28 @@ export const addEmployeeSchema = z.object({
   phone: z.string().min(10).max(15),
   name: z.string().min(1),
   role: z.string().optional(),
-  permissions: z.array(z.string()).optional(),
+  permissions: z.array(permissionName).optional(),
 });
 
 export const updatePermissionsSchema = z.object({
-  permissions: z.array(z.string()),
+  permissions: z.array(permissionName),
 });
+
+const shopLocationFields = {
+  shopAddress: z.string().optional(),
+  region: z.string().optional(),
+  district: z.string().optional(),
+  ward: z.string().optional(),
+  street: z.string().optional(),
+  businessCategory: z.string().optional(),
+};
 
 export const onboardBusinessSchema = z.object({
   phone: z.string().min(10).max(15),
   name: z.string().min(1),
   email: z.string().email().optional(),
   shopName: z.string().min(1),
-  shopAddress: z.string().optional(),
+  ...shopLocationFields,
 });
 
 export const createBusinessOwnerSchema = z.object({
@@ -128,7 +160,7 @@ export const createBusinessOwnerSchema = z.object({
   name: z.string().min(1),
   email: z.string().email().optional(),
   shopName: z.string().min(1),
-  shopAddress: z.string().optional(),
+  ...shopLocationFields,
   currency: z.string().min(3).max(3).optional(),
   agentId: z.string().optional(),
 });
@@ -295,6 +327,8 @@ export const createPurchaseSchema = z.object({
     productId: z.string(),
     quantity: z.number().positive(),
     unitCost: z.number().min(0),
+    unitConfigId: z.string().optional(),
+    baseUnits: z.number().int().positive().optional(),
     tax: z.number().min(0).optional(),
     discount: z.number().min(0).optional(),
   })).min(1),
@@ -309,6 +343,8 @@ export const receivePurchaseSchema = z.object({
   items: z.array(z.object({
     productId: z.string(),
     quantity: z.number().positive(),
+    unitConfigId: z.string().optional(),
+    baseUnits: z.number().int().positive().optional(),
   })).optional(),
   receivedAll: z.boolean().optional(),
 });

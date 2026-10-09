@@ -11,7 +11,7 @@ router.post('/otp/request', otpLimiter, validate(requestOtpSchema), authControll
 router.post('/otp/verify', validate(verifyOtpSchema), authController.verifyOtp.bind(authController));
 router.post('/pin/set', authMiddleware, validate(setPinSchema), authController.setPin.bind(authController));
 router.post('/login', loginLimiter, validate(loginSchema), authController.login.bind(authController));
-router.post('/employee/login', validate(employeeLoginSchema), authController.employeeLogin.bind(authController));
+router.post('/employee/login', loginLimiter, validate(employeeLoginSchema), authController.employeeLogin.bind(authController));
 router.post('/employee/change-pin', authMiddleware, validate(changePinSchema), authController.changeEmployeePin.bind(authController));
 router.post('/refresh', validate(refreshTokenSchema), authController.refresh.bind(authController));
 router.post('/logout', authMiddleware, validate(refreshTokenSchema), authController.logout.bind(authController));

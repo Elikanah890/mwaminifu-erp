@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { Agent, AgentDetail, PaginationMeta } from '@/lib/types';
-import { formatDate, formatNumber, errorMessage } from '@/lib/format';
+import { formatDate, formatNumber, formatCurrency, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
 import Modal from '@/components/Modal';
 import StatusBadge, { Pill } from '@/components/StatusBadge';
@@ -47,6 +47,9 @@ export default function AgentsPage() {
   const [form, setForm] = useState({ username: '', password: '', name: '', phone: '', email: '' });
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  // Credentials to show the System Owner so they can hand them to the agent.
+  const [createdCreds, setCreatedCreds] = useState<{ username: string; password: string; phone?: string } | null>(null);
+  const [resetCreds, setResetCreds] = useState<{ username: string; password: string } | null>(null);
 
   const load = useCallback(
     async (page: number) => {
@@ -91,6 +94,7 @@ export default function AgentsPage() {
         email: form.email.trim(),
       });
       setShowCreate(false);
+      setCreatedCreds({ username: form.username.trim(), password: form.password, phone: form.phone.trim() || undefined });
       toast('Agent registered successfully');
       load(1);
     } catch (err) {
@@ -129,6 +133,33 @@ export default function AgentsPage() {
       load(meta.page);
     } catch (err) {
       setError(errorMessage(err));
+    }
+  };
+
+  const handleResetPassword = async (agent: Agent) => {
+    if (!window.confirm(`Reset the password for ${agent.name} (AGAC-${agent.username})? A new password will be sent to their phone.`)) return;
+    try {
+      const res = await apiClient.post<{ username: string; tempPassword: string }>(`/admin/agents/${agent.id}/reset-password`, {});
+      if (res.data) setResetCreds({ username: res.data.username, password: res.data.tempPassword });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const handlePayout = async (agent: Agent) => {
+    if (!window.confirm(`Pay out ${formatCurrency(agent.commissionEarned ?? 0)} pending commission to ${agent.name}?`)) return;
+    try {
+      const res = await apiClient.post<{ amount: number; reference: string }>(`/admin/agents/${agent.id}/payout`, {});
+      toast(`Payout ${res.data?.reference ?? ''} sent (${formatCurrency(res.data?.amount ?? 0)})`);
+      load(meta.page);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const copy = (text: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => toast('Copied'), () => {});
     }
   };
 
@@ -196,6 +227,8 @@ export default function AgentsPage() {
                   <th className="py-3 px-6 font-semibold">Name</th>
                   <th className="py-3 px-6 font-semibold">Phone</th>
                   <th className="py-3 px-6 font-semibold">Customers Registered</th>
+                  <th className="py-3 px-6 font-semibold text-right">Commission Earned</th>
+                  <th className="py-3 px-6 font-semibold text-right">Commission Paid</th>
                   <th className="py-3 px-6 font-semibold">Status</th>
                   <th className="py-3 px-6 font-semibold">Created</th>
                   <th className="py-3 px-6 text-right font-semibold">Actions</th>
@@ -208,6 +241,8 @@ export default function AgentsPage() {
                     <td className="py-3 px-6 font-medium text-foreground">{agent.name}</td>
                     <td className="py-3 px-6 text-muted-foreground">{agent.phone || '-'}</td>
                     <td className="py-3 px-6">{formatNumber(agent._count?.onboardedUsers ?? 0)}</td>
+                    <td className="py-3 px-6 text-right font-semibold text-secondary">{formatCurrency(agent.commissionEarned ?? 0)}</td>
+                    <td className="py-3 px-6 text-right text-muted-foreground">{formatCurrency(agent.commissionPaid ?? 0)}</td>
                     <td className="py-3 px-6">
                       <StatusBadge active={agent.isActive} />
                     </td>
@@ -219,6 +254,14 @@ export default function AgentsPage() {
                       <button onClick={() => setEditing(agent)} className="text-xs text-secondary font-medium hover:underline">
                         Edit
                       </button>
+                      <button onClick={() => handleResetPassword(agent)} className="text-xs text-primary font-medium hover:underline">
+                        Reset password
+                      </button>
+                      {(agent.commissionEarned ?? 0) - (agent.commissionPaid ?? 0) > 0 && (
+                        <button onClick={() => handlePayout(agent)} className="text-xs text-success font-medium hover:underline">
+                          Payout
+                        </button>
+                      )}
                       <button onClick={() => handleToggle(agent)} className="text-xs text-warning font-medium hover:underline">
                         {agent.isActive ? 'Suspend' : 'Activate'}
                       </button>
@@ -263,6 +306,10 @@ export default function AgentsPage() {
               </button>
             </div>
           </div>
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            The agent signs in through the app under <strong>Agent</strong> using this <strong>username</strong> and
+            <strong> password</strong>. These are also sent to their phone by SMS automatically.
+          </p>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setShowCreate(false)} className="flex-1 btn-outline">
               Cancel
@@ -325,9 +372,65 @@ export default function AgentsPage() {
               )}
             </div>
 
-            <div className="border-t border-border pt-4">
-              <h4 className="text-sm font-semibold text-primary mb-2">Commission Payouts</h4>
-              <p className="text-xs text-subtle-foreground">Commission and payout history will appear here once configured.</p>
+            <div className="border-t border-border pt-4 grid gap-4">
+              <div>
+                <h4 className="text-sm font-semibold text-primary mb-2">Commissions ({detail.commissions?.length ?? 0})</h4>
+                {(detail.commissions?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-subtle-foreground">No commissions yet.</p>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-xs uppercase tracking-wider text-subtle-foreground">
+                        <tr className="border-b border-border">
+                          <th className="py-2 px-3 font-semibold">Date</th>
+                          <th className="py-2 px-3 font-semibold">Owner</th>
+                          <th className="py-2 px-3 font-semibold text-right">Amount</th>
+                          <th className="py-2 px-3 font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {detail.commissions!.map((c) => (
+                          <tr key={c.id}>
+                            <td className="py-2 px-3 text-muted-foreground text-xs">{formatDate(c.createdAt)}</td>
+                            <td className="py-2 px-3 font-medium">{c.owner?.name ?? '—'}</td>
+                            <td className="py-2 px-3 text-right font-semibold text-secondary">{formatCurrency(c.amount)}</td>
+                            <td className="py-2 px-3"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{c.status}</Pill></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-primary mb-2">Payouts ({detail.payouts?.length ?? 0})</h4>
+                {(detail.payouts?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-subtle-foreground">No payouts yet.</p>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-left text-xs uppercase tracking-wider text-subtle-foreground">
+                        <tr className="border-b border-border">
+                          <th className="py-2 px-3 font-semibold">Date</th>
+                          <th className="py-2 px-3 font-semibold">Reference</th>
+                          <th className="py-2 px-3 font-semibold text-right">Amount</th>
+                          <th className="py-2 px-3 font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {detail.payouts!.map((p) => (
+                          <tr key={p.id}>
+                            <td className="py-2 px-3 text-muted-foreground text-xs">{formatDate(p.createdAt)}</td>
+                            <td className="py-2 px-3 font-mono text-xs">{p.reference ?? '—'}</td>
+                            <td className="py-2 px-3 text-right font-semibold text-secondary">{formatCurrency(p.amount)}</td>
+                            <td className="py-2 px-3"><Pill tone={p.status === 'COMPLETED' ? 'green' : 'amber'}>{p.status}</Pill></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ) : null}
@@ -372,6 +475,62 @@ export default function AgentsPage() {
           </button>
         </div>
       </Modal>
+
+      {/* New agent credentials */}
+      <Modal open={!!createdCreds} title="Agent Login Credentials" onClose={() => setCreatedCreds(null)}>
+        {createdCreds && (
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              Give these to the agent — they have also been sent to the agent's phone automatically by SMS
+              {createdCreds.phone ? ` (${createdCreds.phone})` : ''}.
+            </p>
+            <CredRow label="How to sign in" value='Open the app → choose "Agent"' />
+            <CredRow label="Username" value={createdCreds.username} onCopy={() => copy(createdCreds.username)} />
+            <CredRow label="Password" value={createdCreds.password} mono onCopy={() => copy(createdCreds.password)} />
+            <button
+              onClick={() => copy(`Agent login\nUsername: ${createdCreds.username}\nPassword: ${createdCreds.password}`)}
+              className="btn-navy w-full"
+            >
+              Copy credentials
+            </button>
+            <button onClick={() => setCreatedCreds(null)} className="btn-outline w-full">Done</button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Reset password result */}
+      <Modal open={!!resetCreds} title="New Agent Password" onClose={() => setResetCreds(null)}>
+        {resetCreds && (
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">The agent's password was reset and the new password was sent to their phone by SMS.</p>
+            <CredRow label="Username" value={resetCreds.username} onCopy={() => copy(resetCreds.username)} />
+            <CredRow label="New password" value={resetCreds.password} mono onCopy={() => copy(resetCreds.password)} />
+            <button
+              onClick={() => copy(`Agent login\nUsername: ${resetCreds.username}\nPassword: ${resetCreds.password}`)}
+              className="btn-navy w-full"
+            >
+              Copy credentials
+            </button>
+            <button onClick={() => setResetCreds(null)} className="btn-outline w-full">Done</button>
+          </div>
+        )}
+      </Modal>
     </PageWrapper>
+  );
+}
+
+function CredRow({ label, value, mono, onCopy }: { label: string; value: string; mono?: boolean; onCopy?: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">{label}</p>
+        <p className={`truncate ${mono ? 'font-mono' : 'font-semibold'} text-foreground`}>{value}</p>
+      </div>
+      {onCopy && (
+        <button type="button" onClick={onCopy} className="shrink-0 text-xs font-medium text-secondary hover:underline">
+          Copy
+        </button>
+      )}
+    </div>
   );
 }

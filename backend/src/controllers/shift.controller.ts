@@ -69,7 +69,8 @@ export class ShiftController {
       const { openingCashBalance } = req.body || {};
       const user = req.user as { userId?: string; shopId?: string } | undefined;
       const userId = user?.userId;
-      const shopId = user?.shopId;
+      // requireBodyShopAccess has already validated access and set params.shopId.
+      const shopId = req.params.shopId || (req.body && req.body.shopId) || user?.shopId;
 
       if (!shopId) {
         res.status(400).json({
@@ -127,7 +128,8 @@ export class ShiftController {
       const countedCash = (req.body as { countedCash?: number }).countedCash;
       const user = req.user as { userId?: string; shopId?: string } | undefined;
       const userId = user?.userId;
-      const shopId = user?.shopId;
+      // requireBodyShopAccess has already validated access and set params.shopId.
+      const shopId = req.params.shopId || (req.body && req.body.shopId) || user?.shopId;
 
       if (!countedCash) {
         res.status(400).json({

@@ -55,6 +55,10 @@ model User {
   isPinSet      Boolean   @default(false)
   isPhoneVerified Boolean @default(false)
   activationOtpVerifiedAt DateTime?
+  mustChangePassword Boolean @default(false)
+  mustChangePin Boolean @default(false)
+  passwordResetAt DateTime?
+  pinResetAt    DateTime?
   lastLoginAt   DateTime?
   failedLoginAttempts Int @default(0)
   blockedUntil  DateTime?
@@ -81,6 +85,7 @@ model User {
   cashTransactions CashTransaction[]
   auditLogs       AuditLog[]
   refunds         Refund[]
+  commissions     Commission[] @relation("OwnerCommissions")
   createdBy     String?
   agentId       String?
   agent         Agent?    @relation("AgentUsers", fields: [agentId], references: [id])
@@ -102,6 +107,8 @@ model Agent {
   email         String?
   isActive      Boolean  @default(true)
   onboardedUsers User[]  @relation("AgentUsers")
+  commissions   Commission[]
+  payouts       Payout[]
   createdBy     String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -145,6 +152,11 @@ model Shop {
   owner         User      @relation("Owner", fields: [ownerId], references: [id])
   name          String
   address       String?
+  region        String?
+  district      String?
+  ward          String?
+  street        String?
+  businessCategory String?
   logoUrl       String?
   coverUrl      String?
   currency      String    @default("TZS")
@@ -382,10 +394,15 @@ model SaleItem {
   tax         Float   @default(0)
   total       Float   @default(0)
   unit        String?
+  // Multi-unit: which unit configuration was sold and how many base units it holds.
+  unitConfigId     String?
+  unitName         String?
+  baseUnitsPerConfig Int @default(1)
   createdAt   DateTime @default(now())
 
   @@index([saleId])
   @@index([productId])
+  @@index([unitConfigId])
 }
 
 model Refund {
@@ -573,6 +590,7 @@ model Subscription {
   @@index([shopId])
   @@index([planId])
   @@index([status])
+  @@index([createdAt])
 }
 
 model SubscriptionPayment {
@@ -582,11 +600,15 @@ model SubscriptionPayment {
   amount         Float
   method         String       @default("cash")
   reference      String?
-  status         String       @default("COMPLETED")
-  paidAt         DateTime     @default(now())
-  createdAt      DateTime     @default(now())
+  status        String    @default("COMPLETED")
+  paidAt        DateTime  @default(now())
+  commissions   Commission[]
+  createdAt     DateTime  @default(now())
 
   @@index([subscriptionId])
+  @@index([createdAt])
+  @@index([paidAt])
+  @@index([status])
 }
 
 model SmsLog {
@@ -895,4 +917,39 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+}
+
+model Commission {
+  id        String               @id @default(cuid())
+  agentId   String
+  agent     Agent                @relation(fields: [agentId], references: [id])
+  ownerId   String               @unique
+  owner     User                 @relation("OwnerCommissions", fields: [ownerId], references: [id])
+  paymentId String?
+  payment   SubscriptionPayment? @relation(fields: [paymentId], references: [id])
+  amount    Float                @default(0)
+  status    String               @default("PENDING") // PENDING, PAID, FAILED
+  payoutId  String?
+  payout    Payout?              @relation(fields: [payoutId], references: [id])
+  createdAt DateTime             @default(now())
+  paidAt    DateTime?
+
+  @@index([agentId])
+  @@index([status])
+}
+
+model Payout {
+  id           String       @id @default(cuid())
+  agentId      String
+  agent        Agent        @relation(fields: [agentId], references: [id])
+  amount       Float        @default(0)
+  method       String       @default("mobile_money")
+  walletNumber String?
+  reference    String?
+  status       String       @default("PENDING") // PENDING, COMPLETED, FAILED
+  commissions  Commission[]
+  createdAt    DateTime     @default(now())
+  completedAt  DateTime?
+
+  @@index([agentId])
 }

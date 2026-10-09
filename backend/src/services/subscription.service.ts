@@ -1,7 +1,38 @@
 import prisma from '../config/database';
+import { Prisma } from '@prisma/client';
 
 const GRACE_DAYS = 5;
 const DAY = 24 * 60 * 60 * 1000;
+const COMMISSION_RATE = 0.05;
+
+/**
+ * Spec 12.3 — a one-time 5% referral commission is created for the agent who
+ * registered the owner, on the owner's FIRST successful subscription payment.
+ * Tied to the owner (one row per owner).
+ */
+async function createFirstPaymentCommission(
+  tx: Prisma.TransactionClient,
+  shopId: string,
+  paymentId: string,
+  amount: number
+): Promise<void> {
+  const shop = await tx.shop.findUnique({
+    where: { id: shopId },
+    select: { ownerId: true, owner: { select: { agentId: true } } },
+  });
+  const agentId = shop?.owner?.agentId;
+  if (!shop || !agentId) return;
+
+  const existing = await tx.commission.findFirst({ where: { ownerId: shop.ownerId } });
+  if (existing) return;
+
+  const commission = Math.round(amount * COMMISSION_RATE * 100) / 100;
+  if (commission <= 0) return;
+
+  await tx.commission.create({
+    data: { agentId, ownerId: shop.ownerId, paymentId, amount: commission, status: 'PENDING' },
+  });
+}
 
 export const PLAN_FEATURES = [
   { id: 'pos', label: 'Point of Sale (POS)' },
@@ -35,32 +66,51 @@ export function subscriptionStatus(sub: { isActive: boolean; endDate: Date | nul
 
 export class SubscriptionService {
   async ensureDefaultPlans() {
-    const count = await prisma.subscriptionPlan.count({ where: { deletedAt: null } });
-    if (count > 0) return;
-    await prisma.subscriptionPlan.createMany({
-      data: [
-        {
-          name: 'Basic',
-          description: 'For single-shop retailers',
-          price: 5000,
-          billingCycle: 'MONTHLY',
-          features: ['pos', 'inventory', 'credit', 'reports', 'expenses', 'loans', 'employees'],
-          isActive: true,
-          isDefault: true,
-          displayOrder: 1,
-        },
-        {
-          name: 'Premium',
-          description: 'Full platform with messaging and multi-shop',
-          price: 8000,
-          billingCycle: 'MONTHLY',
-          features: ['pos', 'inventory', 'credit', 'reports', 'expenses', 'loans', 'employees', 'sms', 'email', 'whatsapp', 'multishop'],
-          isActive: true,
-          isDefault: false,
-          displayOrder: 2,
-        },
-      ],
-    });
+    const activeCount = await prisma.subscriptionPlan.count({ where: { deletedAt: null, isActive: true } });
+    if (activeCount > 0) return;
+
+    const defaults = [
+      {
+        name: 'Basic',
+        description: 'For single-shop retailers',
+        price: 5000,
+        billingCycle: 'MONTHLY',
+        features: ['pos', 'inventory', 'credit', 'reports', 'expenses', 'loans', 'employees'],
+        isActive: true,
+        isDefault: true,
+        displayOrder: 1,
+      },
+      {
+        name: 'Premium',
+        description: 'Full platform with messaging and multi-shop',
+        price: 8000,
+        billingCycle: 'MONTHLY',
+        features: ['pos', 'inventory', 'credit', 'reports', 'expenses', 'loans', 'employees', 'sms', 'email', 'whatsapp', 'multishop'],
+        isActive: true,
+        isDefault: false,
+        displayOrder: 2,
+      },
+    ];
+
+    for (const plan of defaults) {
+      const existing = await prisma.subscriptionPlan.findUnique({ where: { name: plan.name } });
+      if (existing) {
+        // Reactivate a previously soft-deleted default plan.
+        await prisma.subscriptionPlan.update({
+          where: { id: existing.id },
+          data: {
+            price: plan.price,
+            billingCycle: plan.billingCycle,
+            features: plan.features,
+            isActive: true,
+            deletedAt: null,
+            displayOrder: plan.displayOrder,
+          },
+        });
+      } else {
+        await prisma.subscriptionPlan.create({ data: plan });
+      }
+    }
   }
 
   async listPlans(includeInactive = false) {
@@ -123,9 +173,10 @@ export class SubscriptionService {
         },
         include: { planConfig: true },
       });
-      await tx.subscriptionPayment.create({
+      const payment = await tx.subscriptionPayment.create({
         data: { subscriptionId: sub.id, amount: plan.price, method: data.method || 'cash', status: 'COMPLETED' },
       });
+      await createFirstPaymentCommission(tx, shopId, payment.id, plan.price);
       return { ...sub, effectiveStatus: 'ACTIVE' as const };
     });
   }
@@ -143,9 +194,10 @@ export class SubscriptionService {
         data: { status: 'ACTIVE', isActive: true, endDate: end },
         include: { planConfig: true },
       });
-      await tx.subscriptionPayment.create({
+      const payment = await tx.subscriptionPayment.create({
         data: { subscriptionId: sub.id, amount: price, method: data.method || 'cash', status: 'COMPLETED' },
       });
+      await createFirstPaymentCommission(tx, shopId, payment.id, price);
       return { ...updated, effectiveStatus: 'ACTIVE' as const };
     });
   }
@@ -166,9 +218,10 @@ export class SubscriptionService {
         data: { plan: plan.name, planId: plan.id, billingCycle: cycle, endDate: end, status: 'ACTIVE', isActive: true },
         include: { planConfig: true },
       });
-      await tx.subscriptionPayment.create({
+      const payment = await tx.subscriptionPayment.create({
         data: { subscriptionId: sub.id, amount: plan.price, method: data.method || 'cash', status: 'COMPLETED' },
       });
+      await createFirstPaymentCommission(tx, shopId, payment.id, plan.price);
       return { ...updated, effectiveStatus: 'ACTIVE' as const };
     });
   }

@@ -35,7 +35,7 @@ describe('saleService.createSale', () => {
     expect(sale.id).toBe('s1');
     expect(mockPrisma.stockAdjustment.create).toHaveBeenCalledTimes(1);
     expect(mockPrisma.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { stockQuantity: { decrement: 2 } } })
+      expect.objectContaining({ data: { stockQuantity: 8, baseUnitStock: 8 } })
     );
     expect(mockPrisma.cashTransaction.create).toHaveBeenCalledTimes(1);
   });

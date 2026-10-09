@@ -20,7 +20,7 @@ export class ReportService {
 
     const summary = {
       totalSales: sales.reduce((s, sale) => s + sale.grandTotal, 0),
-      totalItems: sales.reduce((s, sale) => s + sale.items.reduce((i, item) => i + item.quantity, 0), 0),
+      totalItems: sales.reduce((s, sale) => s + sale.items.reduce((i, item) => i + item.quantity * (item.baseUnitsPerConfig || 1), 0), 0),
       averageTicket: sales.length > 0
         ? sales.reduce((s, sale) => s + sale.grandTotal, 0) / sales.length
         : 0,
@@ -61,14 +61,14 @@ export class ReportService {
       }),
       prisma.saleItem.findMany({
         where: { sale: { shopId, status: 'COMPLETED', saleDate: { gte: fromDate, lte: toDate } } },
-        select: { quantity: true, costPrice: true },
+        select: { quantity: true, costPrice: true, baseUnitsPerConfig: true },
       }),
     ]);
 
     const totalRevenue = sales.reduce((s, sale) => s + sale.grandTotal, 0);
     const totalDiscounts = sales.reduce((s, sale) => s + sale.discount, 0);
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-    const cogs = saleItems.reduce((s, i) => s + (i.costPrice || 0) * i.quantity, 0);
+    const cogs = saleItems.reduce((s, i) => s + (i.costPrice || 0) * i.quantity * (i.baseUnitsPerConfig || 1), 0);
     const grossProfit = totalRevenue - cogs;
     const netProfit = grossProfit - totalExpenses;
 

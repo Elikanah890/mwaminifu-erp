@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import { env } from '../config/env';
-import { hashPin, comparePin, comparePassword } from '../utils/bcrypt.util';
+import { hashPin, hashPassword, comparePin, comparePassword } from '../utils/bcrypt.util';
 import { signAccessToken, signRefreshToken, signTempToken } from '../utils/jwt.util';
 import { generateOtp } from '../utils/otp.util';
 import { settingsService } from './settings.service';
@@ -412,6 +412,34 @@ export class AuthService {
     });
 
     return { message: 'PIN changed successfully' };
+  }
+
+  /**
+   * Change the password of a username/password account (System Owner or Agent).
+   * Keeps the linked Agent record in sync.
+   */
+  async changeAdminPassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.passwordHash) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Account not found' };
+    }
+
+    const isValid = await comparePassword(currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw { status: 401, code: 'UNAUTHORIZED', message: 'Current password is incorrect' };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw { status: 422, code: 'VALIDATION_ERROR', message: 'New password must be at least 6 characters' };
+    }
+
+    const hashed = await hashPassword(newPassword);
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: hashed } });
+
+    if (user.role === 'AGENT' && user.agentId) {
+      await prisma.agent.updateMany({ where: { id: user.agentId }, data: { passwordHash: hashed } });
+    }
+
+    return { message: 'Password changed successfully' };
   }
 
   async refreshAccessToken(refreshToken: string) {

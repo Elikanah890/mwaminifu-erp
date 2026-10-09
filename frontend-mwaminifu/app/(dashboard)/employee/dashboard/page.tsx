@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
+import { usePermissions } from '@/lib/context/PermissionsContext';
 import { EmployeeDashboard } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
@@ -17,6 +18,7 @@ import { ShoppingCart, Clock, Package, TrendingUp, Wallet } from 'lucide-react';
 export default function EmployeeDashboardPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t, locale } = useI18n();
+  const { can } = usePermissions();
   const [data, setData] = useState<EmployeeDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -105,9 +107,11 @@ export default function EmployeeDashboardPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
-                <Link href="/employee/sales" className="btn-teal inline-flex items-center gap-2"><ShoppingCart size={16} /> {t('newSale')}</Link>
-              </motion.div>
+              {can('sales:create') && (
+                <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
+                  <Link href="/employee/sales" className="btn-teal inline-flex items-center gap-2"><ShoppingCart size={16} /> {t('newSale')}</Link>
+                </motion.div>
+              )}
               <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
                 {isOpen ? (
                   <Link href="/employee/shift" className="btn-gold inline-flex items-center gap-2"><Clock size={16} /> {t('closeShift')}</Link>

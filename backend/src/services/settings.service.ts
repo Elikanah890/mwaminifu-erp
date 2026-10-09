@@ -15,6 +15,7 @@ export interface SystemSettings {
 
 export const SETTINGS_DEFAULTS: Record<string, { value: unknown; description: string }> = {
   appName: { value: 'Mwaminifu', description: 'Platform display name' },
+  language: { value: 'sw', description: 'Default interface language' },
   currency: { value: 'TZS', description: 'Default currency' },
   supportEmail: { value: 'support@mwaminifu.app', description: 'Support email address' },
   supportPhone: { value: '', description: 'Support phone number' },
@@ -22,6 +23,26 @@ export const SETTINGS_DEFAULTS: Record<string, { value: unknown; description: st
   defaultPageSize: { value: 10, description: 'Default list page size' },
   otpLifetimeMinutes: { value: 5, description: 'OTP validity in minutes' },
   syncIntervalSeconds: { value: 30, description: 'Mobile offline sync interval in seconds' },
+  agentCommissionPerReferral: { value: 5000, description: 'Commission (TZS) paid to an agent per referred business owner' },
+
+  // Subscription settings
+  basicPrice: { value: 5000, description: 'Monthly Basic plan price (TZS)' },
+  premiumPrice: { value: 8000, description: 'Monthly Premium plan price (TZS)' },
+  gracePeriodDays: { value: 5, description: 'Grace period (days) before a lapsed subscription is deactivated' },
+  maxShopsPerOwner: { value: 5, description: 'Maximum shops a business owner can create' },
+
+  // Agent settings
+  maxAgents: { value: 50, description: 'Maximum number of agents' },
+  commissionRate: { value: 5, description: 'Agent commission as a percentage' },
+  agentCodePrefix: { value: 'AGAC-', description: 'Prefix used for agent codes' },
+
+  // Demo accounts
+  demoAccountsCount: { value: 3, description: 'Number of demo accounts' },
+  demoAutoResetFrequency: { value: 'weekly', description: 'How often demo data is reset (daily/weekly/monthly)' },
+
+  // Payment aggregator
+  paymentAggregator: { value: 'clickpesa', description: 'Payment aggregator provider' },
+  webhookUrl: { value: '', description: 'Payment callback endpoint' },
 };
 
 // In-memory cache with a short TTL. Loaded on startup and whenever settings are
@@ -85,7 +106,11 @@ export class SettingsService {
     const def = SETTINGS_DEFAULTS[key]?.value;
     if (typeof def === 'boolean') return raw === true || raw === 'true';
     if (typeof def === 'number') return Number(raw) || Number(def) || 0;
-    if (typeof def === 'string') return String(raw ?? def ?? '');
+    // Fall back to the default when a string setting is missing or blank.
+    if (typeof def === 'string') {
+      const value = raw == null || raw === '' ? def : raw;
+      return String(value ?? '');
+    }
     return raw;
   }
 

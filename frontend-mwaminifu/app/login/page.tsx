@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, BriefcaseBusiness, Check, Loader2, ShieldCheck, Store, UserRound } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
+import { useAppConfig } from '@/lib/context/AppConfigContext';
 import ThemeToggle from '@/components/theme-toggle';
 
 const ROLE_HOME: Record<string, string> = {
@@ -41,6 +42,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { appName } = useAppConfig();
   const { locale, setLocale, t } = useI18n();
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -203,7 +205,7 @@ function LoginForm() {
         <div className="relative flex items-center gap-3">
           <Image src="/logo.jpeg" alt="Mwaminifu" width={42} height={42} className="rounded-xl ring-1 ring-white/20" />
           <div>
-            <p className="font-semibold">Mwaminifu</p>
+            <p className="font-semibold">{appName}</p>
             <p className="text-sm text-white/60">ERP for Tanzanian businesses</p>
           </div>
         </div>

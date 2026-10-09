@@ -11,11 +11,11 @@ import Modal from '@/components/Modal';
 import PageWrapper from '@/components/PageWrapper';
 import { Reveal, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
-import { ChevronDown, ChevronRight, Plus, Store, Users, CreditCard } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Store, CreditCard, KeyRound, Trash2, Eye } from 'lucide-react';
 
 const PER_PAGE = 10;
 
-type Tab = 'owners' | 'shops' | 'employees';
+type Tab = 'owners' | 'shops';
 
 const BUSINESS_CATEGORIES = [
   'Retail / General Shop',
@@ -97,15 +97,15 @@ export default function BusinessesPage() {
   const [error, setError] = useState('');
 
   const [shops, setShops] = useState<Shop[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
-  const [employeesLoading, setEmployeesLoading] = useState(false);
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createdOwner, setCreatedOwner] = useState<{ name: string; phone: string; shopName: string; otp?: string } | null>(null);
+  const [otpData, setOtpData] = useState<{ phone: string; otp: string; expiresInMinutes: number } | null>(null);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BusinessDetail | null>(null);
@@ -116,7 +116,7 @@ export default function BusinessesPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const t = params.get('tab');
-    if (t === 'shops' || t === 'employees') setTab(t);
+    if (t === 'shops') setTab(t);
   }, []);
 
   const load = useCallback(async (page: number) => {
@@ -147,15 +147,6 @@ export default function BusinessesPage() {
       .then((res) => setShops(res.data ?? []))
       .catch((err) => setError(errorMessage(err)))
       .finally(() => setShopsLoading(false));
-  }, [tab]);
-
-  useEffect(() => {
-    if (tab !== 'employees') return;
-    setEmployeesLoading(true);
-    apiClient.get<Employee[]>('/admin/employees?limit=200')
-      .then((res) => setEmployees(res.data ?? []))
-      .catch((err) => setError(errorMessage(err)))
-      .finally(() => setEmployeesLoading(false));
   }, [tab]);
 
   const loadAgents = useCallback(async () => {
@@ -189,8 +180,9 @@ export default function BusinessesPage() {
       if (address) payload.shopAddress = address;
       if (form.agentId) payload.agentId = form.agentId;
 
-      await apiClient.post('/admin/business-owners', payload);
+      const res = await apiClient.post<{ activationOtp?: string }>('/admin/business-owners', payload);
       setShowAdd(false);
+      setCreatedOwner({ name: form.name.trim(), phone: form.phone.trim(), shopName: form.shopName.trim(), otp: res.data?.activationOtp });
       toast('Business added successfully');
       load(1);
     } catch (err) {
@@ -233,6 +225,37 @@ export default function BusinessesPage() {
     }
   };
 
+  const resetOwnerAccess = async (b: Business) => {
+    if (!window.confirm(`Send a password reset to ${b.name}? They will receive a code by SMS.`)) return;
+    try {
+      await apiClient.post(`/admin/business-owners/${b.id}/reset-password`, {});
+      toast('Reset code sent to the owner');
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    }
+  };
+
+  const showOwnerOtp = async (b: Business) => {
+    if (!window.confirm(`Generate a fresh activation OTP for ${b.name}? It is shown once and sent by SMS.`)) return;
+    try {
+      const res = await apiClient.post<{ phone: string; otp: string; expiresInMinutes: number }>(`/admin/business-owners/${b.id}/otp`, {});
+      if (res.data) setOtpData(res.data);
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    }
+  };
+
+  const removeOwner = async (b: Business) => {
+    if (!window.confirm('Remove this business owner? Their shops will be archived and sign-in disabled.')) return;
+    try {
+      await apiClient.del(`/admin/business-owners/${b.id}`);
+      toast('Business owner removed');
+      load(1);
+    } catch (err) {
+      toast(errorMessage(err), 'error');
+    }
+  };
+
   const exportCsv = () => {
     const rows = businesses.map((b) => ({
       name: b.name,
@@ -247,10 +270,10 @@ export default function BusinessesPage() {
   };
 
   return (
-    <PageWrapper title="Businesses" description="Business owners, shops and employees" breadcrumb={['System', 'Businesses']}>
+    <PageWrapper title="Businesses" description="Business owners and shops" breadcrumb={['System', 'Businesses']}>
       <Reveal className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex gap-2">
-          {(['owners', 'shops', 'employees'] as Tab[]).map((t) => (
+          {(['owners', 'shops'] as Tab[]).map((t) => (
             <motion.button
               key={t}
               onClick={() => setTab(t)}
@@ -317,6 +340,7 @@ export default function BusinessesPage() {
                       <th className="py-3 px-4 font-semibold">Shops</th>
                       <th className="py-3 px-4 font-semibold">Status</th>
                       <th className="py-3 px-4 font-semibold">Created</th>
+                      <th className="py-3 px-4 font-semibold text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -337,10 +361,23 @@ export default function BusinessesPage() {
                             <td className="py-3 px-4">{b.shopCount}</td>
                             <td className="py-3 px-4"><StatusBadge active={b.isActive} /></td>
                             <td className="py-3 px-4 text-muted-foreground text-xs">{formatDate(b.createdAt)}</td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                                <button onClick={() => showOwnerOtp(b)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" title="Show activation OTP">
+                                  <Eye size={14} /> Show OTP
+                                </button>
+                                <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline" title="Reset access">
+                                  <KeyRound size={14} /> Reset
+                                </button>
+                                <button onClick={() => removeOwner(b)} className="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline" title="Remove owner">
+                                  <Trash2 size={14} /> Remove
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                           {isOpen && (
                             <tr className="border-b border-border">
-                              <td colSpan={7} className="bg-muted px-6 py-5">
+                              <td colSpan={8} className="bg-muted px-6 py-5">
                                 {detailLoading ? (
                                   <SkeletonCard rows={4} />
                                 ) : detailError ? (
@@ -384,35 +421,12 @@ export default function BusinessesPage() {
                                                   </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-4">
-                                                  <div className="bg-muted rounded-lg p-3"><p className="text-xs text-subtle-foreground">Products</p><p className="font-semibold">{formatNumber(shop._count?.products ?? 0)}</p></div>
-                                                  <div className="bg-muted rounded-lg p-3"><p className="text-xs text-subtle-foreground">Employees</p><p className="font-semibold">{formatNumber(sd?.employees.length ?? shop._count?.employees ?? 0)}</p></div>
-                                                  <div className="bg-muted rounded-lg p-3"><p className="text-xs text-subtle-foreground">Customers</p><p className="font-semibold">{formatNumber(shop._count?.customers ?? 0)}</p></div>
-                                                </div>
-
-                                                {sd && (
-                                                  <>
-                                                    <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5"><Users size={13} /> Employees</p>
-                                                    {sd.employees.length === 0 ? (
-                                                      <p className="text-xs text-subtle-foreground mb-4">No employees</p>
-                                                    ) : (
-                                                      <div className="flex flex-wrap gap-2 mb-4">
-                                                        {sd.employees.map((emp) => (
-                                                          <span key={emp.id} className="inline-flex items-center gap-1.5 text-xs bg-muted-2 text-foreground rounded-full px-3 py-1">
-                                                            {emp.user.name} <span className="text-subtle-foreground">· {emp.role}</span>
-                                                          </span>
-                                                        ))}
-                                                      </div>
-                                                    )}
-
-                                                    {sd.stats.subscription && (
-                                                      <p className="text-xs text-muted-foreground">
-                                                        <CreditCard size={13} className="inline mr-1.5" />
-                                                        Subscription: <strong>{sd.stats.subscription.plan}</strong> — {sd.stats.subscription.status}
-                                                        {sd.stats.subscription.endDate ? ` (ends ${formatDate(sd.stats.subscription.endDate)})` : ''}
-                                                      </p>
-                                                    )}
-                                                  </>
+                                                {sd?.stats.subscription && (
+                                                  <p className="text-xs text-muted-foreground">
+                                                    <CreditCard size={13} className="inline mr-1.5" />
+                                                    Subscription: <strong>{sd.stats.subscription.plan}</strong> — {sd.stats.subscription.status}
+                                                    {sd.stats.subscription.endDate ? ` (ends ${formatDate(sd.stats.subscription.endDate)})` : ''}
+                                                  </p>
                                                 )}
                                               </div>
                                             );
@@ -453,8 +467,6 @@ export default function BusinessesPage() {
                 <th className="py-3 px-6 font-semibold">Shop</th>
                 <th className="py-3 px-6 font-semibold">Owner</th>
                 <th className="py-3 px-6 font-semibold">Location</th>
-                <th className="py-3 px-6 font-semibold">Products</th>
-                <th className="py-3 px-6 font-semibold">Employees</th>
                 <th className="py-3 px-6 font-semibold">Status</th>
                 <th className="py-3 px-6 font-semibold">Created</th>
               </tr>
@@ -465,41 +477,8 @@ export default function BusinessesPage() {
                   <td className="py-3 px-6 font-medium text-foreground">{s.name}</td>
                   <td className="py-3 px-6 text-muted-foreground">{s.owner?.name ?? '-'}</td>
                   <td className="py-3 px-6 text-muted-foreground">{s.address || '-'}</td>
-                  <td className="py-3 px-6">{formatNumber(s._count?.products ?? 0)}</td>
-                  <td className="py-3 px-6">{formatNumber(s._count?.employees ?? 0)}</td>
                   <td className="py-3 px-6"><StatusBadge active={!s.isArchived} activeLabel="Active" inactiveLabel="Archived" /></td>
                   <td className="py-3 px-6 text-muted-foreground text-xs">{formatDate(s.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </Reveal>
-      ))}
-
-      {tab === 'employees' && (employeesLoading ? (
-        <SkeletonTable rows={8} />
-      ) : employees.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message="No employees found" /></div></Reveal>
-      ) : (
-        <Reveal className="surface-card overflow-hidden">
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
-              <tr className="border-b border-border">
-                <th className="py-3 px-6 font-semibold">Employee</th>
-                <th className="py-3 px-6 font-semibold">Role</th>
-                <th className="py-3 px-6 font-semibold">Shop</th>
-                <th className="py-3 px-6 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {employees.map((e) => (
-                <tr key={e.id} className="transition-colors hover:bg-muted">
-                  <td className="py-3 px-6 font-medium text-foreground">{e.user?.name ?? '-'}</td>
-                  <td className="py-3 px-6 text-muted-foreground">{e.role}</td>
-                  <td className="py-3 px-6 text-muted-foreground">{e.shop?.name ?? '-'}</td>
-                  <td className="py-3 px-6"><StatusBadge active={e.isActive} /></td>
                 </tr>
               ))}
             </tbody>
@@ -551,6 +530,97 @@ export default function BusinessesPage() {
             <button type="submit" disabled={saving} className="flex-1 btn-gold">{saving ? 'Creating...' : 'Create Business'}</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Owner activation instructions */}
+      <Modal open={!!createdOwner} title="Business Owner Created" onClose={() => setCreatedOwner(null)}>
+        {createdOwner && (
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              <strong className="text-foreground">{createdOwner.name}</strong> ({createdOwner.shopName}) has been created.
+              Their login is the <strong>phone number</strong> — no password to share.
+            </p>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">Business Owner sign-in</p>
+                <p className="font-semibold text-foreground">App → “Business Owner” → phone + OTP</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">Phone</p>
+                <p className="font-mono font-semibold text-foreground">{createdOwner.phone}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(createdOwner.phone); }}
+                className="shrink-0 text-xs font-medium text-secondary hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+            {createdOwner.otp && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-secondary/30 bg-secondary/5 px-3 py-2">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">Activation OTP (shown once)</p>
+                  <p className="font-mono text-lg font-bold tracking-[0.3em] text-secondary">{createdOwner.otp}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(`Login: ${createdOwner.phone}  OTP: ${createdOwner.otp}`); }}
+                  className="shrink-0 text-xs font-medium text-secondary hover:underline"
+                >
+                  Copy
+                </button>
+              </div>
+            )}
+            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-subtle-foreground">
+              An activation code (OTP) has been sent to this phone by SMS. The owner enters it to activate their
+              account, then sets their own PIN. Employees are added by the owner, not here.
+            </p>
+            <a
+              href={`https://wa.me/${createdOwner.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Login to the app with your phone ${createdOwner.phone}${createdOwner.otp ? ` and OTP ${createdOwner.otp}` : ''}.`)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-outline w-full text-center"
+            >
+              Share via WhatsApp
+            </a>
+            <button onClick={() => setCreatedOwner(null)} className="btn-navy w-full">Done</button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Show OTP (once) */}
+      <Modal open={!!otpData} title="Owner Activation OTP" onClose={() => setOtpData(null)}>
+        {otpData && (
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              Fresh code for <strong className="text-foreground">{otpData.phone}</strong>. It has been sent by SMS and
+              will not be shown again after you close this window.
+            </p>
+            <p className="rounded-lg border border-secondary/30 bg-secondary/5 px-3 py-4 text-center font-mono text-3xl font-bold tracking-[0.3em] text-secondary">
+              {otpData.otp}
+            </p>
+            <p className="text-xs text-subtle-foreground">Valid for {otpData.expiresInMinutes} minutes.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(otpData.otp); }}
+                className="btn-outline flex-1"
+              >
+                Copy OTP
+              </button>
+              <a
+                href={`https://wa.me/${otpData.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Login to the app with your phone ${otpData.phone} and OTP ${otpData.otp}.`)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-navy flex-1 text-center"
+              >
+                Share via WhatsApp
+              </a>
+            </div>
+          </div>
+        )}
       </Modal>
     </PageWrapper>
   );

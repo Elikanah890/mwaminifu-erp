@@ -108,11 +108,11 @@ export default function AgentProfilePage() {
               <dd className="font-medium text-foreground">{profile?.name || '-'}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Username</dt>
-              <dd className="font-medium text-foreground">@{profile?.username || '-'}</dd>
+              <dt className="text-muted-foreground text-sm">Agent Code</dt>
+              <dd className="font-mono font-medium text-primary">AGAC-{profile?.username || '-'}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Phone</dt>
+              <dt className="text-muted-foreground text-sm">Phone / Payout wallet</dt>
               <dd className="font-medium text-foreground">{profile?.phone || '-'}</dd>
             </div>
             <div className="flex justify-between">

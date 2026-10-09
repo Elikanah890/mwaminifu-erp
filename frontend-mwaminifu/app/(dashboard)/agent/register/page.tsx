@@ -60,6 +60,11 @@ export default function RegisterBusinessPage() {
       };
       if (owner.email.trim()) payload.email = owner.email.trim();
       if (location) payload.shopAddress = location;
+      if (shop.category) payload.businessCategory = shop.category;
+      if (shop.region) payload.region = shop.region;
+      if (shop.district) payload.district = shop.district;
+      if (shop.ward) payload.ward = shop.ward;
+      if (shop.street) payload.street = shop.street;
 
       await apiClient.post('/agents/onboard', payload);
       setDone({ name: owner.name.trim(), shopName: shop.shopName.trim(), location });
