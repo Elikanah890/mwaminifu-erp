@@ -14,9 +14,9 @@ beforeEach(() => resetMockPrisma());
 describe('AuthService.login', () => {
   it('issues tokens for valid credentials and resets failed attempts', async () => {
     const pinHash = await hashPin('1234');
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockPrisma.user.findFirst.mockResolvedValue({
       id: 'u1', phone: PHONE, role: 'BUSINESS_OWNER', name: 'John', email: null,
-      isActive: true, isPinSet: true, pinHash, failedLoginAttempts: 0, blockedUntil: null, avatarUrl: null,
+      isActive: true, isPhoneVerified: true, isPinSet: true, pinHash, failedLoginAttempts: 0, blockedUntil: null, avatarUrl: null,
     });
     mockPrisma.shop.findFirst.mockResolvedValue({ id: 'shop1', name: 'Shop' });
     mockPrisma.user.update.mockResolvedValue({});
@@ -32,8 +32,8 @@ describe('AuthService.login', () => {
   });
 
   it('increments failed attempts on a wrong PIN', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'u1', phone: PHONE, role: 'BUSINESS_OWNER', isActive: true, isPinSet: true,
+    mockPrisma.user.findFirst.mockResolvedValue({
+      id: 'u1', phone: PHONE, role: 'BUSINESS_OWNER', isActive: true, isPhoneVerified: true, isPinSet: true,
       pinHash: await hashPin('1234'), failedLoginAttempts: 0, blockedUntil: null,
     });
     mockPrisma.user.update.mockResolvedValue({});
@@ -45,21 +45,37 @@ describe('AuthService.login', () => {
   });
 
   it('rejects a locked account with 429', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'u1', role: 'BUSINESS_OWNER', isActive: true, pinHash: await hashPin('1234'),
+    mockPrisma.user.findFirst.mockResolvedValue({
+      id: 'u1', role: 'BUSINESS_OWNER', isActive: true, isPhoneVerified: true, pinHash: await hashPin('1234'),
       blockedUntil: new Date(Date.now() + 60_000),
     });
     await expect(authService.login(PHONE, '1234')).rejects.toMatchObject({ status: 429 });
   });
 
   it('rejects a disabled account with 403', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', isActive: false });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', isActive: false });
     await expect(authService.login(PHONE, '1234')).rejects.toMatchObject({ status: 403 });
   });
 
   it('rejects unknown phone', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.user.findFirst.mockResolvedValue(null);
     await expect(authService.login(PHONE, '1234')).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('accepts a local-format phone that differs from the stored format', async () => {
+    mockPrisma.user.findFirst.mockResolvedValue({
+      id: 'u1', phone: PHONE, role: 'BUSINESS_OWNER', isActive: true, isPhoneVerified: true, isPinSet: true,
+      pinHash: await hashPin('1234'), failedLoginAttempts: 0, blockedUntil: null,
+    });
+    mockPrisma.shop.findFirst.mockResolvedValue({ id: 'shop1' });
+    mockPrisma.user.update.mockResolvedValue({});
+    mockPrisma.refreshToken.create.mockResolvedValue({});
+    const res = await authService.login('0700000000', '1234');
+    expect(res.accessToken).toBeTruthy();
+    // Lookup must search all common phone formats.
+    expect(mockPrisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { phone: { in: expect.arrayContaining(['0700000000', '255700000000']) } } })
+    );
   });
 });
 
@@ -69,6 +85,7 @@ describe('AuthService.adminLogin', () => {
       id: 'a1', username: 'admin', role: 'SYSTEM_OWNER', name: 'Admin', email: null,
       isActive: true, deletedAt: null, passwordHash: await hashPassword('admin123'),
     });
+    mockPrisma.refreshToken.findMany.mockResolvedValue([]);
     mockPrisma.refreshToken.create.mockResolvedValue({});
     const result = await authService.adminLogin('admin', 'admin123');
     expect(result.accessToken).toBeTruthy();
@@ -85,7 +102,7 @@ describe('AuthService.adminLogin', () => {
 
 describe('AuthService.employeeLogin', () => {
   it('issues a full session for an active employee with a set PIN', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockPrisma.user.findFirst.mockResolvedValue({
       id: 'e1', phone: PHONE, role: 'EMPLOYEE', isActive: true, isPinSet: true, pinHash: await hashPin('1234'),
     });
     mockPrisma.employee.findFirst.mockResolvedValue({
@@ -100,7 +117,7 @@ describe('AuthService.employeeLogin', () => {
   });
 
   it('returns a temporary token when only a temp PIN is set', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockPrisma.user.findFirst.mockResolvedValue({
       id: 'e1', phone: PHONE, role: 'EMPLOYEE', isActive: true, isPinSet: false, pinHash: null,
     });
     mockPrisma.employee.findFirst
@@ -115,7 +132,7 @@ describe('AuthService.employeeLogin', () => {
   });
 
   it('rejects an employee with no active assignment', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'e1', role: 'EMPLOYEE', isActive: true, isPinSet: true });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'e1', role: 'EMPLOYEE', isActive: true, isPinSet: true });
     mockPrisma.employee.findFirst.mockResolvedValue(null);
     await expect(authService.employeeLogin(PHONE, '1234')).rejects.toMatchObject({ status: 403 });
   });
@@ -123,17 +140,17 @@ describe('AuthService.employeeLogin', () => {
 
 describe('AuthService OTP', () => {
   it('rejects OTP requests for unknown accounts', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.user.findFirst.mockResolvedValue(null);
     await expect(authService.requestOtp(PHONE)).rejects.toMatchObject({ status: 404 });
   });
 
   it('rejects OTP requests for admin roles', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'a1', role: 'AGENT', phone: PHONE });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'a1', role: 'AGENT', phone: PHONE });
     await expect(authService.requestOtp(PHONE)).rejects.toMatchObject({ status: 400 });
   });
 
   it('issues and persists an OTP for a valid business owner', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', phone: PHONE });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', phone: PHONE });
     mockPrisma.otp.findFirst.mockResolvedValue(null);
     mockPrisma.otp.create.mockResolvedValue({ id: 'otp1' });
     mockPrisma.smsLog.create.mockResolvedValue({});
@@ -143,11 +160,13 @@ describe('AuthService OTP', () => {
   });
 
   it('rejects an invalid OTP code', async () => {
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', phone: PHONE });
     mockPrisma.otp.findFirst.mockResolvedValue(null);
     await expect(authService.verifyOtp(PHONE, '000000')).rejects.toMatchObject({ status: 400 });
   });
 
   it('increments attempts on a wrong OTP and accepts the correct one', async () => {
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', phone: PHONE });
     mockPrisma.otp.findFirst.mockResolvedValue({ id: 'otp1', code: '123456', attempts: 0 });
     mockPrisma.otp.update.mockResolvedValue({});
     await expect(authService.verifyOtp(PHONE, '000000')).rejects.toMatchObject({ status: 400 });
@@ -159,7 +178,7 @@ describe('AuthService OTP', () => {
   it('accepts a correct OTP and issues tokens', async () => {
     mockPrisma.otp.findFirst.mockResolvedValue({ id: 'otp1', code: '123456', attempts: 0 });
     mockPrisma.otp.update.mockResolvedValue({});
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', phone: PHONE, role: 'BUSINESS_OWNER', name: 'John', isPinSet: true });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', phone: PHONE, role: 'BUSINESS_OWNER', name: 'John', isPinSet: true, isPhoneVerified: true });
     mockPrisma.shop.findFirst.mockResolvedValue({ id: 'shop1', name: 'Shop' });
     mockPrisma.refreshToken.create.mockResolvedValue({});
     const res = await authService.verifyOtp(PHONE, '123456');
@@ -213,14 +232,14 @@ describe('AuthService.logout & PIN reset', () => {
   });
 
   it('sends a PIN reset OTP', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', phone: PHONE });
+    mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', phone: PHONE });
     mockPrisma.otp.create.mockResolvedValue({});
     const res = await authService.requestPinReset(PHONE);
     expect(res.resendAfter).toBe(60);
   });
 
   it('rejects a reset for an unknown user', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.user.findFirst.mockResolvedValue(null);
     await expect(authService.requestPinReset(PHONE)).rejects.toMatchObject({ status: 404 });
   });
 });

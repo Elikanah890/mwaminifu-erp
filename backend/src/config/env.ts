@@ -29,6 +29,11 @@ export const env = {
   // UNSET for real production.
   ALLOW_MOCK_MESSAGING: process.env.ALLOW_MOCK_MESSAGING === 'true',
 
+  // Temporary client-testing switch: greatly raises auth/OTP/general rate limits
+  // and lets the System Owner sign in without being blocked by the 2-session cap.
+  // Is also implied by MOCK_SMS + ALLOW_MOCK_MESSAGING.
+  RATE_LIMIT_RELAXED: process.env.RATE_LIMIT_RELAXED === 'true',
+
   // SMS gateway configuration. In production MOCK_SMS must be false and a real
   // provider must be configured; see SmsService for provider implementations.
   SMS_PROVIDER: process.env.SMS_PROVIDER || (process.env.MOCK_SMS === 'true' ? 'mock' : 'http'),
@@ -44,6 +49,12 @@ export const env = {
 };
 
 export const isProduction = env.NODE_ENV === 'production';
+
+/**
+ * Temporary client-testing mode: relaxed rate limits and no System Owner session
+ * cap. Enabled explicitly or whenever mocked messaging is permitted in prod.
+ */
+export const isTestingMode = env.RATE_LIMIT_RELAXED || (env.MOCK_SMS && env.ALLOW_MOCK_MESSAGING);
 
 /**
  * Fail fast on unsafe production configuration. Called once at startup so a

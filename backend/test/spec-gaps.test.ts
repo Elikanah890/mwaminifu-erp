@@ -168,7 +168,7 @@ describe('owner OTP activation (Spec 4.7)', () => {
   it('activates the owner on a successful OTP verification', async () => {
     mockPrisma.otp.findFirst.mockResolvedValue({ id: 'otp1', code: '123456', attempts: 0, purpose: 'OWNER_ACTIVATION' });
     mockPrisma.otp.update.mockResolvedValue({});
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockPrisma.user.findFirst.mockResolvedValue({
       id: 'u1', phone: '255700000000', role: 'BUSINESS_OWNER', name: 'Owner', isPinSet: false,
       isPhoneVerified: false, activationOtpVerifiedAt: null,
     });
@@ -183,7 +183,7 @@ describe('owner OTP activation (Spec 4.7)', () => {
   });
 
   it('blocks PIN login for an unverified owner', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({
+    mockPrisma.user.findFirst.mockResolvedValue({
       id: 'u1', role: 'BUSINESS_OWNER', isActive: true, isPhoneVerified: false, pinHash: 'x',
     });
     await expect(authService.login('255700000000', '1234')).rejects.toMatchObject({ status: 403, code: 'ACTIVATION_REQUIRED' });
@@ -197,7 +197,7 @@ describe('AGAC Owner session limit (Spec 4.3)', () => {
       id: 'admin1', username: 'admin', role: 'SYSTEM_OWNER', name: 'Admin', email: null,
       isActive: true, deletedAt: null, passwordHash: await hashPassword('pw'),
     });
-    mockPrisma.refreshToken.count.mockResolvedValue(2);
+    mockPrisma.refreshToken.findMany.mockResolvedValue([{ id: 'r1' }, { id: 'r2' }]);
     await expect(authService.adminLogin('admin', 'pw')).rejects.toMatchObject({ status: 409, code: 'SESSION_LIMIT' });
   });
 
@@ -206,7 +206,7 @@ describe('AGAC Owner session limit (Spec 4.3)', () => {
       id: 'admin1', username: 'admin', role: 'SYSTEM_OWNER', name: 'Admin', email: null,
       isActive: true, deletedAt: null, passwordHash: await hashPassword('pw'),
     });
-    mockPrisma.refreshToken.count.mockResolvedValue(1);
+    mockPrisma.refreshToken.findMany.mockResolvedValue([{ id: 'r1' }]);
     mockPrisma.refreshToken.create.mockResolvedValue({});
     const res = await authService.adminLogin('admin', 'pw');
     expect(res.accessToken).toBeTruthy();

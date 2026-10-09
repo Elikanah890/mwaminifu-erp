@@ -1,8 +1,9 @@
 import prisma from '../config/database';
-import { env } from '../config/env';
+import { env, isTestingMode } from '../config/env';
 import { hashPin, hashPassword, comparePin, comparePassword } from '../utils/bcrypt.util';
 import { signAccessToken, signRefreshToken, signTempToken } from '../utils/jwt.util';
 import { generateOtp } from '../utils/otp.util';
+import { normalizePhone, phoneVariants } from '../utils/phone.util';
 import { settingsService } from './settings.service';
 import logger from '../utils/logger.util';
 import { SmsService } from './sms.service';
@@ -11,6 +12,11 @@ const smsService = new SmsService();
 
 // Refresh token DB TTL (60 days) - keep in sync with JWT_REFRESH_EXPIRY in .env
 const REFRESH_TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000;
+
+/** Look up a user tolerating any common phone format (0754..., 255754..., +255...). */
+async function findUserByPhone(phone: string) {
+  return prisma.user.findFirst({ where: { phone: { in: phoneVariants(phone) } } });
+}
 
 async function otpSms(phone: string, code: string, purpose: string, minutes: number): Promise<void> {
   const appName = await settingsService.get('appName');
@@ -25,9 +31,10 @@ async function otpSms(phone: string, code: string, purpose: string, minutes: num
 
 export class AuthService {
   async requestOtp(phone: string) {
-    const user = await prisma.user.findUnique({ where: { phone } });
+    const canonical = normalizePhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
-      throw { status: 404, code: 'NOT_FOUND', message: 'Account not found. Contact your agent.' };
+      throw { status: 404, code: 'NOT_FOUND', message: 'Phone number not registered. Contact your agent.' };
     }
 
     if (user.role === 'SYSTEM_OWNER' || user.role === 'AGENT') {
@@ -35,7 +42,7 @@ export class AuthService {
     }
 
     const recentOtp = await prisma.otp.findFirst({
-      where: { phone, purpose: 'LOGIN', createdAt: { gte: new Date(Date.now() - 60 * 1000) } },
+      where: { phone: canonical, purpose: 'LOGIN', createdAt: { gte: new Date(Date.now() - 60 * 1000) } },
     });
     // In mock/demo mode (no real SMS gateway) always issue a fresh OTP so
     // repeated test sign-ins work without waiting out the resend window.
@@ -43,47 +50,72 @@ export class AuthService {
       return { resendAfter: 60 };
     }
 
+    // Retire any previous unused login codes so only the newest one is valid.
+    await prisma.otp.updateMany({
+      where: { phone: canonical, purpose: 'LOGIN', isUsed: false },
+      data: { isUsed: true },
+    });
+
     const code = generateOtp();
     const minutes = await settingsService.get('otpLifetimeMinutes');
     const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
 
     await prisma.otp.create({
-      data: { phone, code, purpose: 'LOGIN', expiresAt, userId: user.id },
+      data: { phone: canonical, code, purpose: 'LOGIN', expiresAt, userId: user.id },
     });
 
-    await otpSms(phone, code, 'LOGIN', minutes);
+    await otpSms(canonical, code, 'LOGIN', minutes);
 
-    logger.info(`OTP sent to ${phone}`);
-    return { message: 'OTP sent', resendAfter: 60 };
+    logger.info(`OTP sent to ${canonical}`);
+    // In mock mode surface the code so testers/devs can proceed without SMS.
+    return { message: 'OTP sent', resendAfter: 60, ...(env.MOCK_SMS ? { devOtp: code } : {}) };
   }
 
   async verifyOtp(phone: string, code: string, purpose: 'LOGIN' | 'PIN_RESET' = 'LOGIN') {
-    // A first-time owner logs in with the OWNER_ACTIVATION code sent at
-    // registration (Spec 4.7); accept that alongside the normal LOGIN code.
-    const purposes = purpose === 'LOGIN' ? ['LOGIN', 'OWNER_ACTIVATION'] : [purpose];
-    const otp = await prisma.otp.findFirst({
-      where: { phone, purpose: { in: purposes }, isUsed: false, expiresAt: { gte: new Date() } },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Reject when there is no active OTP, or the attempt limit has been hit.
-    if (!otp || otp.attempts >= 5) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Invalid or expired OTP' };
-    }
-
-    // Count failed guesses against this OTP so a 6-digit code cannot be
-    // brute-forced by repeated verify calls.
-    if (otp.code !== code) {
-      await prisma.otp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Invalid or expired OTP' };
-    }
-
-    await prisma.otp.update({ where: { id: otp.id }, data: { isUsed: true } });
-
-    const user = await prisma.user.findUnique({ where: { phone } });
+    const canonical = normalizePhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
-      throw { status: 404, code: 'NOT_FOUND', message: 'User not found' };
+      throw { status: 404, code: 'NOT_FOUND', message: 'Phone number not registered' };
     }
+
+    // In mock/testing mode the fixed code always works, so an OTP request that
+    // was rate-limited or an already-consumed code never blocks a login.
+    const mockBypass = env.MOCK_SMS && code === generateOtp();
+    if (!mockBypass) {
+      // A first-time owner logs in with the OWNER_ACTIVATION code sent at
+      // registration (Spec 4.7); accept that alongside the normal LOGIN code.
+      const purposes = purpose === 'LOGIN' ? ['LOGIN', 'OWNER_ACTIVATION'] : [purpose];
+      const otp = await prisma.otp.findFirst({
+        where: { phone: canonical, purpose: { in: purposes }, isUsed: false, expiresAt: { gte: new Date() } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!otp) {
+        const anyOtp = await prisma.otp.findFirst({
+          where: { phone: canonical, purpose: { in: purposes } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (anyOtp) {
+          throw { status: 400, code: 'OTP_EXPIRED', message: 'OTP expired. Request a new one.' };
+        }
+        throw { status: 400, code: 'INVALID_OTP', message: 'Invalid or expired OTP' };
+      }
+
+      if (otp.attempts >= 5) {
+        throw { status: 429, code: 'RATE_LIMITED', message: 'Too many OTP attempts. Request a new code.' };
+      }
+
+      if (otp.code !== code) {
+        await prisma.otp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+        throw { status: 400, code: 'INVALID_OTP', message: 'Invalid OTP' };
+      }
+    }
+
+    // Consume the code (mark any unused codes for this phone as used).
+    await prisma.otp.updateMany({
+      where: { phone: canonical, isUsed: false },
+      data: { isUsed: true },
+    });
 
     // Spec 4.7 — a successful OTP proves phone ownership and activates the
     // account (records the activation timestamp).
@@ -195,7 +227,7 @@ export class AuthService {
   }
 
   async login(phone: string, pin: string) {
-    const user = await prisma.user.findUnique({ where: { phone } });
+    const user = await findUserByPhone(phone);
     if (!user) {
       throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid credentials' };
     }
@@ -290,9 +322,9 @@ export class AuthService {
   }
 
   async employeeLogin(phone: string, pin: string) {
-    const user = await prisma.user.findUnique({ where: { phone } });
+    const user = await findUserByPhone(phone);
     if (!user || user.role !== 'EMPLOYEE') {
-      throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid employee credentials' };
+      throw { status: 401, code: 'UNAUTHORIZED', message: 'Phone or PIN is incorrect' };
     }
 
     if (!user.isActive) {
@@ -320,7 +352,7 @@ export class AuthService {
 
       const isValid = await comparePin(pin, empWithTemp.tempPinHash!);
       if (!isValid) {
-        throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid temporary PIN' };
+        throw { status: 401, code: 'UNAUTHORIZED', message: 'Phone or PIN is incorrect' };
       }
 
       const tempToken = signTempToken({
@@ -344,7 +376,7 @@ export class AuthService {
 
     const isValid = await comparePin(pin, user.pinHash);
     if (!isValid) {
-      throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid PIN' };
+      throw { status: 401, code: 'UNAUTHORIZED', message: 'Phone or PIN is incorrect' };
     }
 
     const permissions = (employee.permissions as string[]) || [];
@@ -501,16 +533,17 @@ export class AuthService {
   }
 
   async requestPinReset(phone: string) {
-    const user = await prisma.user.findUnique({ where: { phone } });
+    const canonical = normalizePhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
-      throw { status: 404, code: 'NOT_FOUND', message: 'User not found' };
+      throw { status: 404, code: 'NOT_FOUND', message: 'Phone number not registered' };
     }
 
     const code = generateOtp();
     const minutes = await settingsService.get('otpLifetimeMinutes');
     await prisma.otp.create({
       data: {
-        phone,
+        phone: canonical,
         code,
         purpose: 'PIN_RESET',
         expiresAt: new Date(Date.now() + minutes * 60 * 1000),
@@ -518,7 +551,7 @@ export class AuthService {
       },
     });
 
-    await otpSms(phone, code, 'PIN_RESET', minutes);
+    await otpSms(canonical, code, 'PIN_RESET', minutes);
 
     return { message: 'OTP sent', resendAfter: 60 };
   }
@@ -545,15 +578,25 @@ export class AuthService {
     }
 
     // Spec 4.3 — the AGAC Owner account is limited to 2 concurrent sessions.
-    const activeSessions = await prisma.refreshToken.count({
+    // In testing mode we evict the oldest session instead of locking the owner out.
+    const activeSessions = await prisma.refreshToken.findMany({
       where: { userId: user.id, isRevoked: false, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
     });
-    if (user.role === 'SYSTEM_OWNER' && activeSessions >= 2) {
-      throw {
-        status: 409,
-        code: 'SESSION_LIMIT',
-        message: 'Maximum 2 active sessions. Log out on another device first.',
-      };
+    if (user.role === 'SYSTEM_OWNER' && activeSessions.length >= 2) {
+      if (isTestingMode) {
+        await prisma.refreshToken.updateMany({
+          where: { id: { in: activeSessions.slice(0, activeSessions.length - 1).map((t) => t.id) } },
+          data: { isRevoked: true },
+        });
+      } else {
+        throw {
+          status: 409,
+          code: 'SESSION_LIMIT',
+          message: 'Maximum 2 active sessions. Log out on another device first.',
+        };
+      }
     }
 
     const accessToken = signAccessToken({ sub: user.id, role: user.role });

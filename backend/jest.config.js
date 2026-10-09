@@ -10,7 +10,7 @@ module.exports = {
   },
   setupFiles: ['<rootDir>/test/helpers/env.setup.js'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: { module: 'commonjs', esModuleInterop: true, skipLibCheck: true, resolveJsonModule: true } }],
+    '^.+\\.ts$': ['ts-jest', { tsconfig: { module: 'commonjs', esModuleInterop: true, skipLibCheck: true, resolveJsonModule: true, types: ['node', 'jest'] } }],
   },
   collectCoverageFrom: [
     'src/services/auth.service.ts',
