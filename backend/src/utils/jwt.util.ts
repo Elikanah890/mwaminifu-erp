@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import { env } from '../config/env';
 
 export interface JwtPayload {
@@ -17,8 +18,11 @@ export function signAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): strin
 }
 
 export function signRefreshToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): string {
+  // Include a unique JWT ID so two tokens minted in the same second are never
+  // identical (RefreshToken.token is UNIQUE).
   return jwt.sign(payload as object, env.JWT_SECRET, {
     expiresIn: env.JWT_REFRESH_EXPIRY || '60d',
+    jwtid: randomUUID(),
   } as jwt.SignOptions);
 }
 
