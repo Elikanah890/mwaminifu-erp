@@ -33,7 +33,7 @@ function StepVisual({ index }: { index: number }) {
           </span>
           <div>
             <p className="text-sm font-semibold text-foreground">AGAC Agent</p>
-            <p className="text-xs text-muted-foreground">+255 700 000 000</p>
+            <p className="text-xs text-muted-foreground">+255 784 815 686</p>
           </div>
         </div>
         <div className="mt-3 rounded-lg bg-secondary/10 px-3 py-2 text-xs font-semibold text-secondary">

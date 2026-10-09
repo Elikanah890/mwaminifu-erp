@@ -14,6 +14,7 @@ import BrandMark from '@/components/marketing/BrandMark';
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 const LINKS = [
+  { href: '/', key: 'home' as const },
   { href: '/features', key: 'features' as const },
   { href: '/pricing', key: 'pricing' as const },
   { href: '/how-it-works', key: 'how' as const },
@@ -29,7 +30,7 @@ export default function MarketingHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-sidebar text-white">
       <div className="brand-container flex h-16 items-center justify-between px-4 sm:px-6">
-        <Link href="/">
+        <Link href="/" aria-label="Home" title={copy.home}>
           <BrandMark onDark />
         </Link>
 

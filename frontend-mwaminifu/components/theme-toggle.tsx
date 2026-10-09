@@ -8,7 +8,6 @@ import { Check, Moon, Sun } from 'lucide-react';
 const OPTIONS = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
 ] as const;
 
 export default function ThemeToggle({ compact = false, onDark = false }: { compact?: boolean; onDark?: boolean }) {
@@ -16,8 +15,14 @@ export default function ThemeToggle({ compact = false, onDark = false }: { compa
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    // Migrate legacy "system" preference to an explicit light/dark choice.
+    if (theme === 'system') setTheme(resolvedTheme === 'dark' ? 'dark' : 'light');
+  }, [theme, resolvedTheme, setTheme]);
 
+  // A stored "system" value resolves to the effective theme for the checkmark.
+  const active = theme === 'system' ? resolvedTheme : theme;
   const isDark = mounted ? resolvedTheme === 'dark' : false;
 
   return (
@@ -64,7 +69,7 @@ export default function ThemeToggle({ compact = false, onDark = false }: { compa
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-brand"
                 >
                   {option.label}
-                  {theme === option.value && <Check size={14} className="text-secondary" />}
+                  {active === option.value && <Check size={14} className="text-secondary" />}
                 </button>
               ))}
             </motion.div>

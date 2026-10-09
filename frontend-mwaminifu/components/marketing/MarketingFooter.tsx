@@ -63,9 +63,9 @@ export default function MarketingFooter() {
 
         <div>
           <h3 className="mb-3 font-semibold text-foreground">{locale === 'sw' ? 'Mawasiliano' : 'Contact'}</h3>
-          <p className="mb-2 text-sm text-muted-foreground">+255 700 000 000</p>
-          <p className="mb-2 text-sm text-muted-foreground">hello@mwaminifu.co.tz</p>
-          <p className="text-sm text-muted-foreground">WhatsApp: +255 700 000 000</p>
+          <p className="mb-2 text-sm text-muted-foreground">+255 784 815 686</p>
+          <p className="mb-2 text-sm text-muted-foreground">emmanuel@gmail.com</p>
+          <p className="text-sm text-muted-foreground">WhatsApp: +255 784 815 686</p>
         </div>
       </div>
 

@@ -1,8 +1,8 @@
 import type { Locale } from './translations';
 
-export const navText: Record<Locale, Record<'features' | 'pricing' | 'how' | 'about' | 'login' | 'getStarted', string>> = {
-  en: { features: 'Features', pricing: 'Pricing', how: 'How It Works', about: 'About', login: 'Login', getStarted: 'Get Started' },
-  sw: { features: 'Vipengele', pricing: 'Bei', how: 'Jinsi Inavyofanya Kazi', about: 'Kuhusu', login: 'Ingia', getStarted: 'Anza' },
+export const navText: Record<Locale, Record<'home' | 'features' | 'pricing' | 'how' | 'about' | 'login' | 'getStarted', string>> = {
+  en: { home: 'Home', features: 'Features', pricing: 'Pricing', how: 'How It Works', about: 'About', login: 'Login', getStarted: 'Get Started' },
+  sw: { home: 'Nyumbani', features: 'Vipengele', pricing: 'Bei', how: 'Jinsi Inavyofanya Kazi', about: 'Kuhusu', login: 'Ingia', getStarted: 'Anza' },
 };
 
 export const commonText: Record<
@@ -327,9 +327,9 @@ export const aboutPageText: Record<
     contactTitle: 'Contact us',
     contactSubtitle: 'Questions, demos or support — we are one message away.',
     contact: [
-      { channel: 'Phone', value: '+255 700 000 000', note: 'Mon–Sat, 8am–6pm' },
-      { channel: 'Email', value: 'hello@mwaminifu.co.tz', note: 'We reply within a day' },
-      { channel: 'WhatsApp', value: '+255 700 000 000', note: 'Chat with support' },
+      { channel: 'Phone', value: '+255 784 815 686', note: 'Mon–Sat, 8am–6pm' },
+      { channel: 'Email', value: 'emmanuel@gmail.com', note: 'We reply within a day' },
+      { channel: 'WhatsApp', value: '+255 784 815 686', note: 'Chat with support' },
     ],
     faqTitle: 'About Mwaminifu',
     faqs: [
@@ -373,9 +373,9 @@ export const aboutPageText: Record<
     contactTitle: 'Wasiliana nasi',
     contactSubtitle: 'Maswali, maonyesho au msaada — tuko ujumbe mmoja mbali.',
     contact: [
-      { channel: 'Simu', value: '+255 700 000 000', note: 'Jumatatu–Jumamosi, 8am–6pm' },
-      { channel: 'Barua pepe', value: 'hello@mwaminifu.co.tz', note: 'Tunajibu ndani ya siku' },
-      { channel: 'WhatsApp', value: '+255 700 000 000', note: 'Zungumza na msaada' },
+      { channel: 'Simu', value: '+255 784 815 686', note: 'Jumatatu–Jumamosi, 8am–6pm' },
+      { channel: 'Barua pepe', value: 'emmanuel@gmail.com', note: 'Tunajibu ndani ya siku' },
+      { channel: 'WhatsApp', value: '+255 784 815 686', note: 'Zungumza na msaada' },
     ],
     faqTitle: 'Kuhusu Mwaminifu',
     faqs: [
