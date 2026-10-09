@@ -3,12 +3,12 @@ import { authController } from '../controllers/auth.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validation.middleware';
 import { requestOtpSchema, verifyOtpSchema, setPinSchema, loginSchema, employeeLoginSchema, adminLoginSchema, refreshTokenSchema, changePinSchema } from '../validators/auth.validator';
-import { otpLimiter, loginLimiter } from '../middlewares/rateLimit.middleware';
+import { otpLimiter, loginLimiter, verifyLimiter } from '../middlewares/rateLimit.middleware';
 
 const router = Router();
 
 router.post('/otp/request', otpLimiter, validate(requestOtpSchema), authController.requestOtp.bind(authController));
-router.post('/otp/verify', validate(verifyOtpSchema), authController.verifyOtp.bind(authController));
+router.post('/otp/verify', verifyLimiter, validate(verifyOtpSchema), authController.verifyOtp.bind(authController));
 router.post('/pin/set', authMiddleware, validate(setPinSchema), authController.setPin.bind(authController));
 router.post('/login', loginLimiter, validate(loginSchema), authController.login.bind(authController));
 router.post('/employee/login', loginLimiter, validate(employeeLoginSchema), authController.employeeLogin.bind(authController));

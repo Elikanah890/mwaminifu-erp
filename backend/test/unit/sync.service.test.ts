@@ -95,7 +95,7 @@ describe('syncService.pushChanges — idempotency', () => {
       stockAdjustments: [{ clientId: 'a1', data: { productId: 'p1', quantityChange: 5, performedBy: 'u1' }, lastModified: '' }],
     });
     expect(mockPrisma.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { stockQuantity: 15 } })
+      expect.objectContaining({ data: expect.objectContaining({ stockQuantity: { increment: 5 } }) })
     );
   });
 

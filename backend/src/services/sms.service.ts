@@ -115,6 +115,7 @@ export class SmsService {
       const auth = Buffer.from(`${env.SMS_API_KEY}:${env.SMS_API_SECRET}`).toString('base64');
       const res = await fetch(env.SMS_API_URL || 'https://apisms.beem.africa/v1/send', {
         method: 'POST',
+        signal: AbortSignal.timeout(10_000),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Basic ${auth}`,
@@ -152,6 +153,7 @@ export class SmsService {
     try {
       const res = await fetch(env.SMS_API_URL, {
         method: 'POST',
+        signal: AbortSignal.timeout(10_000),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${env.SMS_API_KEY}`,

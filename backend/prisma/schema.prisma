@@ -306,10 +306,13 @@ model StockAdjustment {
   performer       User      @relation(fields: [performedBy], references: [id])
   shopId          String
   createdAt       DateTime  @default(now())
+  clientId        String?
 
   @@index([productId])
   @@index([shopId])
   @@index([createdAt])
+  @@index([performedBy])
+  @@unique([shopId, clientId])
 }
 
 model Customer {
@@ -379,6 +382,8 @@ model Sale {
   @@index([saleDate])
   @@index([status])
   @@index([receiptNumber])
+  @@index([shopId, saleDate])
+  @@unique([shopId, clientId])
 }
 
 model SaleItem {
@@ -433,6 +438,8 @@ model Refund {
   @@index([customerId])
   @@index([status])
   @@index([createdAt])
+  @@index([shopId, createdAt])
+  @@unique([shopId, clientId])
 }
 
 model Expense {
@@ -458,6 +465,8 @@ model Expense {
   @@index([userId])
   @@index([expenseDate])
   @@index([category])
+  @@index([shopId, createdAt])
+  @@unique([shopId, clientId])
 }
 
 model Loan {
@@ -512,6 +521,8 @@ model CreditPayment {
   @@index([customerId])
   @@index([saleId])
   @@index([paymentDate])
+  @@index([customerId, createdAt])
+  @@unique([clientId])
 }
 
 model SyncMetadata {

@@ -100,6 +100,8 @@ describe('shift gating (Spec 8.8.1)', () => {
       id: 'p1', name: 'Rice', sellingPrice: 1000, costPrice: 600, stockQuantity: 10,
       isActive: true, isService: false, unit: 'pc', minPrice: null, maxPrice: null,
     });
+    mockPrisma.product.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.product.findUnique.mockResolvedValue({ stockQuantity: 9 });
     mockPrisma.sale.create.mockResolvedValue({ id: 's1', items: [] });
 
     await saleService.createSale(

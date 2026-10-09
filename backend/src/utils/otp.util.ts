@@ -1,11 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
+import { randomInt } from 'crypto';
 import { env } from '../config/env';
 
 export function generateOtp(): string {
   if (env.MOCK_SMS) {
     return '123456';
   }
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 export function generateUniqueId(): string {
@@ -20,5 +21,5 @@ export function generateReceiptNumber(): string {
 }
 
 export function generateTempPin(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }

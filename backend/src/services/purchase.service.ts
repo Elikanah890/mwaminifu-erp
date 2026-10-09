@@ -200,13 +200,14 @@ export class PurchaseService {
         const product = await tx.product.findFirst({ where: { id: productId, shopId: purchase.shopId } });
         if (!product) continue;
 
-        const newStock = product.stockQuantity + requestedBase;
         // unitCost is per purchase unit → derive per-base-unit cost.
         const baseCost = item.unitCost ? item.unitCost / purchaseBaseUnits : product.costPrice;
-        await tx.product.update({
+        const after = await tx.product.update({
           where: { id: productId },
-          data: { stockQuantity: newStock, baseUnitStock: newStock, costPrice: baseCost },
+          data: { stockQuantity: { increment: requestedBase }, baseUnitStock: { increment: requestedBase }, costPrice: baseCost },
+          select: { stockQuantity: true },
         });
+        const newStock = after.stockQuantity;
 
         await tx.stockMovement.create({
           data: {

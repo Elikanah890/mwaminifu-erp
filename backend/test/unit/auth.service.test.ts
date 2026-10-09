@@ -207,7 +207,7 @@ describe('AuthService.setPin', () => {
 describe('AuthService.refreshAccessToken', () => {
   it('rotates tokens', async () => {
     mockPrisma.refreshToken.findUnique.mockResolvedValue({
-      id: 'r1', isRevoked: false, expiresAt: new Date(Date.now() + 100000), user: { id: 'u1', role: 'BUSINESS_OWNER' },
+      id: 'r1', isRevoked: false, expiresAt: new Date(Date.now() + 100000), user: { id: 'u1', role: 'BUSINESS_OWNER', isActive: true, deletedAt: null },
     });
     mockPrisma.shop.findFirst.mockResolvedValue({ id: 'shop1' });
     mockPrisma.refreshToken.update.mockResolvedValue({});

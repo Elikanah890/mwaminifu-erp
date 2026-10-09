@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { isTestingMode } from '../config/env';
+import { normalizePhone } from '../utils/phone.util';
 
 // Client-testing mode (RATE_LIMIT_RELAXED=true, or MOCK_SMS + ALLOW_MOCK_MESSAGING)
 // raises the ceilings substantially so testers are not locked out, while still
@@ -22,10 +23,27 @@ export const generalLimiter = rateLimit({
 export const otpLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: relaxed ? 100 : 10,
-  keyGenerator: (req) => (req.body && (req.body.phone as string)) || req.ip || 'unknown',
+  keyGenerator: (req) => {
+    const raw = (req.body && (req.body.phone as string)) || '';
+    // Normalise so 0754…, 255754… and +255754… share one bucket.
+    return raw ? normalizePhone(raw) : req.ip || 'unknown';
+  },
   message: {
     success: false,
     error: { code: 'RATE_LIMITED', message: 'Too many OTP requests for this number. Try again in an hour.' },
+    timestamp: new Date().toISOString(),
+  },
+});
+
+// OTP verification: caps brute-force guessing of the 6-digit code per IP.
+export const verifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: relaxed ? 300 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMITED', message: 'Too many OTP verification attempts. Try again later.' },
     timestamp: new Date().toISOString(),
   },
 });

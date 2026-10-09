@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { getErrorMessage } from '../utils/error.util';
 import type { SaleStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 interface OfflineSaleItem {
   productId: string;
@@ -232,6 +233,7 @@ export class SyncService {
 
     const items: OfflineSaleItem[] = data.items || [];
 
+    try {
     await prisma.$transaction(async (tx) => {
       const saleItems: Array<{
         productId: string;
@@ -295,6 +297,10 @@ export class SyncService {
         },
       });
     });
+    } catch (err) {
+      // Concurrent replay of the same clientId — treat as already synced.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    }
   }
 
   private async processExpense(shopId: string, record: { clientId: string; data: Record<string, unknown> }) {
@@ -309,17 +315,21 @@ export class SyncService {
         data: { amount: data.amount, category: data.category, syncStatus: 'SYNCED' },
       });
     } else {
-      await prisma.expense.create({
-        data: {
-          shopId,
-          userId: data.userId,
-          category: data.category,
-          amount: data.amount,
-          description: data.description,
-          clientId: record.clientId,
-          syncStatus: 'SYNCED',
-        },
-      });
+      try {
+        await prisma.expense.create({
+          data: {
+            shopId,
+            userId: data.userId,
+            category: data.category,
+            amount: data.amount,
+            description: data.description,
+            clientId: record.clientId,
+            syncStatus: 'SYNCED',
+          },
+        });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+      }
     }
   }
 
@@ -348,62 +358,79 @@ export class SyncService {
       if ((data.amount || 0) > customer.outstandingBalance) {
         throw new Error(`Payment amount exceeds outstanding balance`);
       }
-      await prisma.$transaction(async (tx) => {
-        await tx.customer.update({
-          where: { id: customer.id },
-          data: {
-            outstandingBalance: { decrement: data.amount || 0 },
-            totalRepaid: { increment: data.amount || 0 },
-          },
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.customer.update({
+            where: { id: customer.id },
+            data: {
+              outstandingBalance: { decrement: data.amount || 0 },
+              totalRepaid: { increment: data.amount || 0 },
+            },
+          });
+          await tx.creditPayment.create({
+            data: {
+              customerId: customer.id,
+              amount: data.amount,
+              method: data.method || 'cash',
+              clientId: record.clientId,
+              syncStatus: 'SYNCED',
+            },
+          });
         });
-        await tx.creditPayment.create({
-          data: {
-            customerId: customer.id,
-            amount: data.amount,
-            method: data.method || 'cash',
-            clientId: record.clientId,
-            syncStatus: 'SYNCED',
-          },
-        });
-      });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+      }
     }
   }
 
   private async processStockAdjustment(shopId: string, record: { clientId: string; data: Record<string, unknown> }) {
     const data = record.data as unknown as OfflineStockAdjustmentData;
 
-    // Guard against cross-shop writes: product must belong to the shop
+    // Idempotency: a replayed adjustment must not double-apply.
+    const existing = await prisma.stockAdjustment.findFirst({ where: { shopId, clientId: record.clientId } });
+    if (existing) return;
+
     const product = await prisma.product.findFirst({
       where: { id: data.productId, shopId },
-      select: { id: true, stockQuantity: true },
+      select: { id: true },
     });
     if (!product) {
       throw new Error(`Product ${data.productId} not found in this shop`);
     }
-
-    const newQuantity = product.stockQuantity + (data.quantityChange || 0);
-    if (newQuantity < 0) {
-      throw new Error(`Stock cannot be negative`);
-    }
-
     if (!data.performedBy) {
       throw new Error('performedBy is required for stock adjustment');
     }
 
-    await prisma.stockAdjustment.create({
-      data: {
-        productId: product.id,
-        quantityChange: data.quantityChange,
-        reason: data.reason || 'Offline adjustment',
-        performedBy: data.performedBy,
-        shopId,
-      },
-    });
+    const change = data.quantityChange || 0;
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (change < 0) {
+          const decremented = await tx.product.updateMany({
+            where: { id: product.id, shopId, stockQuantity: { gte: -change } },
+            data: { stockQuantity: { decrement: -change }, baseUnitStock: { decrement: -change } },
+          });
+          if (decremented.count === 0) throw new Error('Stock cannot be negative');
+        } else if (change > 0) {
+          await tx.product.update({
+            where: { id: product.id },
+            data: { stockQuantity: { increment: change }, baseUnitStock: { increment: change } },
+          });
+        }
 
-    await prisma.product.update({
-      where: { id: product.id },
-      data: { stockQuantity: newQuantity },
-    });
+        await tx.stockAdjustment.create({
+          data: {
+            productId: product.id,
+            quantityChange: change,
+            reason: data.reason || 'Offline adjustment',
+            performedBy: data.performedBy,
+            shopId,
+            clientId: record.clientId,
+          },
+        });
+      });
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    }
   }
 }
 

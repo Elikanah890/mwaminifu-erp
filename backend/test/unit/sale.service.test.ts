@@ -28,14 +28,16 @@ describe('saleService.createSale', () => {
   it('creates an online sale and decrements stock', async () => {
     mockPrisma.sale.findFirst.mockResolvedValue(null);
     mockPrisma.product.findFirst.mockResolvedValue(product);
+    mockPrisma.product.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.product.findUnique.mockResolvedValue({ stockQuantity: 8 });
     mockPrisma.sale.create.mockResolvedValue({ id: 's1', receiptNumber: 'INV-1', grandTotal: 2000, items: [] });
 
     const sale = await saleService.createSale(SHOP, USER, salePayload);
 
     expect(sale.id).toBe('s1');
     expect(mockPrisma.stockAdjustment.create).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { stockQuantity: 8, baseUnitStock: 8 } })
+    expect(mockPrisma.product.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { stockQuantity: { decrement: 2 }, baseUnitStock: { decrement: 2 } } })
     );
     expect(mockPrisma.cashTransaction.create).toHaveBeenCalledTimes(1);
   });

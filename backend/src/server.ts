@@ -3,6 +3,7 @@ import { env, validateProductionConfig } from './config/env';
 import logger from './config/logger';
 import prisma from './config/database';
 import { settingsService } from './services/settings.service';
+import type { Server } from 'http';
 
 const WEAK_JWT_SECRETS = new Set([
   'dev_secret',
@@ -25,6 +26,9 @@ function assertProductionConfig() {
   validateProductionConfig();
 }
 
+let server: Server | undefined;
+let shuttingDown = false;
+
 async function main() {
   try {
     assertProductionConfig();
@@ -37,27 +41,55 @@ async function main() {
 
     // Bind to 0.0.0.0 so the API is reachable from Android emulators (10.0.2.2),
     // physical devices on the LAN, and Docker/reverse-proxy deployments.
-    app.listen(env.PORT, '0.0.0.0', () => {
+    server = app.listen(env.PORT, '0.0.0.0', () => {
       logger.info(`Mwaminifu API server running on http://0.0.0.0:${env.PORT}`);
       logger.info(`Environment: ${env.NODE_ENV}`);
       logger.info(`Health check: http://localhost:${env.PORT}/health`);
     });
+    server.on('error', (err) => logger.error('HTTP server error', err));
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
 
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received. Shutting down gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+/** Drain in-flight requests, then close the DB. Force-exits after 15s. */
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received. Draining connections...`);
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received. Shutting down gracefully...');
-  await prisma.$disconnect();
+  const force = setTimeout(() => {
+    logger.error('Forced shutdown after 15s timeout');
+    process.exit(1);
+  }, 15_000);
+  force.unref();
+
+  try {
+    if (server) {
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+    }
+    await prisma.$disconnect();
+  } catch (err) {
+    logger.error('Error during shutdown', err);
+  }
+
+  clearTimeout(force);
+  logger.info('Shutdown complete');
   process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+
+// Never let an unhandled async error silently kill the process without logging
+// and draining.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', reason);
+});
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', err);
+  void shutdown('uncaughtException');
 });
 
 main();

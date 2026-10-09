@@ -443,6 +443,9 @@ export class AuthService {
       data: { tempPinHash: null },
     });
 
+    // Invalidate every existing session after a PIN change.
+    await prisma.refreshToken.updateMany({ where: { userId, isRevoked: false }, data: { isRevoked: true } });
+
     return { message: 'PIN changed successfully' };
   }
 
@@ -471,6 +474,9 @@ export class AuthService {
       await prisma.agent.updateMany({ where: { id: user.agentId }, data: { passwordHash: hashed } });
     }
 
+    // Invalidate every existing session after a credential change.
+    await prisma.refreshToken.updateMany({ where: { userId, isRevoked: false }, data: { isRevoked: true } });
+
     return { message: 'Password changed successfully' };
   }
 
@@ -485,6 +491,13 @@ export class AuthService {
     }
 
     const user = storedToken.user;
+
+    // Re-validate the account on every refresh so disabled/deleted users and
+    // role changes take effect immediately (P0-8).
+    if (user.isActive === false || user.deletedAt) {
+      await prisma.refreshToken.update({ where: { id: storedToken.id }, data: { isRevoked: true } });
+      throw { status: 401, code: 'FORBIDDEN', message: 'Account is disabled or deleted' };
+    }
 
     const shops = await prisma.shop.findFirst({
       where: { ownerId: user.id, isArchived: false },

@@ -102,6 +102,11 @@ export class SettingsService {
     return cache[key] as SystemSettings[K];
   }
 
+  /** Cached full settings snapshot — avoids a DB load on every public /config hit. */
+  async getAll(): Promise<SystemSettings> {
+    return this.getCached();
+  }
+
   private coerce(key: string, raw: unknown): unknown {
     const def = SETTINGS_DEFAULTS[key]?.value;
     if (typeof def === 'boolean') return raw === true || raw === 'true';

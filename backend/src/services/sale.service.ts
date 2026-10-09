@@ -49,7 +49,9 @@ export class SaleService {
       throw { status: 422, code: 'SHIFT_REQUIRED', message: 'Open your shift first' };
     }
 
-    const sale = await prisma.$transaction(async (tx) => {
+    let sale;
+    try {
+    sale = await prisma.$transaction(async (tx) => {
       let totalAmount = 0;
       const saleItems: Array<{
         productId: string;
@@ -65,7 +67,9 @@ export class SaleService {
         baseUnitsPerConfig: number;
       }> = [];
 
-      for (const item of data.items) {
+      // Lock rows in a stable order so concurrent multi-item sales cannot deadlock.
+      const orderedItems = [...data.items].sort((a, b) => a.productId.localeCompare(b.productId));
+      for (const item of orderedItems) {
         const product = await tx.product.findFirst({
           where: { id: item.productId, shopId },
         });
@@ -136,11 +140,28 @@ export class SaleService {
         });
 
         if (!product.isService) {
-          const newStock = product.stockQuantity - totalBaseUnits;
-          await tx.product.update({
-            where: { id: product.id },
-            data: { stockQuantity: newStock, baseUnitStock: newStock },
+          // Atomic, guarded decrement: prevents lost updates / overselling when
+          // two sales of the same product run concurrently.
+          const decremented = await tx.product.updateMany({
+            where: {
+              id: product.id,
+              shopId,
+              ...(data.allowNegativeStock ? {} : { stockQuantity: { gte: totalBaseUnits } }),
+            },
+            data: {
+              stockQuantity: { decrement: totalBaseUnits },
+              baseUnitStock: { decrement: totalBaseUnits },
+            },
           });
+          if (decremented.count === 0 && !data.allowNegativeStock) {
+            throw {
+              status: 422,
+              code: 'BUSINESS_RULE_VIOLATION',
+              message: `Insufficient stock for "${product.name}".`,
+            };
+          }
+          const after = await tx.product.findUnique({ where: { id: product.id }, select: { stockQuantity: true } });
+          const newStock = after?.stockQuantity ?? 0;
 
           await tx.stockAdjustment.create({
             data: {
@@ -288,7 +309,15 @@ export class SaleService {
       });
 
       return newSale;
-    });
+      });
+    } catch (err) {
+      // Concurrent replay of the same offline sale: return the original.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && data.clientId) {
+        const existing = await prisma.sale.findFirst({ where: { clientId: data.clientId, shopId }, include: { items: true } });
+        if (existing) return existing;
+      }
+      throw err;
+    }
 
     return sale;
   }

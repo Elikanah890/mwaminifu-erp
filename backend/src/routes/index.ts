@@ -37,7 +37,7 @@ const router = Router();
 // Public app config (no auth) — safe, non-sensitive settings for mobile/embeds.
 router.get('/config', async (_req, res, next) => {
   try {
-    const settings = await settingsService.load();
+    const settings = await settingsService.getAll();
     res.json({
       success: true,
       data: {

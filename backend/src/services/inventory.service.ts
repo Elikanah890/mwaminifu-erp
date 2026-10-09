@@ -393,7 +393,7 @@ export class InventoryService {
   }
 
   async adjustStock(productId: string, shopId: string, userId: string, data: { quantityChange: number; reason: string; unitConfigId?: string; baseUnits?: number }) {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const product = await tx.product.findFirst({
         where: { id: productId, shopId },
       });
@@ -415,15 +415,21 @@ export class InventoryService {
       }
       const baseChange = data.quantityChange * units;
 
-      const newQuantity = product.stockQuantity + baseChange;
-      if (newQuantity < 0) {
-        throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Stock cannot be negative' };
+      if (baseChange < 0) {
+        // Atomic guarded decrement — no lost updates on concurrent adjustments.
+        const decremented = await tx.product.updateMany({
+          where: { id: productId, shopId, stockQuantity: { gte: -baseChange } },
+          data: { stockQuantity: { decrement: -baseChange }, baseUnitStock: { decrement: -baseChange } },
+        });
+        if (decremented.count === 0) {
+          throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Stock cannot be negative' };
+        }
+      } else if (baseChange > 0) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { stockQuantity: { increment: baseChange }, baseUnitStock: { increment: baseChange } },
+        });
       }
-
-      await tx.product.update({
-        where: { id: productId },
-        data: { stockQuantity: newQuantity, baseUnitStock: newQuantity },
-      });
 
       await tx.stockAdjustment.create({
         data: {
@@ -435,18 +441,27 @@ export class InventoryService {
         },
       });
 
-      // Check low stock
-      if (newQuantity <= (product.reorderLevel)) {
-        await notificationService.sendLowStockAlert(
-          shopId,
-          product.name,
-          newQuantity,
-          product.reorderLevel
-        );
-      }
+      const after = await tx.product.findUnique({ where: { id: productId }, select: { stockQuantity: true } });
+      const newQuantity = after?.stockQuantity ?? product.stockQuantity + baseChange;
 
-      return { productId, previousStock: product.stockQuantity, newQuantity, change: baseChange };
+      return {
+        productId,
+        previousStock: product.stockQuantity,
+        newQuantity,
+        change: baseChange,
+        reorderLevel: product.reorderLevel,
+        productName: product.name,
+      };
     });
+
+    // Low-stock alert is best-effort and runs AFTER the transaction so a slow
+    // FCM/SMS call can never hold product row locks (P1-7).
+    if (result.newQuantity <= result.reorderLevel) {
+      void notificationService
+        .sendLowStockAlert(shopId, result.productName, result.newQuantity, result.reorderLevel)
+        .catch(() => {});
+    }
+    return result;
   }
 
   async getStockHistory(productId: string, page = 1, limit = 50) {
