@@ -5,6 +5,25 @@ import { hashPassword, comparePassword } from '../utils/bcrypt.util';
 
 const INSENSITIVE = { mode: 'insensitive' as const };
 
+/**
+ * Spec 12.2 — agents must never receive the owner's contact details. Activity
+ * log details can contain phone/email values, so redact them recursively before
+ * returning anything to an agent.
+ */
+const AGENT_REDACTED_KEYS = new Set(['phone', 'email', 'businessownerphone', 'ownerphone']);
+function redactContactDetails(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactContactDetails);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      if (AGENT_REDACTED_KEYS.has(key.toLowerCase())) continue;
+      out[key] = redactContactDetails(inner);
+    }
+    return out;
+  }
+  return value;
+}
+
 export interface AgentPortalListQuery {
   [key: string]: string | undefined;
   page?: string;
@@ -300,9 +319,12 @@ export class AgentPortalService {
         onboardedBy: business.agent?.name ?? 'Unknown',
         onboardedAt: business.createdAt,
         onboardingAction: onboardingActivity?.action ?? null,
-        onboardingDetails: onboardingActivity?.details ?? null,
+        onboardingDetails: redactContactDetails(onboardingActivity?.details ?? null),
       },
-      recentActivity,
+      recentActivity: recentActivity.map((entry) => ({
+        ...entry,
+        details: redactContactDetails(entry.details),
+      })),
       stats: {
         totalShops: stats._count.id,
         totalEmployees,
@@ -428,13 +450,22 @@ export class AgentPortalService {
           shopId: true,
           saleId: true,
           createdAt: true,
-          user: { select: { id: true, name: true, phone: true, role: true } },
+          // Spec 12.2 — no owner contact details for the agent.
+          user: { select: { id: true, name: true, role: true } },
           shop: { select: { id: true, name: true } },
         },
       }),
     ]);
 
-    return { activities, total, page, limit };
+    return {
+      activities: activities.map((entry) => ({
+        ...entry,
+        details: redactContactDetails(entry.details),
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   async getAgentNotifications(agentUserId: string, query: AgentPortalListQuery = {}) {

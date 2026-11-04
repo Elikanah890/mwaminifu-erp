@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
+import { useShop } from '@/lib/context/ShopContext';
 import { Shift } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
@@ -19,6 +20,7 @@ type CloseResult = { shift: Shift; discrepancy: number };
 export default function EmployeeShiftPage() {
   const { toast } = useToast();
   const { t } = useI18n();
+  const { activeShopId } = useShop();
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [history, setHistory] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,9 +49,13 @@ export default function EmployeeShiftPage() {
 
   const openShift = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeShopId) {
+      toast('Shop context not loaded yet', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
-      await apiClient.post('/shifts', { openingCashBalance: Number(opening) || 0 });
+      await apiClient.post('/shifts', { shopId: activeShopId, openingCashBalance: Number(opening) || 0 });
       toast('Shift opened', 'success');
       setOpening('');
       load();
@@ -63,9 +69,14 @@ export default function EmployeeShiftPage() {
   const closeShift = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeShift) return;
+    if (!activeShopId) {
+      toast('Shop context not loaded yet', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await apiClient.put<{ shift: Shift; discrepancy: number }>(`/shifts/${activeShift.id}/close`, {
+        shopId: activeShopId,
         countedCash: Number(counted),
       });
       setResult(res.data ?? null);

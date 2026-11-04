@@ -11,7 +11,7 @@ import Modal from '@/components/Modal';
 import PageWrapper from '@/components/PageWrapper';
 import { Reveal, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
-import { ChevronDown, ChevronRight, Plus, Store, CreditCard, KeyRound, Trash2, Eye } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Store, CreditCard, KeyRound, Trash2 } from 'lucide-react';
 
 const PER_PAGE = 10;
 
@@ -104,8 +104,7 @@ export default function BusinessesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [createdOwner, setCreatedOwner] = useState<{ name: string; phone: string; shopName: string; otp?: string } | null>(null);
-  const [otpData, setOtpData] = useState<{ phone: string; otp: string; expiresInMinutes: number } | null>(null);
+  const [createdOwner, setCreatedOwner] = useState<{ name: string; email: string; phone?: string; shopName: string; tempPassword?: string } | null>(null);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BusinessDetail | null>(null);
@@ -172,17 +171,23 @@ export default function BusinessesPage() {
     try {
       const address = [form.street, form.ward, form.district, form.region].filter(Boolean).join(', ');
       const payload: Record<string, string> = {
-        phone: form.phone.trim(),
+        email: form.email.trim().toLowerCase(),
         name: form.name.trim(),
         shopName: form.shopName.trim(),
       };
-      if (form.email.trim()) payload.email = form.email.trim();
+      if (form.phone.trim()) payload.phone = form.phone.trim();
       if (address) payload.shopAddress = address;
       if (form.agentId) payload.agentId = form.agentId;
 
-      const res = await apiClient.post<{ activationOtp?: string }>('/admin/business-owners', payload);
+      const res = await apiClient.post<{ tempPassword?: string }>('/admin/business-owners', payload);
       setShowAdd(false);
-      setCreatedOwner({ name: form.name.trim(), phone: form.phone.trim(), shopName: form.shopName.trim(), otp: res.data?.activationOtp });
+      setCreatedOwner({
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim() || undefined,
+        shopName: form.shopName.trim(),
+        tempPassword: res.data?.tempPassword,
+      });
       toast('Business added successfully');
       load(1);
     } catch (err) {
@@ -226,20 +231,10 @@ export default function BusinessesPage() {
   };
 
   const resetOwnerAccess = async (b: Business) => {
-    if (!window.confirm(`Send a password reset to ${b.name}? They will receive a code by SMS.`)) return;
+    if (!window.confirm(`Reset the password for ${b.name}? A temporary password will be emailed to them.`)) return;
     try {
-      await apiClient.post(`/admin/business-owners/${b.id}/reset-password`, {});
-      toast('Reset code sent to the owner');
-    } catch (err) {
-      toast(errorMessage(err), 'error');
-    }
-  };
-
-  const showOwnerOtp = async (b: Business) => {
-    if (!window.confirm(`Generate a fresh activation OTP for ${b.name}? It is shown once and sent by SMS.`)) return;
-    try {
-      const res = await apiClient.post<{ phone: string; otp: string; expiresInMinutes: number }>(`/admin/business-owners/${b.id}/otp`, {});
-      if (res.data) setOtpData(res.data);
+      const res = await apiClient.post<{ tempPassword?: string; message?: string }>(`/admin/business-owners/${b.id}/reset-password`, {});
+      toast(res.data?.tempPassword ? `Password reset. Temporary password: ${res.data.tempPassword}` : 'Password reset email sent');
     } catch (err) {
       toast(errorMessage(err), 'error');
     }
@@ -363,9 +358,6 @@ export default function BusinessesPage() {
                             <td className="py-3 px-4 text-muted-foreground text-xs">{formatDate(b.createdAt)}</td>
                             <td className="py-3 px-4">
                               <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                                <button onClick={() => showOwnerOtp(b)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" title="Show activation OTP">
-                                  <Eye size={14} /> Show OTP
-                                </button>
                                 <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline" title="Reset access">
                                   <KeyRound size={14} /> Reset
                                 </button>
@@ -494,8 +486,8 @@ export default function BusinessesPage() {
             <p className="text-sm font-semibold text-primary mb-2">Owner Details</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <input className="input-field" placeholder="Full Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <input className="input-field" placeholder="Phone (255XXXXXXXXX)" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
-              <input className="input-field sm:col-span-2" type="email" placeholder="Email (optional)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <input className="input-field" type="email" placeholder="Owner email (required)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              <input className="input-field" placeholder="Phone (optional)" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
           </div>
 
@@ -538,87 +530,34 @@ export default function BusinessesPage() {
           <div className="space-y-4 text-sm">
             <p className="text-muted-foreground">
               <strong className="text-foreground">{createdOwner.name}</strong> ({createdOwner.shopName}) has been created.
-              Their login is the <strong>phone number</strong> — no password to share.
+              A welcome email was sent to <strong className="text-foreground">{createdOwner.email}</strong>.
             </p>
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">Business Owner sign-in</p>
-                <p className="font-semibold text-foreground">App → “Business Owner” → phone + OTP</p>
+            <div className="rounded-lg border border-secondary/30 bg-secondary/5 p-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-subtle-foreground">Login email</span>
+                <span className="font-mono font-semibold text-foreground">{createdOwner.email}</span>
               </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">Phone</p>
-                <p className="font-mono font-semibold text-foreground">{createdOwner.phone}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(createdOwner.phone); }}
-                className="shrink-0 text-xs font-medium text-secondary hover:underline"
-              >
-                Copy
-              </button>
-            </div>
-            {createdOwner.otp && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-secondary/30 bg-secondary/5 px-3 py-2">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-subtle-foreground">Activation OTP (shown once)</p>
-                  <p className="font-mono text-lg font-bold tracking-[0.3em] text-secondary">{createdOwner.otp}</p>
+              {createdOwner.tempPassword && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-subtle-foreground">Temporary password</span>
+                  <span className="font-mono font-semibold text-secondary">{createdOwner.tempPassword}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(`Login: ${createdOwner.phone}  OTP: ${createdOwner.otp}`); }}
-                  className="shrink-0 text-xs font-medium text-secondary hover:underline"
-                >
-                  Copy
-                </button>
-              </div>
-            )}
-            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-subtle-foreground">
-              An activation code (OTP) has been sent to this phone by SMS. The owner enters it to activate their
-              account, then sets their own PIN. Employees are added by the owner, not here.
-            </p>
-            <a
-              href={`https://wa.me/${createdOwner.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Login to the app with your phone ${createdOwner.phone}${createdOwner.otp ? ` and OTP ${createdOwner.otp}` : ''}.`)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-outline w-full text-center"
-            >
-              Share via WhatsApp
-            </a>
-            <button onClick={() => setCreatedOwner(null)} className="btn-navy w-full">Done</button>
-          </div>
-        )}
-      </Modal>
-
-      {/* Show OTP (once) */}
-      <Modal open={!!otpData} title="Owner Activation OTP" onClose={() => setOtpData(null)}>
-        {otpData && (
-          <div className="space-y-4 text-sm">
-            <p className="text-muted-foreground">
-              Fresh code for <strong className="text-foreground">{otpData.phone}</strong>. It has been sent by SMS and
-              will not be shown again after you close this window.
-            </p>
-            <p className="rounded-lg border border-secondary/30 bg-secondary/5 px-3 py-4 text-center font-mono text-3xl font-bold tracking-[0.3em] text-secondary">
-              {otpData.otp}
-            </p>
-            <p className="text-xs text-subtle-foreground">Valid for {otpData.expiresInMinutes} minutes.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(otpData.otp); }}
-                className="btn-outline flex-1"
-              >
-                Copy OTP
-              </button>
-              <a
-                href={`https://wa.me/${otpData.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Login to the app with your phone ${otpData.phone} and OTP ${otpData.otp}.`)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-navy flex-1 text-center"
-              >
-                Share via WhatsApp
-              </a>
+              )}
             </div>
+            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-subtle-foreground">
+              The owner signs in with email + password and must change the temporary password on first login.
+              Employees are added by the owner, not here.
+            </p>
+            <button
+              onClick={() => {
+                const text = `Mwaminifu owner login\nEmail: ${createdOwner.email}${createdOwner.tempPassword ? `\nPassword: ${createdOwner.tempPassword}` : ''}`;
+                if (navigator.clipboard) navigator.clipboard.writeText(text);
+              }}
+              className="btn-outline w-full"
+            >
+              Copy credentials
+            </button>
+            <button onClick={() => setCreatedOwner(null)} className="btn-navy w-full">Done</button>
           </div>
         )}
       </Modal>

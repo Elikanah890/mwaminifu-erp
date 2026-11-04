@@ -52,6 +52,18 @@ export class SaleService {
     let sale;
     try {
     sale = await prisma.$transaction(async (tx) => {
+      // A customer attached to a sale must belong to the same shop, otherwise
+      // credit could be posted against another tenant's customer record.
+      if (data.customerId) {
+        const customer = await tx.customer.findFirst({
+          where: { id: data.customerId, shopId },
+          select: { id: true },
+        });
+        if (!customer) {
+          throw { status: 422, code: 'VALIDATION_ERROR', message: 'Customer does not belong to this shop' };
+        }
+      }
+
       let totalAmount = 0;
       const saleItems: Array<{
         productId: string;
@@ -120,6 +132,9 @@ export class SaleService {
         }
 
         const itemDiscount = item.discount || 0;
+        if (itemDiscount > item.quantity * resolvedUnitPrice) {
+          throw { status: 422, code: 'VALIDATION_ERROR', message: `Discount cannot exceed the line total for "${product.name}"` };
+        }
         const itemTotal = item.quantity * resolvedUnitPrice - itemDiscount;
         const itemTax = item.tax || 0;
 
@@ -188,7 +203,13 @@ export class SaleService {
       }
 
       const totalDiscount = data.discount || 0;
+      if (totalDiscount > totalAmount) {
+        throw { status: 422, code: 'VALIDATION_ERROR', message: 'Discount cannot exceed the sale subtotal' };
+      }
       const grandTotal = round2(totalAmount - totalDiscount + (data.tax || 0));
+      if (grandTotal < 0) {
+        throw { status: 422, code: 'VALIDATION_ERROR', message: 'Sale total cannot be negative' };
+      }
       const receiptNumber = generateReceiptNumber();
 
       let paymentMethod = 'cash';
@@ -333,6 +354,16 @@ export class SaleService {
       notes?: string;
     }
   ) {
+    if (data.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: data.customerId, shopId },
+        select: { id: true },
+      });
+      if (!customer) {
+        throw { status: 422, code: 'VALIDATION_ERROR', message: 'Customer does not belong to this shop' };
+      }
+    }
+
     let totalAmount = 0;
     const saleItems: Array<{
       productId: string;

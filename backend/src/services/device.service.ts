@@ -14,7 +14,7 @@ export class DeviceService {
       where: { deviceId },
       orderBy: { lastActive: 'desc' },
       include: {
-        user: { select: { id: true, name: true, phone: true, role: true, isActive: true } },
+        user: { select: { id: true, name: true, role: true, isActive: true } },
       },
     });
     return sessions

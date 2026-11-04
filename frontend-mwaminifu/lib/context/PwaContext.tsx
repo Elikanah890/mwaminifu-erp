@@ -86,20 +86,32 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     };
 
     if ('serviceWorker' in navigator) {
-      // Register in every environment so the PWA install prompt works during
-      // development too. In dev the worker is tagged with `?mode=dev` so it
-      // never caches Next's dev chunks (which would serve stale code).
       const isDev = process.env.NODE_ENV !== 'production';
-      const swUrl = isDev ? '/sw.js?mode=dev' : '/sw.js';
-      navigator.serviceWorker
-        .register(swUrl, { scope: '/', updateViaCache: 'none' })
-        .then((reg) => {
-          registration = reg;
-          watchForUpdates(reg);
-          interval = setInterval(() => reg.update().catch(() => undefined), 60 * 60 * 1000);
-        })
-        .catch(() => undefined);
-      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+      if (isDev) {
+        // During local development always run without a service worker. A
+        // previously installed worker can otherwise serve stale React chunks
+        // after code changes ("module factory is not available").
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
+          .catch(() => undefined);
+        if (typeof caches !== 'undefined') {
+          caches
+            .keys()
+            .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+            .catch(() => undefined);
+        }
+      } else {
+        navigator.serviceWorker
+          .register('/sw.js', { scope: '/', updateViaCache: 'none' })
+          .then((reg) => {
+            registration = reg;
+            watchForUpdates(reg);
+            interval = setInterval(() => reg.update().catch(() => undefined), 60 * 60 * 1000);
+          })
+          .catch(() => undefined);
+        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+      }
     }
 
     const onVisible = () => {

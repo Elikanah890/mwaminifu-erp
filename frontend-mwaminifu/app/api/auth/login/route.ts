@@ -1,25 +1,26 @@
 import { NextResponse } from 'next/server';
-import { BACKEND_API_URL, PublicUser, generateCsrfToken } from '@/lib/server/auth';
+import { cookies } from 'next/headers';
+import { BACKEND_API_URL, REFRESH_TOKEN_COOKIE, PublicUser, generateCsrfToken } from '@/lib/server/auth';
 import { setAccessTokenCookie, setRefreshTokenCookie, setCsrfCookie } from '@/lib/server/session';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  let body: { username?: string; password?: string } = {};
+  let body: { email?: string; password?: string } = {};
   try {
     body = await request.json();
   } catch {
     // fall through to validation error
   }
 
-  const username = body.username?.trim();
+  const email = body.email?.trim().toLowerCase();
   const password = body.password;
 
-  if (!username || !password) {
+  if (!email || !password) {
     return NextResponse.json(
       {
         success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Username and password are required' },
+        error: { code: 'VALIDATION_ERROR', message: 'Email and password are required' },
         timestamp: new Date().toISOString(),
       },
       { status: 400 }
@@ -28,10 +29,10 @@ export async function POST(request: Request) {
 
   let backendResponse: Response;
   try {
-    backendResponse = await fetch(`${BACKEND_API_URL}/auth/admin/login`, {
+    backendResponse = await fetch(`${BACKEND_API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
       cache: 'no-store',
     });
   } catch {
@@ -51,16 +52,23 @@ export async function POST(request: Request) {
     return NextResponse.json(
       payload ?? {
         success: false,
-        error: { code: 'UNAUTHORIZED', message: 'Invalid credentials' },
+        error: { code: 'UNAUTHORIZED', message: 'Invalid email or password' },
         timestamp: new Date().toISOString(),
       },
       { status: backendResponse.status }
     );
   }
 
-  const data = (payload as { data?: { accessToken?: string; refreshToken?: string; user?: PublicUser } })?.data;
+  const data = (payload as {
+    data?: {
+      accessToken?: string;
+      refreshToken?: string;
+      requiresPasswordChange?: boolean;
+      user?: PublicUser;
+    };
+  })?.data;
 
-  if (!data?.accessToken || !data?.refreshToken || !data?.user) {
+  if (!data?.accessToken || !data?.user) {
     return NextResponse.json(
       {
         success: false,
@@ -72,12 +80,21 @@ export async function POST(request: Request) {
   }
 
   await setAccessTokenCookie(data.accessToken);
-  await setRefreshTokenCookie(data.refreshToken);
+  if (data.refreshToken) {
+    await setRefreshTokenCookie(data.refreshToken);
+  } else {
+    // A restricted password-change session must not inherit an older refresh
+    // token from a previous user on the same browser.
+    (await cookies()).delete(REFRESH_TOKEN_COOKIE);
+  }
   await setCsrfCookie(generateCsrfToken());
 
   return NextResponse.json({
     success: true,
-    data: { user: data.user },
+    data: {
+      user: data.user,
+      requiresPasswordChange: Boolean(data.requiresPasswordChange),
+    },
     message: 'Login successful',
     timestamp: new Date().toISOString(),
   });

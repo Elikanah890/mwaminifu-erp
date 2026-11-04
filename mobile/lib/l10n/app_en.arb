@@ -307,7 +307,7 @@
   "moreLoans": "Loans",
   "moreSyncStatus": "Sync Status",
   "moreBackup": "Backup",
-  "moreChangePin": "Change PIN",
+  "moreChangePin": "Change Password",
   "moreAbout": "About",
   "moreLogout": "Logout",
   "moreLoggedInAs": "Logged in as {name}",

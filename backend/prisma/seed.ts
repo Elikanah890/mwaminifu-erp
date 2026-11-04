@@ -1,5 +1,5 @@
 import { PrismaClient, UserRole, SaleStatus, LoanStatus } from '@prisma/client';
-import { hashPassword, hashPin } from '../src/utils/bcrypt.util';
+import { hashPassword } from '../src/utils/bcrypt.util';
 
 const prisma = new PrismaClient();
 
@@ -15,11 +15,14 @@ if (isProd && process.env.SEED_ALLOW_PRODUCTION !== 'true') {
 }
 
 const SYSTEM_OWNER_USERNAME = process.env.SYSTEM_OWNER_USERNAME || 'admin';
+const SYSTEM_OWNER_EMAIL = process.env.SYSTEM_OWNER_EMAIL || 'admin@mwaminifu.co.tz';
 const SYSTEM_OWNER_PASSWORD = process.env.SYSTEM_OWNER_PASSWORD || 'admin123';
 const AGENT_USERNAME = process.env.AGENT_TEST_USERNAME || 'agent1';
+const AGENT_EMAIL = process.env.AGENT_TEST_EMAIL || 'agent1@mwaminifu.co.tz';
 const AGENT_PASSWORD = process.env.AGENT_TEST_PASSWORD || 'agent123';
 const OWNER_PHONE = process.env.OWNER_TEST_PHONE || '0754000000';
-const OWNER_PIN = process.env.OWNER_TEST_PIN || '123456';
+const OWNER_EMAIL = process.env.OWNER_TEST_EMAIL || 'john@mwaminifu.co.tz';
+const OWNER_PASSWORD = process.env.OWNER_TEST_PASSWORD || 'owner123';
 
 if (isProd && (!process.env.SYSTEM_OWNER_PASSWORD || !process.env.AGENT_TEST_PASSWORD)) {
   console.error('Refusing to seed: set SYSTEM_OWNER_PASSWORD and AGENT_TEST_PASSWORD in production.');
@@ -62,7 +65,7 @@ async function main() {
       username: SYSTEM_OWNER_USERNAME,
       passwordHash: await hashPassword(SYSTEM_OWNER_PASSWORD),
       name: 'System Administrator',
-      email: 'admin@mwaminifu.com',
+      email: SYSTEM_OWNER_EMAIL,
       role: 'SYSTEM_OWNER',
       isPinSet: true,
     },
@@ -76,7 +79,7 @@ async function main() {
       passwordHash: await hashPassword(AGENT_PASSWORD),
       name: 'Agent One',
       phone: '255712345670',
-      email: 'agent1@mwaminifu.com',
+      email: AGENT_EMAIL,
       role: 'AGENT',
       isPinSet: true,
     },
@@ -88,7 +91,7 @@ async function main() {
       passwordHash: await hashPassword(AGENT_PASSWORD),
       name: 'Agent One',
       phone: '255712345670',
-      email: 'agent1@mwaminifu.com',
+      email: AGENT_EMAIL,
       createdBy: systemOwner.id,
     },
   });
@@ -105,9 +108,9 @@ async function main() {
     data: {
       phone: OWNER_PHONE,
       name: 'John Business',
-      email: 'john@shop.com',
+      email: OWNER_EMAIL,
+      passwordHash: await hashPassword(OWNER_PASSWORD),
       role: 'BUSINESS_OWNER',
-      pinHash: await hashPin(OWNER_PIN),
       isPinSet: true,
       isPhoneVerified: true,
       agentId: agent.id,
@@ -244,48 +247,57 @@ async function main() {
   }
   console.log(`Created ${customers.length} customers`);
 
-  // Create Employees (Manager + Cashier) with canonical permissions.
+  // Create Employees with canonical permissions and email login.
   const employeeData = [
     {
-      name: 'Mary Manager',
+      name: 'Mary Cashier',
+      email: 'mary@mwaminifu.co.tz',
+      password: 'employee123',
       phone: '0754111111',
-      role: 'Manager',
-      pin: '111111',
+      role: 'Cashier',
       permissions: [
-        'sales:create', 'sales:view', 'sales:refund',
-        'products:view', 'products:create', 'products:update',
-        'inventory:view', 'inventory:adjust',
+        'sales:create', 'sales:view', 'products:view', 'inventory:view',
         'customers:view', 'customers:create', 'customers:update',
         'credit:create', 'credit:collect', 'credit:read',
-        'expenses:create', 'expenses:read', 'expenses:approve',
-        'purchases:view', 'purchases:create',
-        'reports:sales', 'reports:inventory', 'reports:credit', 'reports:activity_log',
-        'shift:open', 'shift:close', 'shift:view', 'employees:view',
+        'shift:open', 'shift:close', 'shift:view', 'reports:sales',
       ],
     },
     {
-      name: 'Mary Cashier',
-      phone: '0754222222',
-      role: 'Cashier',
-      pin: '222222',
+      name: 'Peter Sales',
+      email: 'peter@mwaminifu.co.tz',
+      password: 'employee123',
+      phone: '255712345692',
+      role: 'Sales Assistant',
       permissions: [
-        'sales:create', 'sales:view', 'products:view', 'inventory:view',
-        'customers:view', 'customers:create', 'credit:create', 'credit:collect',
-        'shift:open', 'shift:close', 'shift:view', 'reports:sales',
+        'sales:create', 'sales:view', 'customers:view', 'customers:create',
+        'credit:create', 'credit:collect', 'shift:open', 'shift:close', 'shift:view',
+      ],
+    },
+    {
+      name: 'Anna Store',
+      email: 'anna@mwaminifu.co.tz',
+      password: 'employee123',
+      phone: '255712345693',
+      role: 'Store Keeper',
+      permissions: [
+        'products:view', 'products:create', 'products:update',
+        'inventory:view', 'inventory:adjust', 'customers:view',
+        'shift:open', 'shift:close', 'shift:view', 'reports:inventory',
       ],
     },
   ];
 
   for (const emp of employeeData) {
-    let user = await prisma.user.findUnique({ where: { phone: emp.phone } });
+    let user = await prisma.user.findUnique({ where: { email: emp.email } });
     if (!user) {
       user = await prisma.user.create({
         data: {
+          email: emp.email,
           phone: emp.phone,
           name: emp.name,
           role: 'EMPLOYEE',
-          pinHash: await hashPin(emp.pin),
-          isPinSet: true,
+          passwordHash: await hashPassword(emp.password),
+          isPinSet: false,
           isPhoneVerified: true,
         },
       });
@@ -459,20 +471,20 @@ async function main() {
   console.log(`  Password: ${SYSTEM_OWNER_PASSWORD}`);
   console.log('');
   console.log('Agent:');
-  console.log(`  Username: ${AGENT_USERNAME}`);
+  console.log(`  Email:    ${AGENT_EMAIL}`);
   console.log(`  Password: ${AGENT_PASSWORD}`);
   console.log('');
   console.log('Business Owner:');
+  console.log(`  Email:    ${OWNER_EMAIL}`);
+  console.log(`  Password: ${OWNER_PASSWORD}`);
   console.log(`  Phone:    ${OWNER_PHONE}`);
-  console.log('  OTP:      123456 (mocked)');
-  console.log(`  PIN:      ${OWNER_PIN}`);
   console.log('  Shop:     John\'s Grocery');
   console.log('');
   console.log('Employees:');
-  console.log('  Mary Manager:  0754111111 / PIN: 111111');
-  console.log('  Mary Cashier:  0754222222 / PIN: 222222');
+  console.log('  Mary Cashier:  mary@mwaminifu.co.tz / employee123');
+  console.log('  Peter Sales:   peter@mwaminifu.co.tz / employee123');
+  console.log('  Anna Store:    anna@mwaminifu.co.tz / employee123');
   console.log('------------------------------------------');
-  console.log('OTP for testing: always 123456 (when MOCK_SMS=true)');
   console.log('========================================\n');
 }
 

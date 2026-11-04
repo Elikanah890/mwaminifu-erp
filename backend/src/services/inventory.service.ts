@@ -300,7 +300,19 @@ export class InventoryService {
       }
     }
 
-    const { priceOverride, unitConfigs, baseUnitStock, baseUnitName, ...rest } = data;
+    const {
+      priceOverride, unitConfigs, baseUnitStock, baseUnitName,
+      name, sku, categoryId, supplier, supplierId, brand, description, taxRate, status,
+      costPrice, sellingPrice, minPrice, maxPrice, reorderLevel, stockQuantity, unit,
+      unitConversion, images, barcode, isActive,
+    } = data;
+    // Whitelist editable fields. Unknown/privileged keys (shopId, needsPriceReview,
+    // createdAt, ...) are ignored to prevent mass assignment.
+    const rest = {
+      name, sku, categoryId, supplier, supplierId, brand, description, taxRate, status,
+      costPrice, sellingPrice, minPrice, maxPrice, reorderLevel, stockQuantity, unit,
+      unitConversion, images, barcode, isActive,
+    };
     const nextCost = rest.costPrice ?? existing.costPrice;
     const nextSelling = rest.sellingPrice !== undefined ? rest.sellingPrice : existing.sellingPrice;
     const nextMin = rest.minPrice !== undefined ? rest.minPrice : existing.minPrice;
@@ -522,7 +534,11 @@ export class InventoryService {
   async updateCategory(categoryId: string, data: { name?: string; description?: string; parentId?: string | null }) {
     return prisma.category.update({
       where: { id: categoryId },
-      data,
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.parentId !== undefined ? { parentId: data.parentId } : {}),
+      },
     });
   }
 

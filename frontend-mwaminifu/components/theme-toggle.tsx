@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/theme-provider';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Moon, Sun } from 'lucide-react';
 
@@ -17,12 +17,9 @@ export default function ThemeToggle({ compact = false, onDark = false }: { compa
 
   useEffect(() => {
     setMounted(true);
-    // Migrate legacy "system" preference to an explicit light/dark choice.
-    if (theme === 'system') setTheme(resolvedTheme === 'dark' ? 'dark' : 'light');
-  }, [theme, resolvedTheme, setTheme]);
+  }, []);
 
-  // A stored "system" value resolves to the effective theme for the checkmark.
-  const active = theme === 'system' ? resolvedTheme : theme;
+  const active = theme;
   const isDark = mounted ? resolvedTheme === 'dark' : false;
 
   return (

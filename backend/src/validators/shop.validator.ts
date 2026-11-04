@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { GRANTABLE_PERMISSIONS } from '../config/permissions';
 
+const emailField = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
+
 const permissionName = z.string().refine((p) => GRANTABLE_PERMISSIONS.includes(p), {
   message: 'Unknown or non-grantable permission',
 });
@@ -128,7 +130,8 @@ export const loanRepaymentSchema = z.object({
 });
 
 export const addEmployeeSchema = z.object({
-  phone: z.string().min(10).max(15),
+  email: emailField,
+  phone: z.string().min(9).max(15).optional(),
   name: z.string().min(1),
   role: z.string().optional(),
   permissions: z.array(permissionName).optional(),
@@ -148,17 +151,17 @@ const shopLocationFields = {
 };
 
 export const onboardBusinessSchema = z.object({
-  phone: z.string().min(10).max(15),
+  email: emailField,
+  phone: z.string().min(9).max(15).optional(),
   name: z.string().min(1),
-  email: z.string().email().optional(),
   shopName: z.string().min(1),
   ...shopLocationFields,
 });
 
 export const createBusinessOwnerSchema = z.object({
-  phone: z.string().min(10).max(15),
+  email: emailField,
+  phone: z.string().min(9).max(15).optional(),
   name: z.string().min(1),
-  email: z.string().email().optional(),
   shopName: z.string().min(1),
   ...shopLocationFields,
   currency: z.string().min(3).max(3).optional(),
@@ -167,10 +170,11 @@ export const createBusinessOwnerSchema = z.object({
 
 export const createAgentSchema = z.object({
   username: z.string().min(3),
-  password: z.string().min(6),
+  // Password is generated server-side; accepted only for legacy clients.
+  password: z.string().min(6).optional(),
   name: z.string().min(1),
-  phone: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
-  email: z.preprocess((v) => (v === '' ? undefined : v), z.string().email().optional()),
+  phone: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(9).max(15).optional()),
+  email: emailField,
 });
 
 export const sendSmsSchema = z.object({
@@ -204,7 +208,7 @@ export const updateShopSettingsSchema = z.object({
 export const updateAgentSchema = z.object({
   name: z.string().min(1).optional(),
   phone: z.string().optional(),
-  email: z.string().email().optional(),
+  email: emailField.optional(),
   isActive: z.boolean().optional(),
 });
 

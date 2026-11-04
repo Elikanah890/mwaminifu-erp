@@ -1,7 +1,28 @@
 import prisma from '../config/database';
 import { getErrorMessage } from '../utils/error.util';
+import { expandPermissions } from '../config/permissions';
 import type { SaleStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+
+export interface SyncActor {
+  role: string;
+  permissions?: string[];
+}
+
+/** Permission required to push each offline entity type. */
+const PUSH_ENTITY_PERMISSION: Record<string, string> = {
+  sales: 'sales:create',
+  expenses: 'expenses:create',
+  creditPayments: 'credit:collect',
+  stockAdjustments: 'inventory:adjust',
+};
+
+function actorCan(actor: SyncActor | undefined, permission: string): boolean {
+  if (!actor) return true;
+  if (actor.role === 'BUSINESS_OWNER' || actor.role === 'SYSTEM_OWNER') return true;
+  if (actor.role !== 'EMPLOYEE') return false;
+  return expandPermissions(actor.permissions || []).has(permission);
+}
 
 interface OfflineSaleItem {
   productId: string;
@@ -47,7 +68,8 @@ export class SyncService {
   async pushChanges(
     shopId: string,
     deviceId: string,
-    changes: Record<string, Array<{ clientId: string; data: Record<string, unknown>; lastModified: string }>>
+    changes: Record<string, Array<{ clientId: string; data: Record<string, unknown>; lastModified: string }>>,
+    actor?: SyncActor
   ) {
     if (!shopId || !deviceId || !changes) {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'shopId, deviceId and changes are required' };
@@ -67,6 +89,15 @@ export class SyncService {
     for (const [entity, records] of Object.entries(changes)) {
       processed[entity] = [];
       failed[entity] = [];
+
+      const requiredPermission = PUSH_ENTITY_PERMISSION[entity];
+      if (requiredPermission && !actorCan(actor, requiredPermission)) {
+        failed[entity] = records.map((record) => ({
+          clientId: record.clientId,
+          reason: `Missing permission: ${requiredPermission}`,
+        }));
+        continue;
+      }
 
       for (const record of records) {
         try {
@@ -104,7 +135,7 @@ export class SyncService {
     };
   }
 
-  async pullChanges(shopId: string, since: string, limit = 500) {
+  async pullChanges(shopId: string, since: string, limit = 500, actor?: SyncActor) {
     if (!shopId) {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'shopId is required' };
     }
@@ -164,8 +195,25 @@ export class SyncService {
       },
     });
 
+    // Never hand an employee data their granted permissions do not cover.
+    const includeEmployees = actorCan(actor, 'employees:view');
+    const includeLoans = actorCan(actor, 'loans:read');
+    const includeExpenses = actorCan(actor, 'expenses:read');
+    const includeCustomers = actorCan(actor, 'customers:view') || actorCan(actor, 'credit:create');
+    const includeSales = actorCan(actor, 'sales:view') || actorCan(actor, 'sales:create');
+    const includeProducts = actorCan(actor, 'products:view') || actorCan(actor, 'inventory:view') || actorCan(actor, 'sales:create');
+    const includeStock = actorCan(actor, 'inventory:view');
+
     return {
-      changes: { sales, products, customers, expenses, loans, stockAdjustments, employees },
+      changes: {
+        sales: includeSales ? sales : [],
+        products: includeProducts ? products : [],
+        customers: includeCustomers ? customers : [],
+        expenses: includeExpenses ? expenses : [],
+        loans: includeLoans ? loans : [],
+        stockAdjustments: includeStock ? stockAdjustments : [],
+        employees: includeEmployees ? employees : [],
+      },
       serverVersion: lastPullTimestamp.toISOString(),
       lastPullTimestamp: lastPullTimestamp.toISOString(),
       hasMore,

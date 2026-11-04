@@ -1,11 +1,9 @@
 import prisma from '../config/database';
-import { hashPin } from '../utils/bcrypt.util';
-import { generateTempPin } from '../utils/otp.util';
+import { hashPassword } from '../utils/bcrypt.util';
+import { generateTempPassword } from '../utils/otp.util';
 import { shopService } from './shop.service';
-import { SmsService } from './sms.service';
+import { emailService } from './email.service';
 import { FULL_OPERATIONAL_PERMISSIONS } from '../config/permissions';
-
-const smsService = new SmsService();
 
 export { FULL_OPERATIONAL_PERMISSIONS };
 
@@ -24,7 +22,8 @@ export class EmployeeService {
     shopId: string,
     ownerId: string,
     data: {
-      phone: string;
+      email: string;
+      phone?: string;
       name: string;
       role?: string;
       permissions?: string[];
@@ -39,19 +38,35 @@ export class EmployeeService {
       throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Maximum 5 employees per shop' };
     }
 
-    const tempPin = generateTempPin();
-    const tempPinHash = await hashPin(tempPin);
+    const email = data.email.trim().toLowerCase();
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
 
-    // Find or create user
-    let user = await prisma.user.findUnique({ where: { phone: data.phone } });
+    let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
       user = await prisma.user.create({
         data: {
-          phone: data.phone,
+          email,
+          phone: data.phone || null,
           name: data.name,
           role: 'EMPLOYEE',
+          passwordHash,
+          mustChangePassword: true,
           isPinSet: false,
+        },
+      });
+    } else if (user.role !== 'EMPLOYEE') {
+      throw { status: 409, code: 'CONFLICT', message: 'This email belongs to a non-employee account' };
+    } else {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          name: data.name,
+          phone: data.phone || user.phone,
+          passwordHash,
+          mustChangePassword: true,
+          isActive: true,
         },
       });
     }
@@ -72,20 +87,14 @@ export class EmployeeService {
         permissions: data.permissions && data.permissions.length > 0
           ? data.permissions
           : FULL_OPERATIONAL_PERMISSIONS,
-        tempPinHash,
       },
-      include: { user: { select: { name: true, phone: true } } },
+      include: { user: { select: { name: true, email: true, phone: true } } },
     });
 
-    const shop = await prisma.shop.findUnique({ where: { id: shopId }, select: { name: true } });
+    // Email is best-effort and never blocks account creation.
+    await emailService.sendWelcomeEmail({ name: user.name, email }, tempPassword);
 
-    await smsService.send(
-      data.phone,
-      `Welcome to Mwaminifu! You have been added to ${shop?.name}. Download the app and login with phone ${data.phone}. Your temp PIN: ${tempPin}`,
-      { purpose: 'EMPLOYEE_WELCOME', userId: user.id, shopId }
-    );
-
-    return employee;
+    return { ...employee, tempPassword };
   }
 
   async getEmployee(employeeId: string) {
@@ -133,50 +142,76 @@ export class EmployeeService {
       data: { isActive: !employee.isActive },
     });
 
+    // A user may hold assignments in more than one shop; keep the login active
+    // while at least one assignment remains active.
+    const activeAssignments = await prisma.employee.count({
+      where: { userId: employee.userId, isActive: true, deletedAt: null },
+    });
     await prisma.user.update({
       where: { id: employee.userId },
-      data: { isActive: updated.isActive },
+      data: { isActive: activeAssignments > 0 },
     });
+
+    if (activeAssignments === 0) {
+      await prisma.refreshToken.updateMany({
+        where: { userId: employee.userId, isRevoked: false },
+        data: { isRevoked: true },
+      });
+    }
 
     return updated;
   }
 
-  async resetPin(employeeId: string) {
+  async resetPassword(employeeId: string) {
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
-      include: { user: { select: { phone: true } } },
+      include: { user: { select: { email: true, name: true, phone: true } } },
     });
     if (!employee) {
       throw { status: 404, code: 'NOT_FOUND', message: 'Employee not found' };
     }
 
-    const tempPin = generateTempPin();
-    const tempPinHash = await hashPin(tempPin);
-
-    await prisma.employee.update({
-      where: { id: employeeId },
-      data: { tempPinHash },
-    });
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
 
     await prisma.user.update({
       where: { id: employee.userId },
-      data: { pinHash: null, isPinSet: false },
+      data: { passwordHash, mustChangePassword: true, isActive: true },
     });
 
-    await smsService.send(
-      employee.user.phone!,
-      `Mwaminifu: Your PIN has been reset. Your new temporary PIN is ${tempPin}. Login and change your PIN.`,
-      { purpose: 'EMPLOYEE_PIN_RESET', userId: employee.userId, shopId: employee.shopId }
+    await prisma.refreshToken.updateMany({
+      where: { userId: employee.userId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
+    await emailService.sendWelcomeEmail(
+      { name: employee.user.name, email: employee.user.email },
+      tempPassword
     );
 
-    return { message: 'PIN reset. SMS sent.' };
+    return { message: 'Password reset. Email sent.', tempPassword };
   }
 
   async removeEmployee(employeeId: string) {
-    return prisma.employee.update({
+    const removed = await prisma.employee.update({
       where: { id: employeeId },
       data: { isActive: false, deletedAt: new Date() },
     });
+
+    // Removing staff terminates access to this shop. Only disable the shared
+    // login and revoke sessions when no other shop still employs the user.
+    const activeAssignments = await prisma.employee.count({
+      where: { userId: removed.userId, isActive: true, deletedAt: null },
+    });
+    if (activeAssignments === 0) {
+      await prisma.user.update({ where: { id: removed.userId }, data: { isActive: false } });
+      await prisma.refreshToken.updateMany({
+        where: { userId: removed.userId, isRevoked: false },
+        data: { isRevoked: true },
+      });
+    }
+
+    return removed;
   }
 }
 

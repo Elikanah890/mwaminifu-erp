@@ -539,10 +539,16 @@ export class ShopService {
       where: { id: shopId, ownerId: userId, isArchived: false },
     });
 
-    // If not owner, check if employee
+    // If not owner, check if employee of a shop that is still open.
     if (!shop) {
       const employee = await prisma.employee.findFirst({
-        where: { userId, shopId, isActive: true },
+        where: {
+          userId,
+          shopId,
+          isActive: true,
+          deletedAt: null,
+          shop: { isArchived: false },
+        },
       });
       if (!employee) {
         throw { status: 403, code: 'FORBIDDEN', message: 'Access denied to this shop' };

@@ -1,15 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
+import Script from 'next/script';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ToastProvider } from '@/components/Toast';
 import { I18nProvider } from '@/lib/context/I18nContext';
 import { AppConfigProvider } from '@/lib/context/AppConfigContext';
 import { PwaProvider } from '@/lib/context/PwaContext';
-import { SyncProvider } from '@/lib/context/SyncContext';
 import PwaPrompts from '@/components/pwa/PwaPrompts';
-import OfflineBanner from '@/components/sync/OfflineBanner';
-import SyncToasts from '@/components/sync/SyncToasts';
-import ConflictDialog from '@/components/sync/ConflictDialog';
 import './globals.css';
 
 const APP_NAME = 'Mwaminifu ERP';
@@ -97,7 +94,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieStore = await cookies();
   const savedLocale = cookieStore.get('mwaminifu_lang')?.value === 'en' ? 'en' : 'sw';
   return (
-    <html lang={savedLocale} suppressHydrationWarning>
+    <html lang={savedLocale} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {SPLASHES.map((s) => (
           <link
@@ -109,18 +106,32 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         ))}
       </head>
       <body className="min-h-screen antialiased">
+        {/* Apply the stored theme before first paint (no flash). */}
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme');if(t!=='dark'&&t!=='light')t='light';var r=document.documentElement;r.classList.toggle('dark',t==='dark');r.style.colorScheme=t;}catch(e){}})();",
+          }}
+        />
+        {process.env.NODE_ENV !== 'production' && (
+          <Script
+            id="dev-sw-cleanup"
+            strategy="beforeInteractive"
+            dangerouslySetInnerHTML={{
+              __html:
+                "(function(){try{if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})}).catch(function(){})}if(typeof caches!=='undefined'){caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k)})}).catch(function(){})}}catch(e){}})();",
+            }}
+          />
+        )}
         <ThemeProvider>
           <I18nProvider initialLocale={savedLocale}>
             <ToastProvider>
               <AppConfigProvider>
               <PwaProvider>
-                <SyncProvider>
-                  {children}
-                  <OfflineBanner />
-                  <PwaPrompts />
-                  <SyncToasts />
-                  <ConflictDialog />
-                </SyncProvider>
+                {children}
+                <PwaPrompts />
               </PwaProvider>
               </AppConfigProvider>
             </ToastProvider>

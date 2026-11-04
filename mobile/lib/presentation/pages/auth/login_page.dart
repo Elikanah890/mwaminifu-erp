@@ -18,7 +18,6 @@ class _LoginPageState extends State<LoginPage> {
   final _phoneController = TextEditingController();
   final _pinController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  bool _isEmployee = false;
 
   @override
   void dispose() {
@@ -29,30 +28,10 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
-    final bloc = context.read<AuthBloc>();
-    if (_isEmployee) {
-      bloc.add(EmployeeLogin(
-        _phoneController.text.trim(),
-        _pinController.text.trim(),
-      ));
-    } else {
-      bloc.add(LoginWithPin(
-        _phoneController.text.trim(),
-        _pinController.text.trim(),
-      ));
-    }
-  }
-
-  Future<void> _handleRequestOtp() async {
-    final l10n = AppLocalizations.of(context);
-    final phone = _phoneController.text.trim();
-    if (phone.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.authEnterValidPhone)),
-      );
-      return;
-    }
-    context.read<AuthBloc>().add(RequestOtp(phone));
+    context.read<AuthBloc>().add(LoginWithPin(
+      _phoneController.text.trim(),
+      _pinController.text.trim(),
+    ));
   }
 
   @override
@@ -63,10 +42,8 @@ class _LoginPageState extends State<LoginPage> {
         listener: (context, state) {
           if (state is Authenticated) {
             context.go('/dashboard');
-          } else if (state is NeedPinSetup) {
-            context.go('/pin-setup');
-          } else if (state is OtpSent) {
-            context.push('/otp');
+          } else if (state is NeedPasswordChange) {
+            context.go('/change-password');
           } else if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.message), backgroundColor: AppTheme.crimson),
@@ -134,48 +111,25 @@ class _LoginPageState extends State<LoginPage> {
                         fontSize: 14, color: AppTheme.textSecondary,
                       )),
                       const SizedBox(height: 32),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ChoiceChip(
-                              label: Text(l10n.authBusinessOwner),
-                              selected: !_isEmployee,
-                              onSelected: (_) => setState(() => _isEmployee = false),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ChoiceChip(
-                              label: Text(l10n.authEmployee),
-                              selected: _isEmployee,
-                              onSelected: (_) => setState(() => _isEmployee = true),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
                       TextFormField(
                         controller: _phoneController,
-                        decoration: InputDecoration(
-                          labelText: l10n.authPhoneNumber,
-                          hintText: l10n.authPhoneHint,
-                          prefixIcon: const Icon(Icons.phone, color: AppTheme.teal),
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          hintText: 'you@example.com',
+                          prefixIcon: Icon(Icons.mail_outline, color: AppTheme.teal),
                         ),
-                        keyboardType: TextInputType.phone,
-                        validator: (v) => v == null || v.length < 10 ? l10n.authEnterValidPhone : null,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) => v == null || !v.contains('@') ? 'Enter a valid email' : null,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _pinController,
-                        decoration: InputDecoration(
-                          labelText: l10n.authPin,
-                          hintText: l10n.authPinHint,
-                          prefixIcon: const Icon(Icons.lock, color: AppTheme.teal),
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: Icon(Icons.lock, color: AppTheme.teal),
                         ),
-                        keyboardType: TextInputType.number,
                         obscureText: true,
-                        maxLength: 6,
-                        validator: (v) => v == null || v.length != 6 ? l10n.authEnterValidPin : null,
+                        validator: (v) => v == null || v.isEmpty ? 'Enter your password' : null,
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -190,11 +144,6 @@ class _LoginPageState extends State<LoginPage> {
                                 )
                               : Text(l10n.authLogin, style: const TextStyle(fontSize: 16)),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: _handleRequestOtp,
-                        child: Text(l10n.authForgotPin, style: const TextStyle(color: AppTheme.teal)),
                       ),
                     ],
                   ),

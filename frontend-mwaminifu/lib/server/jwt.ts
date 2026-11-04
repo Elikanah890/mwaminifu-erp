@@ -14,6 +14,7 @@ export type SessionClaims = {
   role: string;
   shopId?: string;
   permissions?: string[];
+  mustChangePassword?: boolean;
   iat?: number;
   exp?: number;
 };

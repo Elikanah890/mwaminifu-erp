@@ -893,7 +893,7 @@ class AppLocalizationsSw extends AppLocalizations {
   String get moreBackup => 'Hifadhi Nakala';
 
   @override
-  String get moreChangePin => 'Badilisha PIN';
+  String get moreChangePin => 'Badilisha Password';
 
   @override
   String get moreAbout => 'Kuhusu';

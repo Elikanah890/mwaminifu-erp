@@ -116,6 +116,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
         </div>
 
         <motion.div
+          initial={{ maxWidth: 320 }}
           animate={{ maxWidth: searchFocused ? 560 : 320 }}
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
           className="relative hidden flex-1 md:block"

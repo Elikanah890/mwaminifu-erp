@@ -170,7 +170,7 @@ class MorePage extends StatelessWidget {
             l10n.moreAccount,
             [
               _MoreItem(Icons.person, l10n.profileTitle, () => context.go('/profile')),
-              _MoreItem(Icons.lock, l10n.moreChangePin, () => context.go('/change-pin')),
+              _MoreItem(Icons.lock, l10n.moreChangePin, () => context.go('/change-password')),
               _MoreItem(Icons.info_outline, l10n.moreAbout, () {
                 showAboutDialog(
                   context: context,

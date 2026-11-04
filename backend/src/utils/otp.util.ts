@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { randomInt } from 'crypto';
+import { randomInt, randomBytes } from 'crypto';
 import { env } from '../config/env';
 
 export function generateOtp(): string {
@@ -22,4 +22,9 @@ export function generateReceiptNumber(): string {
 
 export function generateTempPin(): string {
   return randomInt(100000, 1000000).toString();
+}
+
+/** URL-safe temporary password (12 chars) for welcome emails. */
+export function generateTempPassword(): string {
+  return randomBytes(9).toString('base64url');
 }

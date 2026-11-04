@@ -75,19 +75,19 @@ router.get('/users/me/permissions', authMiddleware, authController.permissions.b
 
 // Shop routes
 router.get('/shops', authMiddleware, shopController.list.bind(shopController));
-router.get('/shops/combined-dashboard', authMiddleware, shopController.combinedDashboard.bind(shopController));
+router.get('/shops/combined-dashboard', authMiddleware, requireOwnerOnly(), shopController.combinedDashboard.bind(shopController));
 router.post('/shops', authMiddleware, requireRoles('BUSINESS_OWNER'), validate(createShopSchema), shopController.create.bind(shopController));
 router.get('/shops/:id', authMiddleware, shopController.get.bind(shopController));
 router.put('/shops/:id', authMiddleware, requireRoles('BUSINESS_OWNER'), validate(updateShopSchema), shopController.update.bind(shopController));
 router.delete('/shops/:id', authMiddleware, requireRoles('BUSINESS_OWNER'), shopController.archive.bind(shopController));
-router.get('/shops/:id/dashboard', authMiddleware, shopController.dashboard.bind(shopController));
+router.get('/shops/:id/dashboard', authMiddleware, requireOwnerOnly(), shopController.dashboard.bind(shopController));
 router.get('/shops/:id/settings', authMiddleware, requireRoles('BUSINESS_OWNER'), shopController.getSettings.bind(shopController));
 router.put('/shops/:id/settings', authMiddleware, requireRoles('BUSINESS_OWNER'), validate(updateShopSettingsSchema), shopController.updateSettings.bind(shopController));
 
 // Sale routes
 router.post('/shops/:shopId/sales', authMiddleware, writeLimiter, requireShopAccess(), requirePermission('sales:create'), requireCreditCreateForCreditSale(), validate(createSaleSchema), saleController.create.bind(saleController));
 router.get('/shops/:shopId/sales', authMiddleware, requireShopAccess(), requirePermission('sales:view'), saleController.list.bind(saleController));
-router.get('/sales/:id', authMiddleware, requireEntityAccess('sale'), saleController.get.bind(saleController));
+router.get('/sales/:id', authMiddleware, requireEntityAccess('sale'), requirePermission('sales:view'), saleController.get.bind(saleController));
 router.put('/sales/:id/suspend', authMiddleware, requireEntityAccess('sale'), requirePermission('sales:create'), saleController.suspend.bind(saleController));
 router.put('/sales/:id/resume', authMiddleware, requireEntityAccess('sale'), requirePermission('sales:create'), saleController.resume.bind(saleController));
 router.put('/sales/:id/refund', authMiddleware, requireEntityAccess('sale'), requirePermission('sales:refund'), saleController.refund.bind(saleController));
@@ -96,7 +96,7 @@ router.get('/sales/receipt/:receiptNumber', authMiddleware, requireEntityAccess(
 
 // Returns & Refunds routes
 router.get('/shops/:shopId/refunds', authMiddleware, requireShopAccess(), requirePermission('sales:refund'), saleController.listRefunds.bind(saleController));
-router.get('/refunds/:id', authMiddleware, requireEntityAccess('refund'), saleController.getRefund.bind(saleController));
+router.get('/refunds/:id', authMiddleware, requireEntityAccess('refund'), requirePermission('sales:refund'), saleController.getRefund.bind(saleController));
 router.put('/refunds/:id/status', authMiddleware, requireEntityAccess('refund'), requireRoles('BUSINESS_OWNER'), validate(refundStatusSchema), saleController.setRefundStatus.bind(saleController));
 
 // Employee shift routes
@@ -137,9 +137,9 @@ router.post('/products/:productId/units', authMiddleware, requireEntityAccess('p
 router.delete('/product-units/:id', authMiddleware, requireEntityAccess('product-unit'), requirePermission('products:update'), productUnitController.remove.bind(productUnitController));
 
 // Supplier routes
-router.get('/shops/:shopId/suppliers', authMiddleware, requireShopAccess(), supplierController.list.bind(supplierController));
+router.get('/shops/:shopId/suppliers', authMiddleware, requireShopAccess(), requirePermission('purchases:view'), supplierController.list.bind(supplierController));
 router.post('/shops/:shopId/suppliers', authMiddleware, requireShopAccess(), requireRoles('BUSINESS_OWNER'), validate(createSupplierSchema), supplierController.create.bind(supplierController));
-router.get('/suppliers/:id', authMiddleware, requireEntityAccess('supplier'), supplierController.get.bind(supplierController));
+router.get('/suppliers/:id', authMiddleware, requireEntityAccess('supplier'), requirePermission('purchases:view'), supplierController.get.bind(supplierController));
 router.put('/suppliers/:id', authMiddleware, requireEntityAccess('supplier'), requireRoles('BUSINESS_OWNER'), validate(updateSupplierSchema), supplierController.update.bind(supplierController));
 router.delete('/suppliers/:id', authMiddleware, requireEntityAccess('supplier'), requireRoles('BUSINESS_OWNER'), supplierController.delete.bind(supplierController));
 
@@ -154,10 +154,10 @@ router.post('/purchases/:id/pay', authMiddleware, requireEntityAccess('purchase'
 router.put('/purchases/:id/cancel', authMiddleware, requireEntityAccess('purchase'), requirePermission('purchases:approve'), purchaseController.cancel.bind(purchaseController));
 
 // Stock management routes
-router.get('/shops/:shopId/stock-movements', authMiddleware, requireShopAccess(), stockController.movements.bind(stockController));
-router.get('/shops/:shopId/stock/fast-movers', authMiddleware, requireShopAccess(), stockController.fastMovers.bind(stockController));
-router.get('/shops/:shopId/stock/by-category', authMiddleware, requireShopAccess(), stockController.byCategory.bind(stockController));
-router.get('/shops/:shopId/stock/low-out', authMiddleware, requireShopAccess(), stockController.lowOut.bind(stockController));
+router.get('/shops/:shopId/stock-movements', authMiddleware, requireShopAccess(), requireAnyPermission(['inventory:view', 'reports:inventory']), stockController.movements.bind(stockController));
+router.get('/shops/:shopId/stock/fast-movers', authMiddleware, requireShopAccess(), requireAnyPermission(['inventory:view', 'reports:inventory', 'products:view']), stockController.fastMovers.bind(stockController));
+router.get('/shops/:shopId/stock/by-category', authMiddleware, requireShopAccess(), requireAnyPermission(['inventory:view', 'reports:inventory', 'products:view']), stockController.byCategory.bind(stockController));
+router.get('/shops/:shopId/stock/low-out', authMiddleware, requireShopAccess(), requireAnyPermission(['inventory:view', 'reports:inventory', 'products:view']), stockController.lowOut.bind(stockController));
 router.get('/shops/:shopId/stock/valuation', authMiddleware, requireShopAccess(), requirePermission('reports:valuation'), stockController.valuation.bind(stockController));
 
 // Cash management routes
@@ -168,7 +168,7 @@ router.post('/shops/:shopId/cash/:id/reverse', authMiddleware, requireShopAccess
 
 // Receivables routes
 router.get('/shops/:shopId/receivables/aging', authMiddleware, requireShopAccess(), requirePermission('reports:credit'), creditController.aging.bind(creditController));
-router.get('/customers/:id/statement', authMiddleware, requireEntityAccess('customer'), creditController.statement.bind(creditController));
+router.get('/customers/:id/statement', authMiddleware, requireEntityAccess('customer'), requireAnyPermission(['customers:view', 'credit:read', 'reports:credit']), creditController.statement.bind(creditController));
 router.post('/customers/:id/write-off', authMiddleware, requireEntityAccess('customer'), requirePermission('credit:writeoff'), validate(writeOffSchema), creditController.writeOff.bind(creditController));
 
 // Audit log routes
@@ -195,25 +195,25 @@ router.get('/employees/:id', authMiddleware, requireEntityAccess('employee'), re
 router.put('/employees/:id', authMiddleware, requireEntityAccess('employee'), requireRoles('BUSINESS_OWNER'), employeeController.update.bind(employeeController));
 router.put('/employees/:id/permissions', authMiddleware, requireEntityAccess('employee'), requireRoles('BUSINESS_OWNER'), validate(updatePermissionsSchema), employeeController.updatePermissions.bind(employeeController));
 router.put('/employees/:id/toggle', authMiddleware, requireEntityAccess('employee'), requireRoles('BUSINESS_OWNER'), employeeController.toggle.bind(employeeController));
-router.post('/employees/:id/reset-pin', authMiddleware, requireEntityAccess('employee'), requireRoles('BUSINESS_OWNER'), employeeController.resetPin.bind(employeeController));
+router.post('/employees/:id/reset-password', authMiddleware, requireEntityAccess('employee'), requireRoles('BUSINESS_OWNER'), employeeController.resetPassword.bind(employeeController));
 router.delete('/employees/:id', authMiddleware, requireEntityAccess('employee'), requireRoles('BUSINESS_OWNER'), employeeController.remove.bind(employeeController));
 
 // Customer routes
-router.get('/shops/:shopId/customers', authMiddleware, requireShopAccess(), requirePermission('customers:view'), customerController.list.bind(customerController));
+router.get('/shops/:shopId/customers', authMiddleware, requireShopAccess(), requireAnyPermission(['customers:view', 'credit:read', 'credit:create']), customerController.list.bind(customerController));
 router.post('/shops/:shopId/customers', authMiddleware, requireShopAccess(), requirePermission('customers:create'), validate(createCustomerSchema), customerController.create.bind(customerController));
 router.get('/shops/:shopId/credit/outstanding', authMiddleware, requireShopAccess(), requirePermission('credit:read'), customerController.outstandingCredits.bind(customerController));
-router.get('/customers/:id', authMiddleware, requireEntityAccess('customer'), customerController.get.bind(customerController));
-router.get('/customers/:id/profile', authMiddleware, requireEntityAccess('customer'), customerController.profile.bind(customerController));
+router.get('/customers/:id', authMiddleware, requireEntityAccess('customer'), requireAnyPermission(['customers:view', 'credit:read', 'credit:create']), customerController.get.bind(customerController));
+router.get('/customers/:id/profile', authMiddleware, requireEntityAccess('customer'), requireAnyPermission(['customers:view', 'credit:read', 'credit:create']), customerController.profile.bind(customerController));
 router.put('/customers/:id', authMiddleware, requireEntityAccess('customer'), requirePermission('customers:update'), customerController.update.bind(customerController));
 router.delete('/customers/:id', authMiddleware, requireEntityAccess('customer'), requirePermission('customers:update'), customerController.delete.bind(customerController));
-router.get('/customers/:id/purchase-history', authMiddleware, requireEntityAccess('customer'), customerController.purchaseHistory.bind(customerController));
+router.get('/customers/:id/purchase-history', authMiddleware, requireEntityAccess('customer'), requireAnyPermission(['customers:view', 'credit:read', 'reports:sales']), customerController.purchaseHistory.bind(customerController));
 router.post('/customers/:id/credit-payment', authMiddleware, requireEntityAccess('customer'), requirePermission('credit:collect'), validate(creditPaymentSchema), customerController.creditPayment.bind(customerController));
-router.get('/customers/:id/credit-history', authMiddleware, requireEntityAccess('customer'), customerController.creditHistory.bind(customerController));
+router.get('/customers/:id/credit-history', authMiddleware, requireEntityAccess('customer'), requireAnyPermission(['customers:view', 'credit:read', 'credit:collect']), customerController.creditHistory.bind(customerController));
 
 // Expense routes
 router.post('/shops/:shopId/expenses', authMiddleware, requireShopAccess(), requirePermission('expenses:create'), validate(createExpenseSchema), expenseController.create.bind(expenseController));
 router.get('/shops/:shopId/expenses', authMiddleware, requireShopAccess(), requirePermission('expenses:read'), expenseController.list.bind(expenseController));
-router.get('/expenses/:id', authMiddleware, requireEntityAccess('expense'), expenseController.get.bind(expenseController));
+router.get('/expenses/:id', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:read'), expenseController.get.bind(expenseController));
 router.put('/expenses/:id', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:create'), expenseController.update.bind(expenseController));
 router.delete('/expenses/:id', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:create'), expenseController.delete.bind(expenseController));
 router.put('/expenses/:id/approve', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:approve'), expenseController.approve.bind(expenseController));
@@ -401,7 +401,6 @@ router.get('/admin/business-owners/:id', ...adminAuth, adminController.getBusine
 router.put('/admin/business-owners/:id/status', ...adminAuth, validate(statusUpdateSchema), adminController.updateBusinessOwnerStatus.bind(adminController));
 router.post('/admin/business-owners/:id/reset-pin', ...adminAuth, adminController.resetBusinessOwnerPin.bind(adminController));
 router.post('/admin/business-owners/:id/reset-password', ...adminAuth, adminController.resetBusinessOwnerPassword.bind(adminController));
-router.post('/admin/business-owners/:id/otp', ...adminAuth, adminController.ownerOtp.bind(adminController));
 router.delete('/admin/business-owners/:id', ...adminAuth, adminController.deleteBusinessOwner.bind(adminController));
 
 // Businesses

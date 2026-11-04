@@ -46,6 +46,13 @@ export const env = {
   // Firebase Cloud Messaging (push notifications).
   FCM_SERVER_KEY: process.env.FCM_SERVER_KEY || '',
   FCM_API_URL: process.env.FCM_API_URL || 'https://fcm.googleapis.com/fcm/send',
+
+  // Transactional email (Resend). Without RESEND_API_KEY the email service
+  // prints the message to the server console instead of failing.
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'Mwaminifu <no-reply@mwaminifu.co.tz>',
+  // Public frontend URL used in password-reset links.
+  FRONTEND_URL: process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:3001',
 };
 
 export const isProduction = env.NODE_ENV === 'production';

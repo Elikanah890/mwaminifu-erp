@@ -24,8 +24,18 @@ export async function proxy(request: NextRequest) {
   // client-readable cookie. The backend remains the security boundary.
   const claims = await verifyAccessToken(token);
   const role = claims?.role ?? '';
+  const mustChangePassword = claims?.mustChangePassword === true;
 
   const isAuthPage = pathname === '/login';
+
+  // A restricted token may only reach the password-change screen.
+  if (mustChangePassword && pathname !== '/change-password') {
+    return NextResponse.redirect(new URL('/change-password', request.url));
+  }
+  if (pathname === '/change-password' && !token) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   const prefix = ['/system', '/agent', '/owner', '/employee'].find(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
@@ -47,6 +57,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Authenticated users hitting the login page are sent to their portal.
+  if (isAuthPage && token && mustChangePassword) {
+    return NextResponse.redirect(new URL('/change-password', request.url));
+  }
   if (isAuthPage && token && role) {
     return NextResponse.redirect(new URL(ROLE_HOME[role] ?? '/system/dashboard', request.url));
   }

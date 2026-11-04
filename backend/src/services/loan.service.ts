@@ -94,8 +94,11 @@ export class LoanService {
     return prisma.loan.update({
       where: { id: loanId },
       data: {
-        ...data,
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+        ...(data.lender !== undefined ? { lender: data.lender } : {}),
+        ...(data.amount !== undefined ? { amount: data.amount } : {}),
+        ...(data.interestRate !== undefined ? { interestRate: data.interestRate } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        ...(data.dueDate !== undefined ? { dueDate: new Date(data.dueDate) } : {}),
       },
     });
   }

@@ -9,6 +9,10 @@ import Header from '@/components/Header';
 import IdleMonitor from '@/components/IdleMonitor';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import { ShopProvider } from '@/lib/context/ShopContext';
+import { SyncProvider } from '@/lib/context/SyncContext';
+import OfflineBanner from '@/components/sync/OfflineBanner';
+import SyncToasts from '@/components/sync/SyncToasts';
+import ConflictDialog from '@/components/sync/ConflictDialog';
 
 export default function DashboardShell({
   role,
@@ -69,7 +73,18 @@ export default function DashboardShell({
   );
 
   if (role === 'BUSINESS_OWNER' || role === 'EMPLOYEE') {
-    return <ShopProvider>{content}</ShopProvider>;
+    // Sync starts only after the session is verified, so the login page never
+    // fires authenticated sync requests.
+    return (
+      <ShopProvider>
+        <SyncProvider>
+          {content}
+          <OfflineBanner />
+          <SyncToasts />
+          <ConflictDialog />
+        </SyncProvider>
+      </ShopProvider>
+    );
   }
 
   return content;

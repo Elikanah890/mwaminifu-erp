@@ -4,9 +4,9 @@ import { hashPassword } from '../utils/bcrypt.util';
 import { SmsService } from './sms.service';
 import { auditService, AuditContext } from './audit.service';
 import { getPagination, getSort } from '../utils/pagination.util';
-import { generateOtp } from '../utils/otp.util';
+import { generateOtp, generateTempPassword } from '../utils/otp.util';
+import { emailService } from './email.service';
 import { settingsService } from './settings.service';
-import logger from '../utils/logger.util';
 
 function isUniqueConstraintError(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
@@ -100,7 +100,13 @@ function bucketRevenueTrend(rows: Array<{ day: Date; revenue: number }>, granula
 export class AdminService {
   // ---------------- Agents ----------------
 
-  async createAgent(data: { username: string; password: string; name: string; phone?: string; email?: string }, createdBy: string, ctx: AuditContext = {}) {
+  async createAgent(
+    data: { username: string; password?: string; name: string; phone?: string; email: string },
+    createdBy: string,
+    ctx: AuditContext = {}
+  ) {
+    const email = data.email.trim().toLowerCase();
+
     const existingUser = await prisma.user.findUnique({ where: { username: data.username } });
     if (existingUser) {
       throw { status: 409, code: 'CONFLICT', message: 'Username already exists' };
@@ -111,6 +117,12 @@ export class AdminService {
       throw { status: 409, code: 'CONFLICT', message: 'Username already exists' };
     }
 
+    const emailUser = await prisma.user.findUnique({ where: { email } });
+    const emailAgent = await prisma.agent.findFirst({ where: { email } });
+    if (emailUser || emailAgent) {
+      throw { status: 409, code: 'CONFLICT', message: 'Email already exists' };
+    }
+
     if (data.phone) {
       const phoneUser = await prisma.user.findFirst({ where: { phone: data.phone, deletedAt: null } });
       const phoneAgent = await prisma.agent.findFirst({ where: { phone: data.phone, deletedAt: null } });
@@ -119,7 +131,8 @@ export class AdminService {
       }
     }
 
-    const hashedPassword = await hashPassword(data.password);
+    const tempPassword = data.password || generateTempPassword();
+    const hashedPassword = await hashPassword(tempPassword);
 
     let agent;
     try {
@@ -130,7 +143,7 @@ export class AdminService {
             passwordHash: hashedPassword,
             name: data.name,
             phone: data.phone,
-            email: data.email,
+            email,
             createdBy,
           },
         });
@@ -141,8 +154,9 @@ export class AdminService {
             passwordHash: hashedPassword,
             name: data.name,
             phone: data.phone,
-            email: data.email,
+            email,
             role: 'AGENT',
+            mustChangePassword: true,
             agentId: createdAgent.id,
           },
         });
@@ -151,7 +165,7 @@ export class AdminService {
       });
     } catch (err) {
       if (isUniqueConstraintError(err)) {
-        throw { status: 409, code: 'CONFLICT', message: 'Username or phone already exists' };
+        throw { status: 409, code: 'CONFLICT', message: 'Username, email or phone already exists' };
       }
       throw err;
     }
@@ -160,22 +174,9 @@ export class AdminService {
       agent: { id: agent.id, name: agent.name, username: agent.username },
     }, ctx);
 
-    // Spec 12.1 — deliver the agent's login credentials automatically. SMS is
-    // best-effort: a gateway/mock failure must never fail agent creation.
-    if (agent.phone) {
-      try {
-        const appName = await settingsService.get('appName');
-        await smsService.send(
-          agent.phone,
-          `${appName}: Your agent account is ready. Username: ${agent.username}  Password: ${data.password}. Open the app, choose "Agent", and sign in.`,
-          { purpose: 'AGENT_WELCOME' }
-        );
-      } catch (err) {
-        logger.error('Failed to send agent welcome SMS', err);
-      }
-    }
+    await emailService.sendWelcomeEmail({ name: agent.name, email }, tempPassword);
 
-    return agent;
+    return { ...agent, tempPassword };
   }
 
   async listAgents(query: AdminListQuery = {}) {
@@ -381,6 +382,14 @@ export class AdminService {
       data: pick(data, ['name', 'phone', 'email', 'isActive']),
     });
 
+    if (data.isActive === false) {
+      const agentUsers = await prisma.user.findMany({ where: { agentId, role: 'AGENT' }, select: { id: true } });
+      await prisma.refreshToken.updateMany({
+        where: { userId: { in: agentUsers.map((u) => u.id) }, isRevoked: false },
+        data: { isRevoked: true },
+      });
+    }
+
     await auditService.log(actorId, 'AGENT_UPDATED', {
       agentId,
       before: pick(before as unknown as Record<string, unknown>, ['name', 'phone', 'email', 'isActive']),
@@ -401,6 +410,14 @@ export class AdminService {
     // Only the agent's own login should follow the agent's status. Business
     // owners onboarded by this agent must remain unaffected.
     await prisma.user.updateMany({ where: { agentId, role: 'AGENT' }, data: { isActive } });
+
+    if (!isActive) {
+      const agentUsers = await prisma.user.findMany({ where: { agentId, role: 'AGENT' }, select: { id: true } });
+      await prisma.refreshToken.updateMany({
+        where: { userId: { in: agentUsers.map((u) => u.id) }, isRevoked: false },
+        data: { isRevoked: true },
+      });
+    }
 
     await auditService.log(actorId, 'AGENT_STATUS_CHANGED', {
       agentId,
@@ -430,6 +447,12 @@ export class AdminService {
       data: { deletedAt: now, isActive: false },
     });
 
+    const deletedAgentUsers = await prisma.user.findMany({ where: { agentId, role: 'AGENT' }, select: { id: true } });
+    await prisma.refreshToken.updateMany({
+      where: { userId: { in: deletedAgentUsers.map((u) => u.id) }, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
     await auditService.log(actorId, 'AGENT_DELETED', {
       agent: { id: agentId, name: agent.name, username: agent.username },
     }, ctx);
@@ -440,25 +463,38 @@ export class AdminService {
   // ---------------- Business Owners ----------------
 
   async createBusinessOwner(
-    data: { phone: string; name: string; email?: string; shopName: string; shopAddress?: string; region?: string; district?: string; ward?: string; street?: string; businessCategory?: string; currency?: string; agentId?: string },
+    data: { email: string; phone?: string; name: string; shopName: string; shopAddress?: string; region?: string; district?: string; ward?: string; street?: string; businessCategory?: string; currency?: string; agentId?: string },
     createdBy: string,
     ctx: AuditContext = {}
   ) {
-    const existingUser = await prisma.user.findUnique({ where: { phone: data.phone } });
-    if (existingUser) {
-      throw { status: 409, code: 'CONFLICT', message: 'A user with this phone already exists' };
+    const email = data.email.trim().toLowerCase();
+    const existingEmail = await prisma.user.findUnique({ where: { email } });
+    if (existingEmail) {
+      throw { status: 409, code: 'CONFLICT', message: 'A user with this email already exists' };
     }
+    if (data.phone) {
+      const existingPhone = await prisma.user.findUnique({ where: { phone: data.phone } });
+      if (existingPhone) {
+        throw { status: 409, code: 'CONFLICT', message: 'A user with this phone already exists' };
+      }
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          phone: data.phone,
+          email,
+          phone: data.phone || null,
+          passwordHash,
           name: data.name,
-          email: data.email,
           role: 'BUSINESS_OWNER',
           isActive: true,
           isPinSet: false,
-          isPhoneVerified: false,
+          isPhoneVerified: true,
+          activationOtpVerifiedAt: new Date(),
+          mustChangePassword: true,
           ...(data.agentId ? { agentId: data.agentId } : {}),
         },
       });
@@ -486,44 +522,21 @@ export class AdminService {
         'Hardware', 'Pharmacy', 'Agriculture', 'Stationery',
       ];
       await tx.category.createMany({
-        data: defaultCategories.map((name) => ({
-          shopId: shop.id,
-          name,
-          isDefault: true,
-        })),
+        data: defaultCategories.map((name) => ({ shopId: shop.id, name, isDefault: true })),
       });
 
       return { user, shop };
     });
 
-    // Spec 4.7 — send an account-activation OTP (not a welcome message). The
-    // owner enters it on first login to prove the phone number and activate.
-    const activationCode = generateOtp();
-    const activationMinutes = await settingsService.get('otpLifetimeMinutes');
-    const activationAppName = await settingsService.get('appName');
-    await prisma.otp.create({
-      data: {
-        phone: data.phone,
-        code: activationCode,
-        purpose: 'OWNER_ACTIVATION',
-        expiresAt: new Date(Date.now() + activationMinutes * 60 * 1000),
-        userId: result.user.id,
-      },
-    });
-    await smsService.send(
-      data.phone,
-      `${activationAppName}: Your "${result.shop.name}" activation code is ${activationCode}. Valid for ${activationMinutes} minutes. Enter it in the app to activate your account.`,
-      { purpose: 'OWNER_ACTIVATION', userId: result.user.id, shopId: result.shop.id }
-    );
+    await emailService.sendWelcomeEmail({ name: result.user.name, email }, tempPassword);
 
     await auditService.log(createdBy, 'BUSINESS_OWNER_CREATED', {
       businessOwner: { id: result.user.id, name: result.user.name, phone: result.user.phone },
       shop: { id: result.shop.id, name: result.shop.name, currency: result.shop.currency },
     }, ctx, result.shop.id);
 
-    // Returned ONCE to the (System Owner) caller so the activation code can be
-    // shared if the SMS does not arrive. Never persisted in plain in responses.
-    return { ...result, activationOtp: activationCode };
+    // Returned once to the System Owner as a backup if the email does not arrive.
+    return { ...result, tempPassword };
   }
 
   async listBusinessOwners(query: AdminListQuery = {}) {
@@ -608,6 +621,11 @@ export class AdminService {
 
     const updated = await prisma.user.update({ where: { id: ownerId }, data: { isActive } });
 
+    // Disabling an account must end every existing session immediately.
+    if (!isActive) {
+      await prisma.refreshToken.updateMany({ where: { userId: ownerId, isRevoked: false }, data: { isRevoked: true } });
+    }
+
     await auditService.log(actorId, 'OWNER_STATUS_CHANGED', {
       ownerId,
       ownerName: user.name,
@@ -623,32 +641,27 @@ export class AdminService {
     if (!user) {
       throw { status: 404, code: 'NOT_FOUND', message: 'Business owner not found' };
     }
-    if (!user.phone) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'Owner has no phone number on file' };
-    }
 
-    const code = generateOtp();
-    const minutes = await settingsService.get('otpLifetimeMinutes');
-    const appName = await settingsService.get('appName');
-    await prisma.otp.create({
-      data: {
-        phone: user.phone,
-        code,
-        purpose: 'PIN_RESET',
-        expiresAt: new Date(Date.now() + minutes * 60 * 1000),
-        userId: user.id,
-      },
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustChangePassword: true },
+    });
+    await prisma.refreshToken.updateMany({
+      where: { userId: user.id, isRevoked: false },
+      data: { isRevoked: true },
     });
 
-    await smsService.send(user.phone, `${appName}: Your PIN reset OTP is ${code}. Valid for ${minutes} minutes. Open the app and set a new PIN.`, { purpose: 'OWNER_PIN_RESET', userId: user.id });
+    await emailService.sendWelcomeEmail({ name: user.name, email: user.email }, tempPassword);
 
-    await auditService.log(actorId, 'OWNER_PIN_RESET', {
+    await auditService.log(actorId, 'OWNER_PASSWORD_RESET', {
       ownerId: user.id,
       ownerName: user.name,
-      phone: user.phone,
     }, ctx);
 
-    return { message: 'PIN reset OTP sent to the owner phone. The owner sets the new PIN in the app.' };
+    return { message: 'Password reset. Email sent to the owner.', tempPassword };
   }
 
   /**
@@ -688,12 +701,17 @@ export class AdminService {
       throw { status: 404, code: 'NOT_FOUND', message: 'Agent not found' };
     }
 
-    const tempPassword = Math.random().toString(36).slice(2, 10);
+    const tempPassword = generateTempPassword();
     const hashed = await hashPassword(tempPassword);
 
     await prisma.$transaction(async (tx) => {
       await tx.agent.update({ where: { id: agentId }, data: { passwordHash: hashed } });
-      await tx.user.updateMany({ where: { agentId, role: 'AGENT' }, data: { passwordHash: hashed } });
+      await tx.user.updateMany({ where: { agentId, role: 'AGENT' }, data: { passwordHash: hashed, mustChangePassword: true } });
+    });
+    const agentUsers = await prisma.user.findMany({ where: { agentId, role: 'AGENT' }, select: { id: true } });
+    await prisma.refreshToken.updateMany({
+      where: { userId: { in: agentUsers.map((u) => u.id) }, isRevoked: false },
+      data: { isRevoked: true },
     });
 
     await auditService.log(actorId, 'AGENT_PASSWORD_RESET', {
@@ -702,21 +720,11 @@ export class AdminService {
       username: agent.username,
     }, ctx);
 
-    // Send the new password to the agent automatically (best-effort).
-    if (agent.phone) {
-      try {
-        const appName = await settingsService.get('appName');
-        await smsService.send(
-          agent.phone,
-          `${appName}: Your agent password was reset. Username: ${agent.username}  New password: ${tempPassword}. Sign in under "Agent".`,
-          { purpose: 'AGENT_PASSWORD_RESET' }
-        );
-      } catch (err) {
-        logger.error('Failed to send agent password reset SMS', err);
-      }
+    if (agent.email) {
+      await emailService.sendWelcomeEmail({ name: agent.name, email: agent.email }, tempPassword);
     }
 
-    return { username: agent.username, tempPassword };
+    return { username: agent.username, email: agent.email, tempPassword };
   }
 
   // ---------------- Businesses ----------------
@@ -943,7 +951,14 @@ export class AdminService {
     }
 
     const updated = await prisma.employee.update({ where: { id: employeeId }, data: { isActive } });
-    await prisma.user.updateMany({ where: { id: employee.userId }, data: { isActive } });
+    const activeAssignments = await prisma.employee.count({
+      where: { userId: employee.userId, isActive: true, deletedAt: null },
+    });
+    await prisma.user.updateMany({ where: { id: employee.userId }, data: { isActive: activeAssignments > 0 } });
+
+    if (activeAssignments === 0) {
+      await prisma.refreshToken.updateMany({ where: { userId: employee.userId, isRevoked: false }, data: { isRevoked: true } });
+    }
 
     await auditService.log(actorId, 'EMPLOYEE_STATUS_CHANGED', {
       employeeId,
@@ -2083,22 +2098,35 @@ export class AdminService {
 
   // Legacy (kept for compatibility)
   async onboardBusinessOwner(
-    data: { phone: string; name: string; email?: string; shopName: string; shopAddress?: string; region?: string; district?: string; ward?: string; street?: string; businessCategory?: string },
+    data: { email: string; phone?: string; name: string; shopName: string; shopAddress?: string; region?: string; district?: string; ward?: string; street?: string; businessCategory?: string },
     agentId: string
   ) {
-    const existingUser = await prisma.user.findUnique({ where: { phone: data.phone } });
-    if (existingUser) {
-      throw { status: 409, code: 'CONFLICT', message: 'A user with this phone already exists' };
+    const email = data.email.trim().toLowerCase();
+    const existingEmail = await prisma.user.findUnique({ where: { email } });
+    if (existingEmail) {
+      throw { status: 409, code: 'CONFLICT', message: 'A user with this email already exists' };
     }
+    if (data.phone) {
+      const existingPhone = await prisma.user.findUnique({ where: { phone: data.phone } });
+      if (existingPhone) {
+        throw { status: 409, code: 'CONFLICT', message: 'A user with this phone already exists' };
+      }
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await hashPassword(tempPassword);
 
     const user = await prisma.user.create({
       data: {
-        phone: data.phone,
+        email,
+        phone: data.phone || null,
+        passwordHash,
         name: data.name,
-        email: data.email,
         role: 'BUSINESS_OWNER',
         isPinSet: false,
-        isPhoneVerified: false,
+        isPhoneVerified: true,
+        activationOtpVerifiedAt: new Date(),
+        mustChangePassword: true,
         agentId,
       },
     });
@@ -2127,33 +2155,12 @@ export class AdminService {
     ];
 
     await prisma.category.createMany({
-      data: defaultCategories.map((name) => ({
-        shopId: shop.id,
-        name,
-        isDefault: true,
-      })),
+      data: defaultCategories.map((name) => ({ shopId: shop.id, name, isDefault: true })),
     });
 
-    // Spec 4.7 — activation OTP on agent-led registration.
-    const onboardCode = generateOtp();
-    const onboardMinutes = await settingsService.get('otpLifetimeMinutes');
-    const onboardAppName = await settingsService.get('appName');
-    await prisma.otp.create({
-      data: {
-        phone: data.phone,
-        code: onboardCode,
-        purpose: 'OWNER_ACTIVATION',
-        expiresAt: new Date(Date.now() + onboardMinutes * 60 * 1000),
-        userId: user.id,
-      },
-    });
-    await smsService.send(
-      data.phone,
-      `${onboardAppName}: Your "${data.shopName}" activation code is ${onboardCode}. Valid for ${onboardMinutes} minutes. Enter it in the app to activate your account.`,
-      { purpose: 'OWNER_ACTIVATION', userId: user.id, shopId: shop.id }
-    );
+    await emailService.sendWelcomeEmail({ name: user.name, email }, tempPassword);
 
-    return { user, shop };
+    return { user, shop, tempPassword };
   }
 
   async listAgentBusinesses(agentId: string) {

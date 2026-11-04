@@ -7,6 +7,8 @@ import { normalizePhone, phoneVariants } from '../utils/phone.util';
 import { settingsService } from './settings.service';
 import logger from '../utils/logger.util';
 import { SmsService } from './sms.service';
+import { emailService } from './email.service';
+import { randomBytes, createHash } from 'crypto';
 
 const smsService = new SmsService();
 
@@ -37,8 +39,14 @@ export class AuthService {
       throw { status: 404, code: 'NOT_FOUND', message: 'Phone number not registered. Contact your agent.' };
     }
 
-    if (user.role === 'SYSTEM_OWNER' || user.role === 'AGENT') {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'This phone is not registered as a business owner or employee.' };
+    // OTP sign-in is the Business Owner activation/recovery channel. Employees
+    // must use their PIN (and their own reset flow) instead.
+    if (user.role !== 'BUSINESS_OWNER') {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'This phone is not registered as a business owner.' };
+    }
+
+    if (user.isActive === false || user.deletedAt) {
+      throw { status: 403, code: 'FORBIDDEN', message: 'Account is disabled' };
     }
 
     const recentOtp = await prisma.otp.findFirst({
@@ -76,6 +84,14 @@ export class AuthService {
     const user = await findUserByPhone(phone);
     if (!user) {
       throw { status: 404, code: 'NOT_FOUND', message: 'Phone number not registered' };
+    }
+
+    // A disabled or deleted account must never be able to obtain a session.
+    if (user.isActive === false || user.deletedAt) {
+      throw { status: 403, code: 'FORBIDDEN', message: 'Account is disabled' };
+    }
+    if (user.role !== 'BUSINESS_OWNER') {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'This account cannot sign in with an OTP.' };
     }
 
     // In mock/testing mode the fixed code always works, so an OTP request that
@@ -551,6 +567,12 @@ export class AuthService {
     if (!user) {
       throw { status: 404, code: 'NOT_FOUND', message: 'Phone number not registered' };
     }
+    if (user.isActive === false || user.deletedAt) {
+      throw { status: 403, code: 'FORBIDDEN', message: 'Account is disabled' };
+    }
+    if (user.role === 'SYSTEM_OWNER' || user.role === 'AGENT') {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'This account cannot reset a PIN.' };
+    }
 
     const code = generateOtp();
     const minutes = await settingsService.get('otpLifetimeMinutes');
@@ -581,7 +603,7 @@ export class AuthService {
       throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid credentials' };
     }
 
-    if (!user.isActive || user.deletedAt) {
+    if (user.isActive === false || user.deletedAt) {
       throw { status: 403, code: 'FORBIDDEN', message: 'Account is disabled or deleted' };
     }
 
@@ -635,6 +657,179 @@ export class AuthService {
       },
     };
   }
+
+  // -------------------------------------------------------------------------
+  // Email + password authentication (unified for every role)
+  // -------------------------------------------------------------------------
+
+  private static normalizeEmail(email: string): string {
+    return (email || '').trim().toLowerCase();
+  }
+
+  private static hashResetToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async buildSession(user: {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    name: string;
+    role: string;
+    avatarUrl: string | null;
+    mustChangePassword: boolean;
+  }) {
+    if (user.mustChangePassword) {
+      const tempToken = signTempToken({ sub: user.id, role: user.role, mustChangePassword: true });
+      return {
+        accessToken: tempToken,
+        requiresPasswordChange: true,
+        user: { id: user.id, email: user.email, phone: user.phone, name: user.name, role: user.role, avatarUrl: user.avatarUrl },
+        shop: null,
+        permissions: [] as string[],
+      };
+    }
+
+    const shops = await prisma.shop.findFirst({ where: { ownerId: user.id, isArchived: false } });
+    let permissions: string[] = [];
+    if (user.role === 'EMPLOYEE') {
+      const employee = await prisma.employee.findFirst({ where: { userId: user.id, isActive: true, deletedAt: null } });
+      if (employee) permissions = (employee.permissions as string[]) || [];
+    }
+
+    const accessToken = signAccessToken({ sub: user.id, role: user.role, shopId: shops?.id, permissions });
+    const refreshToken = signRefreshToken({ sub: user.id, role: user.role });
+    await prisma.refreshToken.create({
+      data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS) },
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      requiresPasswordChange: false,
+      user: { id: user.id, email: user.email, phone: user.phone, name: user.name, role: user.role, avatarUrl: user.avatarUrl },
+      shop: shops ? { id: shops.id, name: shops.name } : null,
+      permissions,
+    };
+  }
+
+  async loginWithEmail(email: string, password: string) {
+    const normalized = AuthService.normalizeEmail(email);
+    const user = await prisma.user.findUnique({ where: { email: normalized } });
+
+    if (!user || !user.passwordHash) {
+      throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid email or password' };
+    }
+    if (user.isActive === false || user.deletedAt) {
+      throw { status: 403, code: 'FORBIDDEN', message: 'Account is inactive. Contact support.' };
+    }
+    if (user.blockedUntil && user.blockedUntil > new Date()) {
+      throw { status: 429, code: 'RATE_LIMITED', message: 'Account locked. Try again later.' };
+    }
+
+    const valid = await comparePassword(password, user.passwordHash);
+    if (!valid) {
+      const attempts = user.failedLoginAttempts + 1;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: attempts,
+          blockedUntil: attempts >= 5 ? new Date(Date.now() + 60 * 60 * 1000) : null,
+        },
+      });
+      throw { status: 401, code: 'UNAUTHORIZED', message: 'Invalid email or password' };
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginAttempts: 0, blockedUntil: null, lastLoginAt: new Date() },
+    });
+
+    return this.buildSession(user as {
+      id: string; email: string | null; phone: string | null; name: string;
+      role: string; avatarUrl: string | null; mustChangePassword: boolean;
+    });
+  }
+
+  async changePassword(userId: string, newPassword: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw { status: 404, code: 'NOT_FOUND', message: 'User not found' };
+
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        passwordResetTokenHash: null,
+        passwordResetExpires: null,
+        passwordResetAt: new Date(),
+      },
+    });
+
+    // Changing the password ends every existing session.
+    await prisma.refreshToken.updateMany({
+      where: { userId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
+    return { message: 'Password updated successfully' };
+  }
+
+  async forgotPassword(email: string) {
+    const normalized = AuthService.normalizeEmail(email);
+    const user = await prisma.user.findUnique({ where: { email: normalized } });
+
+    // Always return the same response to avoid account enumeration.
+    const response = { message: 'If that email exists, a reset link has been sent.' };
+    if (!user || user.isActive === false || user.deletedAt || !user.passwordHash) return response;
+
+    const token = randomBytes(32).toString('hex');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetTokenHash: AuthService.hashResetToken(token),
+        passwordResetExpires: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+
+    const base = (env.FRONTEND_URL || '').replace(/\/+$/, '');
+    const resetLink = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+    await emailService.sendPasswordResetEmail({ name: user.name, email: user.email }, resetLink);
+    return response;
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: AuthService.hashResetToken(token),
+        passwordResetExpires: { gt: new Date() },
+      },
+    });
+    if (!user) {
+      throw { status: 400, code: 'INVALID_TOKEN', message: 'This reset link is invalid or has expired.' };
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        passwordResetTokenHash: null,
+        passwordResetExpires: null,
+        passwordResetAt: new Date(),
+      },
+    });
+
+    await prisma.refreshToken.updateMany({
+      where: { userId: user.id, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
+    return { message: 'Password reset successfully' };
+  }
+
 }
 
 export const authService = new AuthService();

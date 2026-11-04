@@ -7,6 +7,8 @@ export interface JwtPayload {
   role: string;
   shopId?: string;
   permissions?: string[];
+  /** Set on restricted tokens issued before a mandatory password change. */
+  mustChangePassword?: boolean;
   iat?: number;
   exp?: number;
 }

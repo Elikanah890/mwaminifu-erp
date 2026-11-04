@@ -16,8 +16,6 @@ import '../presentation/blocs/auth/auth_bloc.dart';
 import '../presentation/blocs/product/product_bloc.dart';
 import '../presentation/blocs/shop/shop_bloc.dart';
 import '../presentation/pages/auth/login_page.dart';
-import '../presentation/pages/auth/otp_page.dart';
-import '../presentation/pages/auth/pin_setup_page.dart';
 import '../presentation/pages/auth/change_pin_page.dart';
 import '../presentation/pages/dashboard/dashboard_page.dart';
 import 'package:mwaminifu_app/presentation/pages/pos/pos_page.dart' as pos;
@@ -97,8 +95,7 @@ class _MwaminifuAppState extends State<MwaminifuApp> {
       initialLocation: '/login',
       routes: [
         GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-        GoRoute(path: '/otp', builder: (_, _) => const OtpPage()),
-        GoRoute(path: '/pin-setup', builder: (_, _) => const PinSetupPage()),
+        GoRoute(path: '/change-password', builder: (_, _) => const ChangePinPage()),
         ShellRoute(
           builder: (_, _, child) => MainShell(child: child),
           routes: [
@@ -114,7 +111,6 @@ class _MwaminifuAppState extends State<MwaminifuApp> {
             GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
             GoRoute(path: '/support', builder: (_, _) => const SupportPage()),
             GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
-            GoRoute(path: '/change-pin', builder: (_, _) => const ChangePinPage()),
             GoRoute(path: '/more', builder: (_, _) => const MorePage()),
             GoRoute(path: '/receipt-settings', builder: (_, _) => const ReceiptSettingsPage()),
           ],

@@ -3,6 +3,13 @@ jest.mock('../../src/config/database', () => ({
   default: require('../helpers/mockPrisma').default,
 }));
 
+jest.mock('../../src/services/email.service', () => ({
+  emailService: {
+    sendWelcomeEmail: jest.fn().mockResolvedValue(true),
+    sendPasswordResetEmail: jest.fn().mockResolvedValue(true),
+  },
+}));
+
 import { authService } from '../../src/services/auth.service';
 import { hashPin, hashPassword } from '../../src/utils/bcrypt.util';
 import mockPrisma, { resetMockPrisma } from '../helpers/mockPrisma';
@@ -256,5 +263,101 @@ describe('AuthService.changeEmployeePin', () => {
   it('rejects an incorrect current PIN', async () => {
     mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', pinHash: await hashPin('1234') });
     await expect(authService.changeEmployeePin('u1', '0000', '5678')).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+
+describe('AuthService.loginWithEmail', () => {
+  const baseUser = {
+    id: 'u1',
+    email: 'john@mwaminifu.co.tz',
+    phone: '0754000000',
+    name: 'John Business',
+    role: 'BUSINESS_OWNER',
+    isActive: true,
+    deletedAt: null,
+    avatarUrl: null,
+    mustChangePassword: false,
+    failedLoginAttempts: 0,
+    blockedUntil: null,
+    passwordHash: '',
+  };
+
+  it('issues a session for valid email + password', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, passwordHash: await hashPassword('owner123') });
+    mockPrisma.shop.findFirst.mockResolvedValue({ id: 'shop1', name: 'John\'s' });
+    mockPrisma.user.update.mockResolvedValue({});
+    mockPrisma.refreshToken.create.mockResolvedValue({});
+
+    const result = await authService.loginWithEmail('John@Mwaminifu.co.tz', 'owner123');
+    expect(result.accessToken).toBeTruthy();
+    expect(result.refreshToken).toBeTruthy();
+    expect(result.requiresPasswordChange).toBe(false);
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'john@mwaminifu.co.tz' } });
+  });
+
+  it('returns a restricted token when a password change is required', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      ...baseUser,
+      mustChangePassword: true,
+      passwordHash: await hashPassword('TempPass123'),
+    });
+    mockPrisma.user.update.mockResolvedValue({});
+
+    const result = await authService.loginWithEmail('john@mwaminifu.co.tz', 'TempPass123');
+    expect(result.requiresPasswordChange).toBe(true);
+    expect(result.refreshToken).toBeUndefined();
+    expect(result.accessToken).toBeTruthy();
+  });
+
+  it('rejects invalid password and increments attempts', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, passwordHash: await hashPassword('owner123') });
+    mockPrisma.user.update.mockResolvedValue({});
+    await expect(authService.loginWithEmail('john@mwaminifu.co.tz', 'wrong')).rejects.toMatchObject({ status: 401 });
+    expect(mockPrisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ failedLoginAttempts: 1 }) })
+    );
+  });
+
+  it('rejects inactive accounts', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, isActive: false, passwordHash: await hashPassword('owner123') });
+    await expect(authService.loginWithEmail('john@mwaminifu.co.tz', 'owner123')).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('AuthService password reset', () => {
+  it('changes the password and revokes existing sessions', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', email: 'john@mwaminifu.co.tz' });
+    mockPrisma.user.update.mockResolvedValue({});
+    const res = await authService.changePassword('u1', 'NewPassword123');
+    expect(res.message).toMatch(/updated/i);
+    expect(mockPrisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ mustChangePassword: false }) })
+    );
+    expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalled();
+  });
+
+  it('returns a generic response for an unknown email', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+    const res = await authService.forgotPassword('unknown@example.com');
+    expect(res.message).toMatch(/reset link/i);
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('creates a reset token for a known email', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'u1', name: 'John', email: 'john@mwaminifu.co.tz', isActive: true, deletedAt: null, passwordHash: 'hash',
+    });
+    mockPrisma.user.update.mockResolvedValue({});
+    const res = await authService.forgotPassword('john@mwaminifu.co.tz');
+    expect(res.message).toMatch(/reset link/i);
+    expect(mockPrisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ passwordResetTokenHash: expect.any(String) }) })
+    );
+  });
+
+  it('rejects an invalid reset token', async () => {
+    mockPrisma.user.findFirst.mockResolvedValue(null);
+    await expect(authService.resetPassword('bad-token', 'NewPassword123')).rejects.toMatchObject({ status: 400 });
   });
 });

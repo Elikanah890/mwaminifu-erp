@@ -115,3 +115,50 @@ describe('syncService.pushChanges — idempotency', () => {
     await expect(syncService.pullChanges('', '')).rejects.toMatchObject({ status: 400 });
   });
 });
+
+describe('syncService — permission enforcement', () => {
+  it('refuses offline sales for an employee without sales:create', async () => {
+    mockPrisma.sale.findFirst.mockResolvedValue(null);
+    const result = await syncService.pushChanges(
+      SHOP,
+      'dev1',
+      { sales: [{ clientId: 'c1', data: baseSale, lastModified: '' }] },
+      { role: 'EMPLOYEE', permissions: ['inventory:view'] }
+    );
+    expect(mockPrisma.sale.create).not.toHaveBeenCalled();
+    expect(result.failed.sales[0].reason).toMatch(/sales:create/);
+  });
+
+  it('refuses offline expenses for an employee without expenses:create', async () => {
+    const result = await syncService.pushChanges(
+      SHOP,
+      'dev1',
+      { expenses: [{ clientId: 'e1', data: { userId: 'u1', category: 'Rent', amount: 100 }, lastModified: '' }] },
+      { role: 'EMPLOYEE', permissions: ['sales:create'] }
+    );
+    expect(mockPrisma.expense.create).not.toHaveBeenCalled();
+    expect(result.failed.expenses[0].reason).toMatch(/expenses:create/);
+  });
+
+  it('omits employee/loan/expense data from a low-permission pull', async () => {
+    mockPrisma.employee.findMany.mockResolvedValue([{ id: 'e1' }]);
+    mockPrisma.loan.findMany.mockResolvedValue([{ id: 'l1' }]);
+    mockPrisma.expense.findMany.mockResolvedValue([{ id: 'x1' }]);
+    mockPrisma.sale.findMany.mockResolvedValue([{ id: 's1' }]);
+    mockPrisma.product.findMany.mockResolvedValue([{ id: 'p1' }]);
+    mockPrisma.customer.findMany.mockResolvedValue([{ id: 'c1' }]);
+    mockPrisma.stockAdjustment.findMany.mockResolvedValue([{ id: 'a1' }]);
+
+    const result = await syncService.pullChanges(SHOP, '', 500, {
+      role: 'EMPLOYEE',
+      permissions: ['sales:create', 'sales:view', 'products:view', 'inventory:view', 'customers:view'],
+    });
+
+    expect(result.changes.employees).toEqual([]);
+    expect(result.changes.loans).toEqual([]);
+    expect(result.changes.expenses).toEqual([]);
+    expect(result.changes.sales).toHaveLength(1);
+    expect(result.changes.products).toHaveLength(1);
+    expect(result.changes.customers).toHaveLength(1);
+  });
+});

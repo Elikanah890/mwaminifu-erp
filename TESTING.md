@@ -9,15 +9,18 @@ the demo data so other testers can use it too.
 
 ## Test accounts
 
-| Role             | Login                        | Secret        | Notes |
-|------------------|------------------------------|---------------|-------|
-| System Owner     | username `admin`             | password `admin123` | Platform admin dashboard |
-| Agent            | username `agent1`            | password `agent123` | Registers businesses, commissions |
-| Business Owner   | phone `0754000000`           | OTP `123456` / PIN `123456` | Owns "John's Grocery" |
-| Manager          | phone `0754111111`           | PIN `111111`  | Full operational staff |
-| Cashier          | phone `0754222222`           | PIN `222222`  | Limited staff |
+| Role             | Email                        | Password      |
+|------------------|------------------------------|---------------|
+| System Owner     | admin@mwaminifu.co.tz        | admin123      |
+| Agent            | agent1@mwaminifu.co.tz       | agent123      |
+| Business Owner   | john@mwaminifu.co.tz         | owner123      |
+| Employee         | mary@mwaminifu.co.tz         | employee123   |
+| Employee         | peter@mwaminifu.co.tz        | employee123   |
+| Employee         | anna@mwaminifu.co.tz         | employee123   |
 
-> OTP is always `123456` in this test environment (mock SMS). No real SMS is sent.
+Sign in with **email + password**. First-time accounts created by an Agent or
+Business Owner receive a temporary password by email and must change it on
+first login. Use “Forgot password?” to reset.
 
 ## What to test
 

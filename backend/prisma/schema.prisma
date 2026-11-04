@@ -44,9 +44,9 @@ enum RefundStatus {
 model User {
   id            String    @id @default(cuid())
   phone         String?   @unique
-  email         String?
+  email         String    @unique
   username      String?   @unique
-  passwordHash  String?
+  passwordHash  String
   name          String
   role          UserRole  @default(BUSINESS_OWNER)
   pinHash       String?
@@ -56,6 +56,8 @@ model User {
   isPhoneVerified Boolean @default(false)
   activationOtpVerifiedAt DateTime?
   mustChangePassword Boolean @default(false)
+  passwordResetTokenHash String? @unique
+  passwordResetExpires DateTime?
   mustChangePin Boolean @default(false)
   passwordResetAt DateTime?
   pinResetAt    DateTime?

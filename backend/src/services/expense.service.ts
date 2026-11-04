@@ -100,11 +100,16 @@ export class ExpenseService {
       throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Approved expenses cannot be edited. Reverse the expense instead.' };
     }
 
+    // Whitelist: approvalStatus, shopId and deletedAt are never editable here.
     return prisma.expense.update({
       where: { id: expenseId },
       data: {
-        ...data,
-        expenseDate: data.expenseDate ? new Date(data.expenseDate) : undefined,
+        ...(data.category !== undefined ? { category: data.category } : {}),
+        ...(data.amount !== undefined ? { amount: data.amount } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.receiptUrl !== undefined ? { receiptUrl: data.receiptUrl } : {}),
+        ...(data.paymentMethod !== undefined ? { paymentMethod: data.paymentMethod } : {}),
+        ...(data.expenseDate !== undefined ? { expenseDate: new Date(data.expenseDate) } : {}),
       },
     });
   }

@@ -20,15 +20,6 @@ function generateUsername(name: string): string {
   return `${base}${Math.floor(100 + Math.random() * 900)}`;
 }
 
-function generatePassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let out = '';
-  const rand = new Uint32Array(12);
-  crypto.getRandomValues(rand);
-  for (let i = 0; i < 12; i++) out += chars[rand[i] % chars.length];
-  return out;
-}
-
 export default function AgentsPage() {
   const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -44,12 +35,12 @@ export default function AgentsPage() {
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const [form, setForm] = useState({ username: '', password: '', name: '', phone: '', email: '' });
+  const [form, setForm] = useState({ username: '', name: '', phone: '', email: '' });
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   // Credentials to show the System Owner so they can hand them to the agent.
-  const [createdCreds, setCreatedCreds] = useState<{ username: string; password: string; phone?: string } | null>(null);
-  const [resetCreds, setResetCreds] = useState<{ username: string; password: string } | null>(null);
+  const [createdCreds, setCreatedCreds] = useState<{ username: string; email: string; tempPassword: string; phone?: string } | null>(null);
+  const [resetCreds, setResetCreds] = useState<{ username: string; email?: string; tempPassword: string } | null>(null);
 
   const load = useCallback(
     async (page: number) => {
@@ -76,7 +67,7 @@ export default function AgentsPage() {
   }, [load]);
 
   const openCreate = () => {
-    setForm({ username: generateUsername('agent'), password: generatePassword(), name: '', phone: '', email: '' });
+    setForm({ username: generateUsername('agent'), name: '', phone: '', email: '' });
     setFormError('');
     setShowCreate(true);
   };
@@ -86,15 +77,19 @@ export default function AgentsPage() {
     setFormError('');
     setSaving(true);
     try {
-      await apiClient.post('/admin/agents', {
+      const res = await apiClient.post<{ username: string; email: string; tempPassword: string }>('/admin/agents', {
         username: form.username.trim(),
-        password: form.password,
         name: form.name.trim(),
         phone: form.phone.trim() || undefined,
-        email: form.email.trim() || undefined,
+        email: form.email.trim().toLowerCase(),
       });
       setShowCreate(false);
-      setCreatedCreds({ username: form.username.trim(), password: form.password, phone: form.phone.trim() || undefined });
+      setCreatedCreds({
+        username: res.data?.username ?? form.username.trim(),
+        email: res.data?.email ?? form.email.trim().toLowerCase(),
+        tempPassword: res.data?.tempPassword ?? '',
+        phone: form.phone.trim() || undefined,
+      });
       toast('Agent registered successfully');
       load(1);
     } catch (err) {
@@ -142,7 +137,7 @@ export default function AgentsPage() {
     if (!window.confirm(`Reset the password for ${agent.name} (AGAC-${agent.username})? A new password will be sent to their phone.`)) return;
     try {
       const res = await apiClient.post<{ username: string; tempPassword: string }>(`/admin/agents/${agent.id}/reset-password`, {});
-      if (res.data) setResetCreds({ username: res.data.username, password: res.data.tempPassword });
+      if (res.data) setResetCreds({ username: res.data.username, email: (res.data as { email?: string }).email, tempPassword: res.data.tempPassword });
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -288,8 +283,8 @@ export default function AgentsPage() {
         {formError && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{formError}</div>}
         <form onSubmit={handleCreate} className="space-y-4">
           <input className="input-field" placeholder="Full Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <input className="input-field" placeholder="Phone Number" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
-          <input className="input-field" type="email" placeholder="Email (optional)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <input className="input-field" type="email" placeholder="Email (required)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          <input className="input-field" placeholder="Phone Number (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Username (auto-generated)</label>
             <div className="flex gap-2">
@@ -299,18 +294,8 @@ export default function AgentsPage() {
               </button>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Temporary Password (share with the agent)</label>
-            <div className="flex gap-2">
-              <input className="input-field font-mono" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-              <button type="button" className="btn-outline shrink-0" onClick={() => setForm({ ...form, password: generatePassword() })}>
-                Regenerate
-              </button>
-            </div>
-          </div>
           <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-            The agent signs in through the app under <strong>Agent</strong> using this <strong>username</strong> and
-            <strong> password</strong>. These are also sent to their phone by SMS automatically.
+            The agent signs in with their <strong>email</strong> and the generated password. Welcome credentials are emailed automatically.
           </p>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setShowCreate(false)} className="flex-1 btn-outline">
@@ -483,14 +468,13 @@ export default function AgentsPage() {
         {createdCreds && (
           <div className="space-y-4 text-sm">
             <p className="text-muted-foreground">
-              Give these to the agent — they have also been sent to the agent's phone automatically by SMS
-              {createdCreds.phone ? ` (${createdCreds.phone})` : ''}.
+              A welcome email was sent to <strong>{createdCreds.email}</strong>. Share these if it does not arrive.
             </p>
-            <CredRow label="How to sign in" value='Open the app → choose "Agent"' />
-            <CredRow label="Username" value={createdCreds.username} onCopy={() => copy(createdCreds.username)} />
-            <CredRow label="Password" value={createdCreds.password} mono onCopy={() => copy(createdCreds.password)} />
+            <CredRow label="Login email" value={createdCreds.email} onCopy={() => copy(createdCreds.email)} />
+            <CredRow label="Temporary password" value={createdCreds.tempPassword} mono onCopy={() => copy(createdCreds.tempPassword)} />
+            <CredRow label="Agent code" value={`AGAC-${createdCreds.username}`} onCopy={() => copy(`AGAC-${createdCreds.username}`)} />
             <button
-              onClick={() => copy(`Agent login\nUsername: ${createdCreds.username}\nPassword: ${createdCreds.password}`)}
+              onClick={() => copy(`Mwaminifu agent login\nEmail: ${createdCreds.email}\nPassword: ${createdCreds.tempPassword}`)}
               className="btn-navy w-full"
             >
               Copy credentials
@@ -504,11 +488,11 @@ export default function AgentsPage() {
       <Modal open={!!resetCreds} title="New Agent Password" onClose={() => setResetCreds(null)}>
         {resetCreds && (
           <div className="space-y-4 text-sm">
-            <p className="text-muted-foreground">The agent's password was reset and the new password was sent to their phone by SMS.</p>
-            <CredRow label="Username" value={resetCreds.username} onCopy={() => copy(resetCreds.username)} />
-            <CredRow label="New password" value={resetCreds.password} mono onCopy={() => copy(resetCreds.password)} />
+            <p className="text-muted-foreground">The agent&apos;s password was reset and emailed{resetCreds.email ? ` to ${resetCreds.email}` : ''}.</p>
+            <CredRow label="Login email" value={resetCreds.email ?? resetCreds.username} onCopy={() => copy(resetCreds.email ?? resetCreds.username)} />
+            <CredRow label="New password" value={resetCreds.tempPassword} mono onCopy={() => copy(resetCreds.tempPassword)} />
             <button
-              onClick={() => copy(`Agent login\nUsername: ${resetCreds.username}\nPassword: ${resetCreds.password}`)}
+              onClick={() => copy(`Mwaminifu agent login\nEmail: ${resetCreds.email ?? resetCreds.username}\nPassword: ${resetCreds.tempPassword}`)}
               className="btn-navy w-full"
             >
               Copy credentials

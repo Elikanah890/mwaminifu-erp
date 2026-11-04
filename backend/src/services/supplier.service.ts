@@ -63,7 +63,13 @@ export class SupplierService {
   async updateSupplier(supplierId: string, data: { name?: string; phone?: string; email?: string; address?: string; notes?: string }) {
     return prisma.supplier.update({
       where: { id: supplierId },
-      data,
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.address !== undefined ? { address: data.address } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+      },
     });
   }
 

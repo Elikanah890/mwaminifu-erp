@@ -280,93 +280,68 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
 }
 
 class ApiClient {
-  async login(username: string, password: string): Promise<ApiResponse<{ user: PublicUser }>> {
+  async login(email: string, password: string): Promise<ApiResponse<{ user: PublicUser; requiresPasswordChange?: boolean }>> {
+    const normalized = email.trim().toLowerCase();
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email: normalized, password }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         if (isNetworkFailure(response.status, data)) {
-          const offline = await this.tryOfflineLogin(username, password);
+          const offline = await this.tryOfflineLogin(normalized, password);
           if (offline) return offline;
         }
         throw toApiError(response.status, data);
       }
       const user = (data as ApiResponse<{ user: PublicUser }>)?.data?.user;
       if (user) {
-        await cacheCredential(username, password, user);
+        await cacheCredential(normalized, password, user);
         this.setUser(user);
       }
-      return data as ApiResponse<{ user: PublicUser }>;
+      return data as ApiResponse<{ user: PublicUser; requiresPasswordChange?: boolean }>;
     } catch (e) {
       if (e instanceof ApiErrorException) throw e;
-      const offline = await this.tryOfflineLogin(username, password);
+      const offline = await this.tryOfflineLogin(normalized, password);
       if (offline) return offline;
       throw new ApiErrorException(0, { code: 'OFFLINE', message: 'You are offline and no cached login is available' });
     }
   }
 
-  async requestOtp(phone: string): Promise<ApiResponse<{ message?: string; resendAfter?: number }>> {
-    if (!isOnline()) throw new ApiErrorException(0, { code: 'OFFLINE', message: 'Requires internet to send OTP' });
-    const response = await fetch('/api/auth/otp/request', {
+  async forgotPassword(email: string): Promise<ApiResponse<{ message?: string }>> {
+    if (!isOnline()) throw new ApiErrorException(0, { code: 'OFFLINE', message: 'Requires internet to reset your password' });
+    const response = await fetch('/api/auth/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone }),
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) throw toApiError(response.status, data);
-    return data as ApiResponse<{ message?: string; resendAfter?: number }>;
+    return data as ApiResponse<{ message?: string }>;
   }
 
-  async verifyOtp(phone: string, code: string): Promise<ApiResponse<{ user: PublicUser }>> {
-    if (!isOnline()) {
-      throw new ApiErrorException(0, { code: 'OFFLINE', message: 'OTP login requires internet. Use a cached device or reconnect.' });
-    }
-    const response = await fetch('/api/auth/otp/verify', {
+  async resetPassword(token: string, newPassword: string): Promise<ApiResponse<{ message?: string }>> {
+    const response = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, otp: code }),
+      body: JSON.stringify({ token, newPassword }),
     });
     const data = await response.json().catch(() => null);
     if (!response.ok) throw toApiError(response.status, data);
-    const user = (data as ApiResponse<{ user: PublicUser }>)?.data?.user;
-    if (user) {
-      await cacheCredential(phone, code, user);
-      this.setUser(user);
-    }
-    return data as ApiResponse<{ user: PublicUser }>;
+    return data as ApiResponse<{ message?: string }>;
   }
 
-  async employeeLogin(phone: string, pin: string): Promise<ApiResponse<{ user: PublicUser }>> {
-    try {
-      const response = await fetch('/api/auth/employee/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, pin }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        if (isNetworkFailure(response.status, data)) {
-          const offline = await this.tryOfflineLogin(phone, pin);
-          if (offline) return offline;
-        }
-        throw toApiError(response.status, data);
-      }
-      const user = (data as ApiResponse<{ user: PublicUser }>)?.data?.user;
-      if (user) {
-        await cacheCredential(phone, pin, user);
-        this.setUser(user);
-      }
-      return data as ApiResponse<{ user: PublicUser }>;
-    } catch (e) {
-      if (e instanceof ApiErrorException) throw e;
-      const offline = await this.tryOfflineLogin(phone, pin);
-      if (offline) return offline;
-      throw new ApiErrorException(0, { code: 'OFFLINE', message: 'You are offline and no cached login is available' });
-    }
+  async changePassword(newPassword: string): Promise<ApiResponse<{ message?: string }>> {
+    const response = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw toApiError(response.status, data);
+    return data as ApiResponse<{ message?: string }>;
   }
 
   private async tryOfflineLogin(identity: string, secret: string): Promise<ApiResponse<{ user: PublicUser }> | null> {

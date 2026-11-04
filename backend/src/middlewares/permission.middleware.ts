@@ -305,7 +305,14 @@ export function requireBodyShopAccess() {
       res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Platform and agent accounts cannot access shop-level data' }, timestamp: new Date().toISOString() });
       return;
     }
-    const shopId = (req.body && (req.body.shopId as string)) || (req.query.shopId as string) || req.params.shopId;
+    // Employees are bound to exactly one shop, so the token's shopId is a safe
+    // fallback when the client does not echo shopId in the body (e.g. the
+    // shift open/close endpoints).
+    const shopId =
+      (req.body && (req.body.shopId as string)) ||
+      (req.query.shopId as string) ||
+      req.params.shopId ||
+      req.user.shopId;
     if (!shopId) {
       res.status(422).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'shopId is required' }, timestamp: new Date().toISOString() });
       return;

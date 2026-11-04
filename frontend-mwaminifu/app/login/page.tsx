@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, BriefcaseBusiness, Check, Loader2, ShieldCheck, Store, UserRound } from 'lucide-react';
+import { Check, Loader2, Lock, Mail } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
 import { useAppConfig } from '@/lib/context/AppConfigContext';
@@ -18,42 +18,33 @@ const ROLE_HOME: Record<string, string> = {
   EMPLOYEE: '/employee/dashboard',
 };
 
-type RoleType = 'SYSTEM_OWNER' | 'AGENT' | 'BUSINESS_OWNER' | 'EMPLOYEE';
-
-const ROLE_META: Record<RoleType, { label: string; icon: typeof ShieldCheck }> = {
-  SYSTEM_OWNER: { label: 'System Owner', icon: ShieldCheck },
-  AGENT: { label: 'Agent', icon: BriefcaseBusiness },
-  BUSINESS_OWNER: { label: 'Business Owner', icon: Store },
-  EMPLOYEE: { label: 'Employee', icon: UserRound },
-};
-
-const TEST_CREDENTIALS = {
-  SYSTEM_OWNER: { username: 'admin', password: 'admin123' },
-  AGENT: { username: 'agent1', password: 'agent123' },
-  BUSINESS_OWNER: { phone: '0754000000', otp: '123456' },
-  EMPLOYEE: { phone: '0754111111', pin: '1234' },
-};
-
-// Seeded demo credentials must never be pre-filled or shown in production.
-const SHOW_TEST_LOGIN = process.env.NODE_ENV !== 'production';
-
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { appName } = useAppConfig();
-  const { locale, setLocale, t } = useI18n();
+  const { locale, setLocale } = useI18n();
+  const sw = locale === 'sw';
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<RoleType | ''>('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [pin, setPin] = useState('');
+
+  useEffect(() => {
+    const code = searchParams.get('error');
+    if (!code) return;
+    if (code === 'not_registered') {
+      setError(sw ? 'Barua pepe hii haijasajiliwa. Wasiliana na Agent.' : 'Email not registered. Contact your Agent.');
+    } else if (code === 'inactive') {
+      setError(sw ? 'Akaunti imezimwa. Wasiliana na msaada.' : 'Account inactive. Contact support.');
+    } else {
+      setError(sw ? 'Imeshindikana kuingia. Jaribu tena.' : 'Sign-in failed. Please try again.');
+    }
+  }, [searchParams, sw]);
 
   const redirectTarget = (role?: string) => {
     const requested = searchParams.get('redirect');
@@ -66,7 +57,7 @@ function LoginForm() {
     setTimeout(() => {
       router.replace(redirectTarget(role));
       router.refresh();
-    }, 550);
+    }, 500);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -75,117 +66,19 @@ function LoginForm() {
     setInfo('');
     setLoading(true);
     try {
-      if (selectedRole === 'SYSTEM_OWNER' || selectedRole === 'AGENT') {
-        const response = await apiClient.login(username, password);
-        const user = response.data?.user;
-        if (!user?.role) throw new Error('Invalid credentials');
-        completeLogin(user.role);
+      const response = await apiClient.login(email, password);
+      const data = response.data;
+      if (!data?.user?.role) throw new Error(sw ? 'Taarifa si sahihi' : 'Invalid email or password');
+      if (data.requiresPasswordChange) {
+        router.replace('/change-password');
         return;
       }
-      if (selectedRole === 'BUSINESS_OWNER') {
-        const response = await apiClient.verifyOtp(phone, otp);
-        const user = response.data?.user;
-        if (!user?.role) throw new Error('Invalid or expired OTP');
-        completeLogin(user.role);
-        return;
-      }
-      if (selectedRole === 'EMPLOYEE') {
-        const response = await apiClient.employeeLogin(phone, pin);
-        const user = response.data?.user;
-        if (!user?.role) throw new Error('Invalid employee credentials');
-        completeLogin(user.role);
-        return;
-      }
-      throw new Error('Please select a role');
+      completeLogin(data.user.role);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : sw ? 'Imeshindikana kuingia' : 'Login failed');
       setLoading(false);
     }
   };
-
-  const handleSendOtp = async () => {
-    setError('');
-    setInfo('');
-    if (!phone) {
-      setError('Enter a phone number first');
-      return;
-    }
-    setLoading(true);
-    try {
-      await apiClient.requestOtp(phone);
-      setInfo('OTP sent. Check your messages.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const chooseRole = (role: RoleType) => {
-    setSelectedRole(role);
-    setError('');
-    setInfo('');
-    if (!SHOW_TEST_LOGIN) {
-      setUsername('');
-      setPassword('');
-      setPhone('');
-      setOtp('');
-      setPin('');
-      return;
-    }
-    const creds = TEST_CREDENTIALS[role];
-    if ('username' in creds) {
-      setUsername(creds.username);
-      setPassword(creds.password);
-      setPhone('');
-      setOtp('');
-      setPin('');
-    } else if ('otp' in creds) {
-      setPhone(creds.phone);
-      setOtp(creds.otp);
-      setUsername('');
-      setPassword('');
-      setPin('');
-    } else {
-      setPhone(creds.phone);
-      setPin(creds.pin);
-      setUsername('');
-      setPassword('');
-      setOtp('');
-    }
-  };
-
-  const quickLogin = async (role: RoleType) => {
-    chooseRole(role);
-    setLoading(true);
-    setError('');
-    setInfo('');
-    try {
-      if (role === 'SYSTEM_OWNER' || role === 'AGENT') {
-        const creds = TEST_CREDENTIALS[role];
-        const response = await apiClient.login(creds.username, creds.password);
-        completeLogin(response.data?.user?.role);
-        return;
-      }
-      if (role === 'BUSINESS_OWNER') {
-        const creds = TEST_CREDENTIALS.BUSINESS_OWNER;
-        await apiClient.requestOtp(creds.phone);
-        const response = await apiClient.verifyOtp(creds.phone, creds.otp);
-        completeLogin(response.data?.user?.role);
-        return;
-      }
-      const creds = TEST_CREDENTIALS.EMPLOYEE;
-      const response = await apiClient.employeeLogin(creds.phone, creds.pin);
-      completeLogin(response.data?.user?.role);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Quick login failed');
-      setLoading(false);
-    }
-  };
-
-  const isUsernameRole = selectedRole === 'SYSTEM_OWNER' || selectedRole === 'AGENT';
-  const isBusinessOwner = selectedRole === 'BUSINESS_OWNER';
-  const isEmployee = selectedRole === 'EMPLOYEE';
 
   return (
     <div className="grid min-h-screen bg-background lg:grid-cols-2">
@@ -221,7 +114,7 @@ function LoginForm() {
             Sell, stock and track every shilling.
           </h1>
           <p className="mt-5 max-w-md text-white/70">
-            A production-ready workspace for owners, agents, managers and employees.
+            One secure sign-in for owners, agents, managers and employees.
           </p>
           <div className="mt-10 grid grid-cols-3 gap-3 text-sm">
             {['Works Offline', 'Kiswahili + English', 'Mobile + Desktop'].map((item, i) => (
@@ -244,9 +137,7 @@ function LoginForm() {
       <section className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-lg">
           <div className="mb-10 flex items-center justify-between">
-            <Link href="/" className="inline-flex items-center gap-1.5 text-sm font-semibold text-secondary transition-brand hover:gap-2.5">
-              <ArrowLeft size={15} /> {t('backToHome')}
-            </Link>
+            <span className="text-sm font-semibold text-secondary">{appName}</span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setLocale(locale === 'sw' ? 'en' : 'sw')}
@@ -258,145 +149,117 @@ function LoginForm() {
             </div>
           </div>
 
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE }} className="mb-8">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">{t('signIn')}</h1>
-            <p className="mt-2 text-muted-foreground">Choose your role and continue to your dashboard.</p>
-          </motion.div>
+          <div className="mb-8">
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">{sw ? 'Ingia' : 'Sign in'}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {sw ? 'Tumia barua pepe na password yako.' : 'Use your email and password.'}
+            </p>
+          </div>
 
-          <AnimatePresence mode="wait">
-            {error && (
-              <motion.div
-                key={error}
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="animate-shake mb-4 rounded-lg border border-danger/25 bg-danger/10 px-4 py-3 text-sm text-danger"
-              >
-                {error}
-              </motion.div>
-            )}
-            {info && (
-              <motion.div
-                key={info}
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="mb-4 rounded-lg border border-success/25 bg-success/10 px-4 py-3 text-sm text-success"
-              >
-                {info}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-medium text-foreground">{t('role')}</label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {(Object.keys(ROLE_META) as RoleType[]).map((role) => {
-                  const Icon = ROLE_META[role].icon;
-                  const active = selectedRole === role;
-                  return (
-                    <motion.button
-                      type="button"
-                      key={role}
-                      onClick={() => chooseRole(role)}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.97 }}
-                      className={`relative rounded-xl border p-3 text-left transition-colors ${
-                        active ? 'border-secondary bg-secondary/10' : 'border-border hover:border-secondary/50'
-                      }`}
-                    >
-                      {active && (
-                        <motion.span layoutId="login-role" className="absolute inset-0 rounded-xl ring-1 ring-secondary/40" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
-                      )}
-                      <Icon size={18} className={active ? 'text-secondary' : 'text-muted-foreground'} />
-                      <span className="mt-2 block text-xs font-semibold text-foreground">{ROLE_META[role].label}</span>
-                    </motion.button>
-                  );
-                })}
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-foreground">
+                {sw ? 'Barua pepe' : 'Email'}
+              </label>
+              <div className="relative">
+                <Mail size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground" />
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="input-field pl-10"
+                />
               </div>
             </div>
 
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={selectedRole}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-4"
-              >
-                {isUsernameRole && (
-                  <>
-                    <input className="input-field" placeholder={t('username')} value={username} onChange={(e) => setUsername(e.target.value)} />
-                    <input className="input-field" type="password" placeholder={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} />
-                  </>
-                )}
-                {isBusinessOwner && (
-                  <>
-                    <input className="input-field" placeholder={t('phone')} value={phone} onChange={(e) => setPhone(e.target.value)} />
-                    <div className="flex gap-2">
-                      <input className="input-field" placeholder={t('otp')} value={otp} onChange={(e) => setOtp(e.target.value)} />
-                      <button type="button" onClick={handleSendOtp} disabled={loading} className="btn-outline whitespace-nowrap">
-                        {t('sendOtp')}
-                      </button>
-                    </div>
-                  </>
-                )}
-                {isEmployee && (
-                  <>
-                    <input className="input-field" placeholder={t('phone')} value={phone} onChange={(e) => setPhone(e.target.value)} />
-                    <input className="input-field" type="password" placeholder={t('pin')} value={pin} onChange={(e) => setPin(e.target.value)} />
-                  </>
-                )}
-              </motion.div>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label htmlFor="password" className="block text-sm font-medium text-foreground">
+                  {sw ? 'Password' : 'Password'}
+                </label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-secondary hover:underline">
+                  {sw ? 'Umesahau password?' : 'Forgot password?'}
+                </Link>
+              </div>
+              <div className="relative">
+                <Lock size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground" />
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="input-field pl-10"
+                />
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {error && (
+                <motion.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  role="alert"
+                  className="rounded-lg border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger"
+                >
+                  {error}
+                </motion.p>
+              )}
             </AnimatePresence>
+            {info && <p className="rounded-lg border border-secondary/25 bg-secondary/10 px-3 py-2.5 text-sm text-secondary">{info}</p>}
 
             <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              disabled={loading || !selectedRole || success}
-              className={`relative w-full overflow-hidden rounded-[10px] px-6 py-3 font-semibold transition-colors ${
-                success ? 'bg-success text-white' : 'bg-primary text-primary-foreground hover:bg-primary-hover'
-              } disabled:opacity-60`}
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.99 }}
+              type="submit"
+              disabled={loading || success}
+              className="btn-teal flex w-full items-center justify-center gap-2 py-3"
             >
               <AnimatePresence mode="wait" initial={false}>
                 {success ? (
-                  <motion.span key="done" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center justify-center gap-2">
-                    <Check size={18} /> {locale === 'sw' ? 'Imefanikiwa' : 'Success'}
+                  <motion.span key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="inline-flex items-center gap-2">
+                    <Check size={17} /> {sw ? 'Karibu!' : 'Welcome!'}
                   </motion.span>
                 ) : loading ? (
-                  <motion.span key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center gap-2">
-                    <Loader2 size={18} className="animate-spin" /> {t('signingIn')}
+                  <motion.span key="loading" className="inline-flex items-center gap-2">
+                    <Loader2 size={17} className="animate-spin" /> {sw ? 'Inaingia...' : 'Signing in...'}
                   </motion.span>
                 ) : (
                   <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {t('signIn')}
+                    {sw ? 'Ingia' : 'Sign in'}
                   </motion.span>
                 )}
               </AnimatePresence>
             </motion.button>
           </form>
 
-          {SHOW_TEST_LOGIN && (
-          <div className="mt-8 border-t border-border pt-6">
-            <p className="mb-3 text-sm font-semibold text-muted-foreground">{t('quickTestLogin')}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(ROLE_META) as RoleType[]).map((role) => (
-                <motion.button
-                  key={role}
-                  whileHover={{ y: -1 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => quickLogin(role)}
-                  disabled={loading}
-                  className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-                >
-                  {ROLE_META[role].label}
-                </motion.button>
-              ))}
-            </div>
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium uppercase tracking-wider text-subtle-foreground">
+              {sw ? 'au tumia email' : 'or use email'}
+            </span>
+            <span className="h-px flex-1 bg-border" />
           </div>
-          )}
+
+          <button
+            type="button"
+            onClick={() => setInfo(sw ? 'Kuingia na Google kunakuja hivi karibuni.' : 'Google Sign-In is coming soon.')}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-border-strong bg-card px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border-strong text-xs font-bold">G</span>
+            {sw ? 'Ingia na Google' : 'Continue with Google'}
+          </button>
+
+          <p className="mt-6 text-center text-xs text-subtle-foreground">
+            {sw ? 'Huna akaunti? Wasiliana na Agent au mmiliki wa biashara.' : 'No account? Contact your Agent or business owner.'}
+          </p>
         </div>
       </section>
     </div>

@@ -124,7 +124,21 @@ export class CustomerService {
     isBlacklisted?: boolean;
     status?: string;
   }) {
-    return prisma.customer.update({ where: { id: customerId }, data });
+    // Whitelist editable fields: balances, shop ownership and soft-delete
+    // flags must never be settable from a request body (mass assignment).
+    return prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        ...(data.email !== undefined ? { email: data.email } : {}),
+        ...(data.address !== undefined ? { address: data.address } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        ...(data.creditLimit !== undefined ? { creditLimit: data.creditLimit } : {}),
+        ...(data.isBlacklisted !== undefined ? { isBlacklisted: data.isBlacklisted } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+      },
+    });
   }
 
   async deleteCustomer(customerId: string) {

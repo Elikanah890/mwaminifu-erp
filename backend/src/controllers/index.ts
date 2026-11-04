@@ -352,10 +352,10 @@ export class EmployeeController {
     } catch (error) { next(error); }
   }
 
-  async resetPin(req: Request, res: Response, next: NextFunction) {
+  async resetPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await employeeService.resetPin(req.params.id);
-      res.json({ success: true, data: result, message: 'PIN reset', timestamp: new Date().toISOString() });
+      const result = await employeeService.resetPassword(req.params.id);
+      res.json({ success: true, data: result, message: result.message, timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 
@@ -635,7 +635,7 @@ export class SyncController {
   async push(req: Request, res: Response, next: NextFunction) {
     try {
       const { shopId, deviceId, changes } = req.body;
-      const result = await syncService.pushChanges(shopId, deviceId, changes);
+      const result = await syncService.pushChanges(shopId, deviceId, changes, { role: req.user!.role, permissions: req.user!.permissions });
       res.json({ success: true, data: result, timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -643,7 +643,7 @@ export class SyncController {
   async pull(req: Request, res: Response, next: NextFunction) {
     try {
       const { shopId, since, limit } = req.query;
-      const result = await syncService.pullChanges(shopId as string, since as string, parseInt(limit as string) || 500);
+      const result = await syncService.pullChanges(shopId as string, since as string, parseInt(limit as string) || 500, { role: req.user!.role, permissions: req.user!.permissions });
       res.json({ success: true, data: result, timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -670,10 +670,15 @@ export class NotificationController {
 
   async markRead(req: Request, res: Response, next: NextFunction) {
     try {
-      await prisma.notification.update({
-        where: { id: req.params.id },
+      // Scope by userId so one user cannot mutate another user's notification.
+      const result = await prisma.notification.updateMany({
+        where: { id: req.params.id, userId: req.user!.userId },
         data: { isRead: true },
       });
+      if (result.count === 0) {
+        res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Notification not found' }, timestamp: new Date().toISOString() });
+        return;
+      }
       res.json({ success: true, message: 'Marked as read', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
@@ -772,14 +777,14 @@ export class AdminController {
   async resetAgentPassword(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await adminService.resetAgentPassword(req.params.id, req.user!.userId, this.ctx(req));
-      res.json({ success: true, data: result, message: 'Agent password reset', timestamp: new Date().toISOString() });
+      res.json({ success: true, data: result, message: 'Agent password reset. Email sent.', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 
   async createBusinessOwner(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await adminService.createBusinessOwner(req.body, req.user!.userId, this.ctx(req));
-      res.status(201).json({ success: true, data: result, message: 'Business owner created. SMS sent.', timestamp: new Date().toISOString() });
+      res.status(201).json({ success: true, data: result, message: 'Business owner created. Welcome email sent.', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 
@@ -815,7 +820,7 @@ export class AdminController {
   async resetBusinessOwnerPassword(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await adminService.resetBusinessOwnerPin(req.params.id, req.user!.userId, this.ctx(req));
-      res.json({ success: true, data: result, message: 'Password reset code sent to the owner phone', timestamp: new Date().toISOString() });
+      res.json({ success: true, data: result, message: 'Password reset. Welcome email sent to the owner.', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 
@@ -1142,7 +1147,7 @@ export class AdminController {
         shopName: result.shop.name,
       }, this.ctx(req));
 
-      res.status(201).json({ success: true, data: result, message: 'Business owner created. SMS sent.', timestamp: new Date().toISOString() });
+      res.status(201).json({ success: true, data: result, message: 'Business owner created. Welcome email sent.', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
 

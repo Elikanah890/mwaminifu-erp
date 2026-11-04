@@ -103,7 +103,8 @@ export default function OwnerEmployeesPage() {
   const [activitySales, setActivitySales] = useState<SaleListItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', role: 'Cashier' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', role: 'Cashier' });
+  const [credentials, setCredentials] = useState<{ name: string; email: string; tempPassword: string } | null>(null);
   const [selectedPerms, setSelectedPerms] = useState<string[]>(DEFAULT_EMPLOYEE_PERMISSIONS);
 
   const load = () => {
@@ -125,15 +126,19 @@ export default function OwnerEmployeesPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await apiClient.post(`/shops/${activeShopId}/employees`, {
+      const res = await apiClient.post<{ tempPassword?: string }>(`/shops/${activeShopId}/employees`, {
         name: form.name,
-        phone: form.phone,
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim() || undefined,
         role: form.role,
         permissions: selectedPerms,
       });
-      toast('Employee added. SMS sent with temp PIN.', 'success');
+      toast('Employee added. Welcome email sent.', 'success');
+      if (res.data?.tempPassword) {
+        setCredentials({ name: form.name, email: form.email.trim().toLowerCase(), tempPassword: res.data.tempPassword });
+      }
       setAddOpen(false);
-      setForm({ name: '', phone: '', role: 'Cashier' });
+      setForm({ name: '', email: '', phone: '', role: 'Cashier' });
       setSelectedPerms(DEFAULT_EMPLOYEE_PERMISSIONS);
       load();
     } catch (err) {
@@ -162,11 +167,14 @@ export default function OwnerEmployeesPage() {
     }
   };
 
-  const resetPin = async (emp: EmployeeRow) => {
+  const resetPassword = async (emp: EmployeeRow) => {
     setSubmitting(true);
     try {
-      await apiClient.post(`/employees/${emp.id}/reset-pin`);
-      toast('PIN reset. SMS sent.', 'success');
+      const res = await apiClient.post<{ tempPassword?: string }>(`/employees/${emp.id}/reset-password`);
+      toast('Password reset. Email sent.', 'success');
+      if (res.data?.tempPassword && emp.user) {
+        setCredentials({ name: emp.user.name, email: emp.user.email ?? '', tempPassword: res.data.tempPassword });
+      }
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -223,7 +231,7 @@ export default function OwnerEmployeesPage() {
               {employees.map((e) => (
                 <tr key={e.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
                   <td className="px-4 py-3 font-medium text-foreground">{e.user?.name ?? '-'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{e.user?.phone ?? '-'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{e.user?.email ?? e.user?.phone ?? '-'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{e.role}</td>
                   <td className="px-4 py-3"><StatusBadge active={e.isActive} /></td>
                   <td className="px-4 py-3 text-muted-foreground">{formatDate(e.createdAt)}</td>
@@ -235,8 +243,8 @@ export default function OwnerEmployeesPage() {
                       >
                         <ShieldCheck size={14} /> {t('permissions')}
                       </button>
-                      <button onClick={() => resetPin(e)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline">
-                        <KeyRound size={14} /> {t('resetPin')}
+                      <button onClick={() => resetPassword(e)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline">
+                        <KeyRound size={14} /> Reset password
                       </button>
                       <button onClick={() => openActivity(e)} className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:underline">
                         <Activity size={14} /> {t('activity')}
@@ -257,8 +265,13 @@ export default function OwnerEmployeesPage() {
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Phone</label>
-            <input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input-field" placeholder="e.g. 0754111111" />
+            <label className="block text-sm font-medium text-foreground mb-1">Email <span className="text-danger">*</span></label>
+            <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field" placeholder="employee@example.com" />
+            <p className="mt-1 text-xs text-subtle-foreground">Login credentials will be emailed here.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Phone (optional)</label>
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input-field" placeholder="e.g. 0754111111" />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Role</label>
@@ -310,6 +323,25 @@ export default function OwnerEmployeesPage() {
         <button onClick={savePermissions} disabled={submitting} className="btn-navy w-full">
           {submitting ? 'Saving...' : 'Save Permissions'}
         </button>
+      </Modal>
+
+      <Modal open={!!credentials} title="Employee Login Credentials" onClose={() => setCredentials(null)}>
+        {credentials && (
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">Share these with <strong>{credentials.name}</strong> if the email does not arrive.</p>
+            <div className="rounded-lg bg-muted p-4 space-y-2">
+              <div className="flex justify-between gap-4"><span className="text-muted-foreground">Email</span><span className="font-medium text-foreground">{credentials.email}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-muted-foreground">Temporary password</span><code className="font-mono font-semibold text-foreground">{credentials.tempPassword}</code></div>
+            </div>
+            <button
+              onClick={() => navigator.clipboard?.writeText(`Email: ${credentials.email}\nPassword: ${credentials.tempPassword}`)}
+              className="btn-navy w-full"
+            >
+              Copy credentials
+            </button>
+            <button onClick={() => setCredentials(null)} className="btn-outline w-full">Done</button>
+          </div>
+        )}
       </Modal>
 
       <Modal open={!!activityTarget} title={`Activity — ${activityTarget?.user?.name ?? ''}`} onClose={() => setActivityTarget(null)} wide>

@@ -40,12 +40,12 @@ export default function RegisterBusinessPage() {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<{ name: string; shopName: string; location: string } | null>(null);
+  const [done, setDone] = useState<{ name: string; email: string; shopName: string; location: string; tempPassword?: string } | null>(null);
 
   const [owner, setOwner] = useState({ name: '', phone: '', email: '' });
   const [shop, setShop] = useState({ shopName: '', category: '', region: '', district: '', ward: '', street: '' });
 
-  const ownerValid = owner.name.trim() && owner.phone.trim();
+  const ownerValid = Boolean(owner.name.trim() && owner.email.trim());
   const shopValid = shop.shopName.trim();
 
   const location = [shop.street, shop.ward, shop.district, shop.region].filter(Boolean).join(', ');
@@ -54,11 +54,11 @@ export default function RegisterBusinessPage() {
     setSubmitting(true);
     try {
       const payload: Record<string, string> = {
-        phone: owner.phone.trim(),
+        email: owner.email.trim().toLowerCase(),
         name: owner.name.trim(),
         shopName: shop.shopName.trim(),
       };
-      if (owner.email.trim()) payload.email = owner.email.trim();
+      if (owner.phone.trim()) payload.phone = owner.phone.trim();
       if (location) payload.shopAddress = location;
       if (shop.category) payload.businessCategory = shop.category;
       if (shop.region) payload.region = shop.region;
@@ -66,8 +66,14 @@ export default function RegisterBusinessPage() {
       if (shop.ward) payload.ward = shop.ward;
       if (shop.street) payload.street = shop.street;
 
-      await apiClient.post('/agents/onboard', payload);
-      setDone({ name: owner.name.trim(), shopName: shop.shopName.trim(), location });
+      const res = await apiClient.post<{ user: { email: string }; shop: unknown; tempPassword?: string }>('/agents/onboard', payload);
+      setDone({
+        name: owner.name.trim(),
+        email: owner.email.trim().toLowerCase(),
+        shopName: shop.shopName.trim(),
+        location,
+        tempPassword: res.data?.tempPassword,
+      });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to register business', 'error');
     } finally {
@@ -86,7 +92,11 @@ export default function RegisterBusinessPage() {
             {done.location ? ` · ${done.location}` : ''}
           </p>
           <div className="bg-muted rounded-lg p-4 text-left text-sm text-muted-foreground mb-6">
-            The owner will receive an SMS on their phone. Guide them to download the app and complete activation.
+            <p>A welcome email was sent to <strong>{done.email}</strong> with a temporary password.</p>
+            {done.tempPassword && (
+              <p className="mt-2">Temporary password (share as backup): <code className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">{done.tempPassword}</code></p>
+            )}
+            <p className="mt-2">The owner must change this password on first login.</p>
           </div>
           <div className="flex gap-3">
             <Link href="/agent/dashboard" className="btn-navy flex-1">
@@ -133,8 +143,8 @@ export default function RegisterBusinessPage() {
             <div className="space-y-5">
               <h3 className="text-lg font-semibold text-primary">Owner Information</h3>
               <Input label="Full Name" required value={owner.name} onChange={(e) => setOwner({ ...owner, name: e.target.value })} placeholder="Full name" />
-              <Input label="Phone Number" required hint="The owner will receive an SMS on this number" value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} placeholder="255XXXXXXXXX" inputMode="tel" />
-              <Input label="Email" type="email" value={owner.email} onChange={(e) => setOwner({ ...owner, email: e.target.value })} placeholder="email@example.com" />
+              <Input label="Email" type="email" required hint="Login credentials will be emailed here" value={owner.email} onChange={(e) => setOwner({ ...owner, email: e.target.value })} placeholder="email@example.com" />
+              <Input label="Phone Number" hint="Optional contact number" value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} placeholder="255XXXXXXXXX" inputMode="tel" />
               <div className="flex justify-end">
                 <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-navy" disabled={!ownerValid} onClick={() => setStep(2)}>
                   Continue

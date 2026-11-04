@@ -889,7 +889,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get moreBackup => 'Backup';
 
   @override
-  String get moreChangePin => 'Change PIN';
+  String get moreChangePin => 'Change Password';
 
   @override
   String get moreAbout => 'About';

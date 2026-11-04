@@ -80,6 +80,11 @@ class NeedPinSetup extends AuthState {
   NeedPinSetup({required this.tempToken, required this.user});
 }
 
+class NeedPasswordChange extends AuthState {
+  final UserModel user;
+  NeedPasswordChange({required this.user});
+}
+
 class Authenticated extends AuthState {
   final UserModel user;
   final String? shopId;
@@ -178,7 +183,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       _permissions = _resolvePermissions(user, null);
 
       if (data['isPinSet'] == true) {
-        emit(Authenticated(user: user));
+        // Existing accounts receive a full session from /auth/otp/verify. It
+        // must be persisted or the app appears logged in while every API call
+        // is unauthenticated.
+        if (data['accessToken'] != null) {
+          await apiClient.saveToken(data['accessToken']);
+        }
+        if (data['refreshToken'] != null) {
+          await apiClient.saveRefreshToken(data['refreshToken']);
+        }
+        await _persist(user, _permissions, data['shop']?['id']);
+        emit(Authenticated(user: user, shopId: data['shop']?['id']));
       } else {
         emit(NeedPinSetup(tempToken: _tempToken!, user: user));
       }
@@ -213,15 +228,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       final res = await apiClient.post('/auth/login', data: {
-        'phone': event.phone,
-        'pin': event.pin,
+        'email': event.phone,
+        'password': event.pin,
       });
       final data = res['data'];
       await apiClient.saveToken(data['accessToken']);
-      await apiClient.saveRefreshToken(data['refreshToken']);
+      if (data['refreshToken'] != null) {
+        await apiClient.saveRefreshToken(data['refreshToken']);
+      }
       final user = UserModel.fromJson(data['user']);
       _currentUser = user;
       _permissions = _resolvePermissions(user, data['permissions']);
+      if (data['requiresPasswordChange'] == true) {
+        emit(NeedPasswordChange(user: user));
+        return;
+      }
       await _persist(user, _permissions, data['shop']?['id']);
       emit(Authenticated(user: user, shopId: data['shop']?['id']));
     } catch (e) {

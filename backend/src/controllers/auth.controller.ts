@@ -35,9 +35,39 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { phone, pin } = req.body;
-      const result = await authService.login(phone, pin);
+      const { email, password } = req.body;
+      const result = await authService.loginWithEmail(email, password);
       res.json({ success: true, data: result, message: 'Login successful', timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { newPassword } = req.body;
+      const result = await authService.changePassword(req.user!.userId, newPassword);
+      res.json({ success: true, data: result, message: result.message, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async forgotPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body;
+      const result = await authService.forgotPassword(email);
+      res.json({ success: true, data: result, message: result.message, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token, newPassword } = req.body;
+      const result = await authService.resetPassword(token, newPassword);
+      res.json({ success: true, data: result, message: result.message, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
     }
@@ -112,7 +142,7 @@ export class AuthController {
         where: { id: req.user!.userId },
         select: {
           id: true, phone: true, email: true, name: true, role: true,
-          avatarUrl: true, isActive: true, createdAt: true,
+          avatarUrl: true, isActive: true, mustChangePassword: true, createdAt: true,
         },
       });
 

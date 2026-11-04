@@ -36,6 +36,15 @@ function activeSubscription() {
 beforeEach(() => {
   resetMockPrisma();
   activeSubscription();
+  // authMiddleware re-validates the account on every request now.
+  mockPrisma.user.findUnique.mockImplementation(({ where }: { where: { id: string } }) => {
+    const accounts: Record<string, { id: string; role: string; isActive: boolean; deletedAt: null; isPhoneVerified: boolean }> = {
+      [OWNER]: { id: OWNER, role: 'BUSINESS_OWNER', isActive: true, deletedAt: null, isPhoneVerified: true },
+      [EMP]: { id: EMP, role: 'EMPLOYEE', isActive: true, deletedAt: null, isPhoneVerified: true },
+      agent_1: { id: 'agent_1', role: 'AGENT', isActive: true, deletedAt: null, isPhoneVerified: true },
+    };
+    return Promise.resolve(accounts[where.id] ?? null);
+  });
 });
 
 describe('RBAC — loans & cash permissions', () => {
@@ -145,5 +154,70 @@ describe('Role boundaries', () => {
   it('rejects requests with no token', async () => {
     const res = await request(app).get(`/api/v1/shops/${SHOP}/cash`);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('Account status re-validation', () => {
+  it('rejects a disabled account even with a valid token', async () => {
+    authOwner();
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: OWNER, role: 'BUSINESS_OWNER', isActive: false, deletedAt: null, isPhoneVerified: true,
+    });
+    const res = await request(app)
+      .get(`/api/v1/shops/${SHOP}/customers`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('ACCOUNT_DISABLED');
+  });
+
+  it('rejects an employee whose assignment has been revoked', async () => {
+    mockPrisma.shop.findFirst.mockResolvedValue(null);
+    mockPrisma.employee.findFirst.mockResolvedValue(null);
+    const res = await request(app)
+      .get(`/api/v1/shops/${SHOP}/products`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('NO_ACTIVE_ASSIGNMENT');
+  });
+});
+
+describe('Employee data-access boundaries', () => {
+  it('denies the owner financial dashboard to employees', async () => {
+    authEmployee(['sales:view']);
+    const res = await request(app)
+      .get(`/api/v1/shops/${SHOP}/dashboard`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('allows the POS customer list with credit:create even without customers:view', async () => {
+    authEmployee(['credit:create']);
+    const res = await request(app)
+      .get(`/api/v1/shops/${SHOP}/customers`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('denies reading a single expense without expenses:read', async () => {
+    authEmployee(['expenses:create']);
+    mockPrisma.expense.findUnique.mockResolvedValue({ shopId: SHOP });
+    const res = await request(app)
+      .get('/api/v1/expenses/exp_1')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toMatch(/expenses:read/);
+  });
+});
+
+describe('Email + password auth migration', () => {
+  it('retires the OTP request endpoint with 410', async () => {
+    const res = await request(app).post('/api/v1/auth/otp/request').send({ phone: '0754000000' });
+    expect(res.status).toBe(410);
+    expect(res.body.error.message).toMatch(/email \+ password/i);
+  });
+
+  it('retires the employee PIN login endpoint with 410', async () => {
+    const res = await request(app).post('/api/v1/auth/employee/login').send({ phone: '0754111111', pin: '1234' });
+    expect(res.status).toBe(410);
   });
 });
