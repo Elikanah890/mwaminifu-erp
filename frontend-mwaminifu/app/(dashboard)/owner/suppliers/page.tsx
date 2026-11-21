@@ -89,7 +89,7 @@ export default function SuppliersPage() {
     <PageWrapper
       title={t('suppliers')}
       description={t('suppliers')}
-      breadcrumb={['Owner', t('inventory'), t('suppliers')]}
+      breadcrumb={[t('businessOwner'), t('inventory'), t('suppliers')]}
       actions={
         <div className="flex items-center gap-2">
           <button onClick={() => apiClient.download(`/shops/${activeShopId}/reports/suppliers/export?format=csv`, 'suppliers.csv')} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>

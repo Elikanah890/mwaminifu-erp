@@ -19,6 +19,7 @@ interface CommissionRow {
   createdAt: string;
   paidAt?: string | null;
   payout?: { id: string; reference?: string | null } | null;
+  payment?: { amount?: number; subscription?: { plan?: string } | null } | null;
 }
 
 interface PayoutRow {
@@ -96,6 +97,7 @@ export default function AgentCommissionsPage() {
                   <tr className="border-b border-border">
                     <th className="py-3 pr-4 font-semibold">Date</th>
                     <th className="py-3 pr-4 font-semibold">Customer</th>
+                    <th className="py-3 pr-4 font-semibold">Plan</th>
                     <th className="py-3 pr-4 font-semibold text-right">Amount</th>
                     <th className="py-3 pr-4 font-semibold">Status</th>
                     <th className="py-3 font-semibold">Payout Ref</th>
@@ -106,6 +108,7 @@ export default function AgentCommissionsPage() {
                     <tr key={c.id}>
                       <td className="py-3 pr-4 text-muted-foreground text-xs">{formatDate(c.createdAt)}</td>
                       <td className="py-3 pr-4 font-medium text-foreground">{c.owner?.name ?? '—'}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{c.payment?.subscription?.plan ?? '—'}</td>
                       <td className="py-3 pr-4 text-right font-semibold text-secondary">{formatCurrency(c.amount)}</td>
                       <td className="py-3 pr-4"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{c.status}</Pill></td>
                       <td className="py-3 font-mono text-xs text-muted-foreground">{c.payout?.reference ?? '—'}</td>

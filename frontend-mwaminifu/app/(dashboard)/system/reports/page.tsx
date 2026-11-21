@@ -29,6 +29,11 @@ interface OwnersReport {
 
 type Preset = 'today' | 'week' | 'month' | 'year' | 'custom';
 
+function actionLabel(action: string): string {
+  if (action === 'OWNER_PIN_RESET') return 'PASSWORD_RESET';
+  return action.replace(/_/g, ' ');
+}
+
 const PRESETS: Array<{ key: Preset; label: string }> = [
   { key: 'today', label: 'Today' },
   { key: 'week', label: 'This Week' },
@@ -77,7 +82,7 @@ export default function ReportsPage() {
         apiClient.get<OwnersReport>('/admin/reports/owners'),
         apiClient.get<PlatformStats>('/admin/platform-stats'),
         apiClient.get<ActivityLog[]>('/admin/activity-logs?limit=8'),
-        apiClient.get<Subscription[]>('/admin/subscriptions?limit=1000'),
+        apiClient.get<Subscription[]>('/admin/subscriptions?limit=200'),
       ]);
       if (agentsRes.data) setAgents(agentsRes.data);
       if (ownersRes.data) setOwners(ownersRes.data);
@@ -115,8 +120,9 @@ export default function ReportsPage() {
       .map(([k, v]) => ({ label: k, count: v }));
   }, [owners]);
 
-  const activeSubs = subscriptions.filter((s) => s.isActive).length;
-  const lapsedSubs = subscriptions.length - activeSubs;
+  const scopedSubs = subscriptions.filter((s) => !s.shop?.isArchived);
+  const activeSubs = scopedSubs.filter((s) => s.status === 'ACTIVE').length;
+  const lapsedSubs = scopedSubs.length - activeSubs;
   const subPie = [
     { name: 'Active', value: activeSubs, color: '#00897b' },
     { name: 'Lapsed', value: lapsedSubs, color: '#EF4444' },
@@ -240,7 +246,7 @@ export default function ReportsPage() {
                   {logs.map((log) => (
                     <li key={log.id} className="py-3 flex items-center justify-between gap-4 transition-colors hover:bg-muted -mx-2 px-2 rounded-lg">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground">{log.action.replace(/_/g, ' ')}</p>
+                        <p className="text-sm font-medium text-foreground">{actionLabel(log.action)}</p>
                         <p className="text-xs text-subtle-foreground truncate">{log.user?.name || 'System'} {log.shop ? `· ${log.shop.name}` : ''}</p>
                       </div>
                       <span className="text-xs text-subtle-foreground shrink-0">{formatDateTime(log.createdAt)}</span>

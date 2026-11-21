@@ -32,7 +32,7 @@ export class EmployeeService {
     await shopService.verifyShopAccess(shopId, ownerId);
 
     const employeeCount = await prisma.employee.count({
-      where: { shopId, isActive: true },
+      where: { shopId, isActive: true, deletedAt: null },
     });
     if (employeeCount >= 5) {
       throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Maximum 5 employees per shop' };
@@ -43,6 +43,7 @@ export class EmployeeService {
     const passwordHash = await hashPassword(tempPassword);
 
     let user = await prisma.user.findUnique({ where: { email } });
+    let createdNewUser = false;
 
     if (!user) {
       user = await prisma.user.create({
@@ -56,45 +57,62 @@ export class EmployeeService {
           isPinSet: false,
         },
       });
+      createdNewUser = true;
     } else if (user.role !== 'EMPLOYEE') {
       throw { status: 409, code: 'CONFLICT', message: 'This email belongs to a non-employee account' };
-    } else {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          name: data.name,
-          phone: data.phone || user.phone,
-          passwordHash,
-          mustChangePassword: true,
-          isActive: true,
-        },
-      });
+    } else if (user.isActive === false) {
+      // Re-enable the shared login without touching the existing password.
+      await prisma.user.update({ where: { id: user.id }, data: { isActive: true } });
     }
 
-    const existingEmployee = await prisma.employee.findFirst({
-      where: { userId: user.id, shopId },
+    const existingEmployee = await prisma.employee.findUnique({
+      where: { userId_shopId: { userId: user.id, shopId } },
     });
 
-    if (existingEmployee) {
+    if (existingEmployee && !existingEmployee.deletedAt && existingEmployee.isActive) {
       throw { status: 409, code: 'CONFLICT', message: 'Employee already assigned to this shop' };
     }
 
-    const employee = await prisma.employee.create({
-      data: {
-        userId: user.id,
-        shopId,
-        role: data.role || 'Cashier',
-        permissions: data.permissions && data.permissions.length > 0
-          ? data.permissions
-          : FULL_OPERATIONAL_PERMISSIONS,
-      },
-      include: { user: { select: { name: true, email: true, phone: true } } },
-    });
+    const [otherActiveAssignments, activePrimary] = await Promise.all([
+      prisma.employee.count({ where: { userId: user.id, isActive: true, deletedAt: null } }),
+      prisma.employee.findFirst({ where: { userId: user.id, isPrimary: true, isActive: true, deletedAt: null }, select: { id: true } }),
+    ]);
+    const isPrimary = otherActiveAssignments === 0 || !activePrimary;
 
-    // Email is best-effort and never blocks account creation.
-    await emailService.sendWelcomeEmail({ name: user.name, email }, tempPassword);
+    const permissions = data.permissions && data.permissions.length > 0
+      ? data.permissions
+      : FULL_OPERATIONAL_PERMISSIONS;
 
-    return { ...employee, tempPassword };
+    const employee = existingEmployee
+      ? await prisma.employee.update({
+          where: { id: existingEmployee.id },
+          data: {
+            role: data.role || existingEmployee.role,
+            permissions,
+            isActive: true,
+            deletedAt: null,
+            isPrimary,
+          },
+          include: { user: { select: { name: true, email: true, phone: true } } },
+        })
+      : await prisma.employee.create({
+          data: {
+            userId: user.id,
+            shopId,
+            role: data.role || 'Cashier',
+            permissions,
+            isPrimary,
+          },
+          include: { user: { select: { name: true, email: true, phone: true } } },
+        });
+
+    // Only a brand-new login needs the temporary password. Adding an existing
+    // employee to another shop must never reset their current password.
+    if (createdNewUser) {
+      await emailService.sendWelcomeEmail({ name: user.name, email }, tempPassword);
+    }
+
+    return { ...employee, tempPassword: createdNewUser ? tempPassword : null, createdNewUser };
   }
 
   async getEmployee(employeeId: string) {
@@ -124,6 +142,23 @@ export class EmployeeService {
     });
   }
 
+  private async ensurePrimaryAssignment(userId: string) {
+    const primary = await prisma.employee.findFirst({
+      where: { userId, isPrimary: true, isActive: true, deletedAt: null },
+      select: { id: true },
+    });
+    if (primary) return;
+
+    const next = await prisma.employee.findFirst({
+      where: { userId, isActive: true, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (next) {
+      await prisma.employee.update({ where: { id: next.id }, data: { isPrimary: true } });
+    }
+  }
+
   async updatePermissions(employeeId: string, permissions: string[]) {
     return prisma.employee.update({
       where: { id: employeeId },
@@ -139,7 +174,11 @@ export class EmployeeService {
 
     const updated = await prisma.employee.update({
       where: { id: employeeId },
-      data: { isActive: !employee.isActive },
+      data: {
+        isActive: !employee.isActive,
+        // Release the partial unique primary slot before promoting a colleague.
+        ...(!employee.isActive ? {} : { isPrimary: false }),
+      },
     });
 
     // A user may hold assignments in more than one shop; keep the login active
@@ -159,6 +198,7 @@ export class EmployeeService {
       });
     }
 
+    await this.ensurePrimaryAssignment(employee.userId);
     return updated;
   }
 
@@ -195,7 +235,7 @@ export class EmployeeService {
   async removeEmployee(employeeId: string) {
     const removed = await prisma.employee.update({
       where: { id: employeeId },
-      data: { isActive: false, deletedAt: new Date() },
+      data: { isActive: false, deletedAt: new Date(), isPrimary: false },
     });
 
     // Removing staff terminates access to this shop. Only disable the shared
@@ -211,6 +251,7 @@ export class EmployeeService {
       });
     }
 
+    await this.ensurePrimaryAssignment(removed.userId);
     return removed;
   }
 }

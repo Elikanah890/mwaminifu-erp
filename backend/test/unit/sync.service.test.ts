@@ -162,3 +162,20 @@ describe('syncService — permission enforcement', () => {
     expect(result.changes.customers).toHaveLength(1);
   });
 });
+
+describe('syncService.pullChanges — cursor safety', () => {
+  it('does not advance past unreturned records when an entity hits the limit', async () => {
+    const first = new Date('2026-01-01T00:00:00.000Z');
+    const second = new Date('2026-01-02T00:00:00.000Z');
+    mockPrisma.product.findMany.mockResolvedValue([
+      { id: 'p1', updatedAt: first },
+      { id: 'p2', updatedAt: second },
+    ]);
+
+    const result = await syncService.pullChanges(SHOP, '', 2, { role: 'BUSINESS_OWNER' });
+
+    expect(result.hasMore).toBe(true);
+    expect(new Date(result.serverVersion).getTime()).toBeLessThan(second.getTime());
+    expect(result.changes.products).toHaveLength(2);
+  });
+});

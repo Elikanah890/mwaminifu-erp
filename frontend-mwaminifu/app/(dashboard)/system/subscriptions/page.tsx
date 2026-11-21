@@ -178,7 +178,7 @@ export default function SubscriptionsPage() {
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className={`px-4 py-2 rounded-lg text-sm font-medium border ${tab === 'subscriptions' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'}`}
         >
-          Active Subscriptions ({meta.total})
+          Active Subscriptions ({meta.activeCount ?? 0})
         </motion.button>
       </Reveal>
 

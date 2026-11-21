@@ -72,6 +72,12 @@ export default function AgentsPage() {
     setShowCreate(true);
   };
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === '1') {
+      openCreate();
+    }
+  }, []);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -144,7 +150,7 @@ export default function AgentsPage() {
   };
 
   const handlePayout = async (agent: Agent) => {
-    if (!window.confirm(`Pay out ${formatCurrency(agent.commissionEarned ?? 0)} pending commission to ${agent.name}?`)) return;
+    if (!window.confirm(`Pay out ${formatCurrency(agent.commissionPending ?? 0)} pending commission to ${agent.name}?`)) return;
     try {
       const res = await apiClient.post<{ amount: number; reference: string }>(`/admin/agents/${agent.id}/payout`, {});
       toast(`Payout ${res.data?.reference ?? ''} sent (${formatCurrency(res.data?.amount ?? 0)})`);
@@ -216,18 +222,19 @@ export default function AgentsPage() {
           {agents.length === 0 ? (
             <EmptyState message="No agents found" />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                 <tr className="border-b border-border">
                   <th className="py-3 px-6 font-semibold">Agent Code</th>
                   <th className="py-3 px-6 font-semibold">Name</th>
-                  <th className="py-3 px-6 font-semibold">Phone</th>
-                  <th className="py-3 px-6 font-semibold">Customers Registered</th>
-                  <th className="py-3 px-6 font-semibold text-right">Commission Earned</th>
-                  <th className="py-3 px-6 font-semibold text-right">Commission Paid</th>
+                  <th className="hidden py-3 px-6 font-semibold sm:table-cell">Phone</th>
+                  <th className="hidden py-3 px-6 font-semibold md:table-cell">Customers Registered</th>
+                  <th className="hidden py-3 px-6 font-semibold text-right md:table-cell">Commission Pending</th>
+                  <th className="hidden py-3 px-6 font-semibold text-right md:table-cell">Commission Earned</th>
+                  <th className="hidden py-3 px-6 font-semibold text-right lg:table-cell">Commission Paid</th>
                   <th className="py-3 px-6 font-semibold">Status</th>
-                  <th className="py-3 px-6 font-semibold">Created</th>
+                  <th className="hidden py-3 px-6 font-semibold lg:table-cell">Created</th>
                   <th className="py-3 px-6 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -236,15 +243,16 @@ export default function AgentsPage() {
                   <tr key={agent.id} className="transition-colors hover:bg-muted">
                     <td className="py-3 px-6 font-mono text-primary">AGAC-{agent.username}</td>
                     <td className="py-3 px-6 font-medium text-foreground">{agent.name}</td>
-                    <td className="py-3 px-6 text-muted-foreground">{agent.phone || '-'}</td>
-                    <td className="py-3 px-6">{formatNumber(agent._count?.onboardedUsers ?? 0)}</td>
-                    <td className="py-3 px-6 text-right font-semibold text-secondary">{formatCurrency(agent.commissionEarned ?? 0)}</td>
-                    <td className="py-3 px-6 text-right text-muted-foreground">{formatCurrency(agent.commissionPaid ?? 0)}</td>
+                    <td className="hidden py-3 px-6 text-muted-foreground sm:table-cell">{agent.phone || '-'}</td>
+                    <td className="hidden py-3 px-6 md:table-cell">{formatNumber(agent._count?.onboardedUsers ?? 0)}</td>
+                    <td className="hidden py-3 px-6 text-right font-semibold text-warning md:table-cell">{formatCurrency(agent.commissionPending ?? 0)}</td>
+                    <td className="hidden py-3 px-6 text-right font-semibold text-secondary md:table-cell">{formatCurrency(agent.commissionEarned ?? 0)}</td>
+                    <td className="hidden py-3 px-6 text-right text-muted-foreground lg:table-cell">{formatCurrency(agent.commissionPaid ?? 0)}</td>
                     <td className="py-3 px-6">
                       <StatusBadge active={agent.isActive} />
                     </td>
-                    <td className="py-3 px-6 text-muted-foreground text-xs">{formatDate(agent.createdAt)}</td>
-                    <td className="py-3 px-6 text-right space-x-2">
+                    <td className="hidden py-3 px-6 text-muted-foreground text-xs lg:table-cell">{formatDate(agent.createdAt)}</td>
+                    <td className="py-3 px-6 text-right"><div className="flex flex-wrap items-center justify-end gap-2">
                       <button onClick={() => openDetail(agent.id)} className="text-xs text-secondary font-medium hover:underline">
                         View
                       </button>
@@ -254,7 +262,7 @@ export default function AgentsPage() {
                       <button onClick={() => handleResetPassword(agent)} className="text-xs text-primary font-medium hover:underline">
                         Reset password
                       </button>
-                      {(agent.commissionEarned ?? 0) - (agent.commissionPaid ?? 0) > 0 && (
+                      {(agent.commissionPending ?? 0) > 0 && (
                         <button onClick={() => handlePayout(agent)} className="text-xs text-success font-medium hover:underline">
                           Payout
                         </button>
@@ -265,11 +273,39 @@ export default function AgentsPage() {
                       <button onClick={() => setDeleting(agent)} className="text-xs text-danger font-medium hover:underline">
                         Delete
                       </button>
+                    </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
+          )}
+          {agents.length > 0 && (
+            <div className="divide-y divide-border md:hidden">
+              {agents.map((agent) => (
+                <div key={`mobile-${agent.id}`} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[11px] text-primary">AGAC-{agent.username}</p>
+                      <p className="mt-0.5 font-semibold text-foreground">{agent.name}</p>
+                      <p className="text-xs text-muted-foreground">{agent.email || agent.phone || '-'}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{formatNumber(agent._count?.onboardedUsers ?? 0)} customers · {formatCurrency(agent.commissionPending ?? 0)} pending · {formatCurrency(agent.commissionPaid ?? 0)} paid</p>
+                    </div>
+                    <StatusBadge active={agent.isActive} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2 text-xs font-medium">
+                    <button onClick={() => openDetail(agent.id)} className="text-secondary hover:underline">View</button>
+                    <button onClick={() => setEditing(agent)} className="text-secondary hover:underline">Edit</button>
+                    <button onClick={() => handleResetPassword(agent)} className="text-primary hover:underline">Reset password</button>
+                    {(agent.commissionPending ?? 0) > 0 && (
+                      <button onClick={() => handlePayout(agent)} className="text-success hover:underline">Payout</button>
+                    )}
+                    <button onClick={() => handleToggle(agent)} className="text-warning hover:underline">{agent.isActive ? 'Suspend' : 'Activate'}</button>
+                    <button onClick={() => setDeleting(agent)} className="text-danger hover:underline">Delete</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
           <div className="px-6 py-3 border-t border-border">
@@ -327,6 +363,12 @@ export default function AgentsPage() {
               <div className="stat-card"><p className="text-xs text-muted-foreground">Active Customers</p><p className="text-lg font-bold text-secondary">{formatNumber(detail.stats?.activeUsers ?? 0)}</p></div>
             </div>
 
+            <div className="grid grid-cols-3 gap-3">
+              <div className="stat-card"><p className="text-xs text-muted-foreground">Commission Earned</p><p className="text-lg font-bold text-primary">{formatCurrency(detail.stats?.commissionEarned ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">Commission Pending</p><p className="text-lg font-bold text-warning">{formatCurrency(detail.stats?.commissionPending ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">Commission Paid</p><p className="text-lg font-bold text-secondary">{formatCurrency(detail.stats?.commissionPaid ?? 0)}</p></div>
+            </div>
+
             <div>
               <h4 className="text-sm font-semibold text-primary mb-2">Registration Log ({detail.onboardedUsers?.length ?? 0})</h4>
               {detail.onboardedUsers?.length === 0 ? (
@@ -371,6 +413,7 @@ export default function AgentsPage() {
                         <tr className="border-b border-border">
                           <th className="py-2 px-3 font-semibold">Date</th>
                           <th className="py-2 px-3 font-semibold">Owner</th>
+                          <th className="py-2 px-3 font-semibold">Plan</th>
                           <th className="py-2 px-3 font-semibold text-right">Amount</th>
                           <th className="py-2 px-3 font-semibold">Status</th>
                         </tr>
@@ -380,6 +423,7 @@ export default function AgentsPage() {
                           <tr key={c.id}>
                             <td className="py-2 px-3 text-muted-foreground text-xs">{formatDate(c.createdAt)}</td>
                             <td className="py-2 px-3 font-medium">{c.owner?.name ?? '—'}</td>
+                            <td className="py-2 px-3 text-muted-foreground">{c.payment?.subscription?.plan ?? '—'}</td>
                             <td className="py-2 px-3 text-right font-semibold text-secondary">{formatCurrency(c.amount)}</td>
                             <td className="py-2 px-3"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{c.status}</Pill></td>
                           </tr>

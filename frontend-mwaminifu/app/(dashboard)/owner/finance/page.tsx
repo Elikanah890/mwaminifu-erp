@@ -39,7 +39,7 @@ export default function FinanceOverviewPage() {
   const s = data?.summary;
 
   return (
-    <PageWrapper title={t('financeOverview')} description={t('finance')} breadcrumb={['Owner', t('finance'), t('financeOverview')]}>
+    <PageWrapper title={t('financeOverview')} description={t('finance')} breadcrumb={[t('businessOwner'), t('finance'), t('financeOverview')]}>
       <PeriodSelector period={period} onChange={setPeriod} from={from} to={to} onFrom={setFrom} onTo={setTo} />
 
       {shopLoading || loading ? (

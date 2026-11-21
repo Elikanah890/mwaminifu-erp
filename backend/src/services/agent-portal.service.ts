@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { auditService, AuditContext } from './audit.service';
 import { getPagination, getSort } from '../utils/pagination.util';
 import { hashPassword, comparePassword } from '../utils/bcrypt.util';
+import { billingStatusForOwner } from '../utils/billing-status';
 
 const INSENSITIVE = { mode: 'insensitive' as const };
 
@@ -64,7 +65,9 @@ export interface AgentStats {
   activeBusinesses: number;
   inactiveBusinesses: number;
   pendingBusinesses: number;
+  lapsedBusinesses: number;
   totalShops: number;
+  totalCustomers: number;
   businessesThisMonth: number;
   businessesThisYear: number;
   shopsThisMonth: number;
@@ -81,48 +84,63 @@ export class AgentPortalService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
 
-    const [
-      totalBusinesses,
-      activeBusinesses,
-      inactiveBusinesses,
-      pendingBusinesses,
-      totalShops,
-      businessesThisMonth,
-      businessesThisYear,
-      shopsThisMonth,
-      shopsThisYear,
-    ] = await Promise.all([
-      prisma.user.count({ where: { agentId, role: 'BUSINESS_OWNER', deletedAt: null } }),
-      prisma.user.count({ where: { agentId, role: 'BUSINESS_OWNER', isActive: true, deletedAt: null } }),
-      prisma.user.count({ where: { agentId, role: 'BUSINESS_OWNER', isActive: false, deletedAt: null } }),
-      prisma.user.count({
-        where: { agentId, role: 'BUSINESS_OWNER', isActive: true, isPinSet: false, deletedAt: null },
-      }),
-      prisma.shop.count({
-        where: { owner: { agentId, role: 'BUSINESS_OWNER' }, isArchived: false, deletedAt: null },
-      }),
-      prisma.user.count({
-        where: { agentId, role: 'BUSINESS_OWNER', deletedAt: null, createdAt: { gte: startOfMonth } },
-      }),
-      prisma.user.count({
-        where: { agentId, role: 'BUSINESS_OWNER', deletedAt: null, createdAt: { gte: startOfYear } },
-      }),
-      prisma.shop.count({
-        where: { owner: { agentId, role: 'BUSINESS_OWNER' }, isArchived: false, deletedAt: null, createdAt: { gte: startOfMonth } },
-      }),
-      prisma.shop.count({
-        where: { owner: { agentId, role: 'BUSINESS_OWNER' }, isArchived: false, deletedAt: null, createdAt: { gte: startOfYear } },
-      }),
-    ]);
+    const businessRows = await prisma.user.findMany({
+      where: { agentId, role: 'BUSINESS_OWNER', deletedAt: null },
+      select: {
+        isActive: true,
+        isPinSet: true,
+        createdAt: true,
+        ownedShops: {
+          where: { isArchived: false, deletedAt: null },
+          select: {
+            subscriptions: {
+              select: {
+                status: true,
+                isActive: true,
+                endDate: true,
+                payments: { where: { status: 'COMPLETED' }, select: { id: true } },
+              },
+            },
+          },
+        },
+      },
+    });
 
-    const [earnedAgg, paidAgg, pendingAgg, monthAgg, agent] = await Promise.all([
-      prisma.commission.aggregate({ where: { agentId }, _sum: { amount: true } }),
+    const [totalShops, businessesThisMonth, businessesThisYear, shopsThisMonth, shopsThisYear] =
+      await Promise.all([
+        prisma.shop.count({
+          where: { owner: { agentId, role: 'BUSINESS_OWNER' }, isArchived: false, deletedAt: null },
+        }),
+        prisma.user.count({
+          where: { agentId, role: 'BUSINESS_OWNER', deletedAt: null, createdAt: { gte: startOfMonth } },
+        }),
+        prisma.user.count({
+          where: { agentId, role: 'BUSINESS_OWNER', deletedAt: null, createdAt: { gte: startOfYear } },
+        }),
+        prisma.shop.count({
+          where: { owner: { agentId, role: 'BUSINESS_OWNER' }, isArchived: false, deletedAt: null, createdAt: { gte: startOfMonth } },
+        }),
+        prisma.shop.count({
+          where: { owner: { agentId, role: 'BUSINESS_OWNER' }, isArchived: false, deletedAt: null, createdAt: { gte: startOfYear } },
+        }),
+      ]);
+
+    const statuses = businessRows.map((row) => ({
+      isActive: row.isActive,
+      status: billingStatusForOwner(
+        row.ownedShops.flatMap((shop) => shop.subscriptions),
+        now
+      ),
+    }));
+
+    const totalBusinesses = businessRows.length;
+    const activeBusinesses = statuses.filter((row) => row.isActive && row.status === 'ACTIVE').length;
+    const inactiveBusinesses = statuses.filter((row) => !row.isActive).length;
+    const pendingBusinesses = statuses.filter((row) => row.status === 'PENDING_PAYMENT').length;
+    const lapsedBusinesses = statuses.filter((row) => row.status === 'LAPSED').length;
+
+    const [paidAgg, pendingAgg, monthAgg, agent] = await Promise.all([
       prisma.commission.aggregate({ where: { agentId, status: 'PAID' }, _sum: { amount: true } }),
       prisma.commission.aggregate({ where: { agentId, status: 'PENDING' }, _sum: { amount: true } }),
       prisma.commission.aggregate({ where: { agentId, createdAt: { gte: startOfMonth } }, _sum: { amount: true } }),
@@ -136,12 +154,14 @@ export class AgentPortalService {
       activeBusinesses,
       inactiveBusinesses,
       pendingBusinesses,
+      lapsedBusinesses,
       totalShops,
+      totalCustomers: totalShops,
       businessesThisMonth,
       businessesThisYear,
       shopsThisMonth,
       shopsThisYear,
-      commissionEarned: round2(earnedAgg._sum.amount || 0),
+      commissionEarned: round2(paidAgg._sum.amount || 0),
       commissionPaid: round2(paidAgg._sum.amount || 0),
       commissionPending: round2(pendingAgg._sum.amount || 0),
       commissionThisMonth: round2(monthAgg._sum.amount || 0),
@@ -160,8 +180,13 @@ export class AgentPortalService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        // Spec 12.2 — no owner contact details for the agent.
-        include: { owner: { select: { id: true, name: true } }, payout: { select: { id: true, reference: true } } },
+        // Spec 12.2 — owner name only, but show the plan that generated the
+        // commission so the agent sees the exact breakdown.
+        include: {
+          owner: { select: { id: true, name: true } },
+          payout: { select: { id: true, reference: true } },
+          payment: { select: { amount: true, subscription: { select: { plan: true } } } },
+        },
       }),
     ]);
     return { commissions: rows, total, page, limit };
@@ -216,6 +241,15 @@ export class AgentPortalService {
               isArchived: true,
               createdAt: true,
               _count: { select: { employees: true, products: true } },
+              subscriptions: {
+                orderBy: { createdAt: 'desc' },
+                select: {
+                  status: true,
+                  isActive: true,
+                  endDate: true,
+                  payments: { where: { status: 'COMPLETED' }, select: { id: true } },
+                },
+              },
             },
             orderBy: { createdAt: 'desc' },
           },
@@ -224,34 +258,47 @@ export class AgentPortalService {
       }),
     ]);
 
-    const businessesWithActivity = await Promise.all(
-      businesses.map(async (b) => {
-        const lastActivity = await prisma.activityLog.findFirst({
-          where: { userId: b.id },
-          orderBy: { createdAt: 'desc' },
-          select: { createdAt: true },
-        });
-        const shopData = b.ownedShops.map(s => ({
-          id: s.id,
-          name: s.name,
-          address: s.address,
-          isArchived: s.isArchived,
-          createdAt: s.createdAt.toISOString(),
-          _count: s._count,
-        }));
-        return {
-          id: b.id,
-          name: b.name,
-          isActive: b.isActive,
-          isPinSet: b.isPinSet,
-          createdAt: b.createdAt.toISOString(),
-          agentId: b.agentId,
-          ownedShops: shopData,
-          _count: b._count,
-          lastActivity: lastActivity?.createdAt?.toISOString() ?? null,
-        } as AgentBusiness;
-      })
+    // One grouped query instead of one activity lookup per business (N+1).
+    const businessIds = businesses.map((b) => b.id);
+    const lastActivityRows = businessIds.length
+      ? await prisma.activityLog.groupBy({
+          by: ['userId'],
+          where: { userId: { in: businessIds } },
+          _max: { createdAt: true },
+        })
+      : [];
+    const lastActivityMap = new Map(
+      lastActivityRows
+        .filter((row) => row.userId)
+        .map((row) => [row.userId as string, row._max.createdAt])
     );
+
+    const businessesWithActivity = businesses.map((b) => {
+      const shopData = b.ownedShops.map((s) => ({
+        id: s.id,
+        name: s.name,
+        address: s.address,
+        isArchived: s.isArchived,
+        createdAt: s.createdAt.toISOString(),
+        _count: s._count,
+      }));
+      const billingStatus = billingStatusForOwner(
+        b.ownedShops.flatMap((s) => s.subscriptions ?? []),
+        new Date()
+      );
+      return {
+        id: b.id,
+        name: b.name,
+        isActive: b.isActive,
+        isPinSet: b.isPinSet,
+        billingStatus,
+        createdAt: b.createdAt.toISOString(),
+        agentId: b.agentId,
+        ownedShops: shopData,
+        _count: b._count,
+        lastActivity: lastActivityMap.get(b.id)?.toISOString() ?? null,
+      } as AgentBusiness;
+    });
 
     return { businesses: businessesWithActivity, total, page, limit };
   }

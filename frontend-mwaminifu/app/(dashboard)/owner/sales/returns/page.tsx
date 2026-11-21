@@ -125,7 +125,7 @@ export default function ReturnsPage() {
     <PageWrapper
       title={t('returns')}
       description={t('returns')}
-      breadcrumb={['Owner', t('sales'), t('returns')]}
+      breadcrumb={[t('businessOwner'), t('sales'), t('returns')]}
       actions={
         <div className="flex items-center gap-2">
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="input-field max-w-[180px]">

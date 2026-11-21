@@ -84,7 +84,11 @@ async function main() {
     if (user.role === 'AGENT') {
       await prisma.agent.updateMany({
         where: { username: user.username ?? undefined },
-        data: { email, passwordHash: passwordHash! },
+        data: {
+          email,
+          passwordHash: passwordHash!,
+          ...(user.username === 'agent1' ? { isActive: true, deletedAt: null } : {}),
+        },
       });
     }
 

@@ -14,6 +14,7 @@ import Modal from '@/components/Modal';
 import StatsCard from '@/components/StatsCard';
 import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
+import { usePermissions } from '@/lib/context/PermissionsContext';
 import { Plus, Receipt, Trash2, RefreshCw, TrendingUp, TrendingDown, Check, X } from 'lucide-react';
 
 const CATEGORIES = ['Rent', 'Wages', 'Transport', 'Utilities', 'Restocking', 'Food', 'Other'];
@@ -24,6 +25,7 @@ export default function OwnerExpensesPage() {
   const { activeShopId } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const { can } = usePermissions();
 
   const [tab, setTab] = useState<Tab>('expenses');
 
@@ -211,7 +213,7 @@ export default function OwnerExpensesPage() {
   const pendingCount = expenses.filter((e) => e.approvalStatus === 'PENDING').length;
 
   return (
-    <PageWrapper title={t('expenses')} description={t('expenses')} breadcrumb={['Owner', t('finance'), t('expenses')]}>
+    <PageWrapper title={t('expenses')} description={t('expenses')} breadcrumb={[t('businessOwner'), t('finance'), t('expenses')]}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex gap-2">
           {(['expenses', 'recurring', 'capital'] as Tab[]).map((tb) => (
@@ -250,7 +252,7 @@ export default function OwnerExpensesPage() {
               {loading ? (
                 <SkeletonTable rows={6} />
               ) : filteredExpenses.length === 0 ? (
-                <EmptyState message={t('noData')} />
+                <EmptyState icon={<Receipt size={22} />} title={t('noExpensesYet')} description={t('noExpensesDesc')} action={can('expenses:create') ? <button onClick={() => setAddOpen(true)} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addExpense')}</button> : undefined} />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -297,7 +299,7 @@ export default function OwnerExpensesPage() {
 
             <ChartWrapper title={t('byCategory')} subtitle={t('expenses')}>
               {byCategory.length === 0 ? (
-                <EmptyState message={t('noData')} />
+                <EmptyState icon={<Receipt size={22} />} title={t('noExpensesYet')} description={t('noExpensesDesc')} />
               ) : (
                 <ul className="divide-y divide-border">
                   {byCategory.map((c) => (
@@ -322,7 +324,7 @@ export default function OwnerExpensesPage() {
           {recurringLoading ? (
             <SkeletonTable rows={5} />
           ) : recurring.length === 0 ? (
-            <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+            <Reveal><div className="surface-card"><EmptyState icon={<Receipt size={22} />} title={t('noExpensesYet')} description={t('noExpensesDesc')} /></div></Reveal>
           ) : (
             <Reveal><div className="surface-card overflow-x-auto">
               <table className="w-full text-sm">
@@ -362,7 +364,7 @@ export default function OwnerExpensesPage() {
           {capitalLoading ? (
             <SkeletonTable rows={5} />
           ) : capital.length === 0 ? (
-            <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+            <Reveal><div className="surface-card"><EmptyState icon={<Receipt size={22} />} title={t('noExpensesYet')} description={t('noExpensesDesc')} /></div></Reveal>
           ) : (
             <Reveal><div className="surface-card overflow-x-auto">
               <table className="w-full text-sm">

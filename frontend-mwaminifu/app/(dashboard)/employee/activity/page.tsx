@@ -12,23 +12,34 @@ import ChartWrapper from '@/components/ChartWrapper';
 import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Stagger, StaggerItem } from '@/components/motion';
+import { usePermissions } from '@/lib/context/PermissionsContext';
+import AccessDenied from '@/components/AccessDenied';
 
 type Activity = { sales: SaleListItem[]; shifts: Shift[] };
 
 export default function EmployeeActivityPage() {
-  const { loading: shopLoading } = useShop();
+  const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const { can, loading: permsLoading } = usePermissions();
   const [activity, setActivity] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!activeShopId || !can('sales:view')) return;
     setLoading(true);
     apiClient.get<Activity>('/employee/activity')
       .then((res) => setActivity(res.data ?? null))
       .catch((err) => toast(errorMessage(err), 'error'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeShopId, toast, can]);
+
+  if (permsLoading) {
+    return <PageWrapper title={t('myActivity')}><SkeletonCard rows={6} /></PageWrapper>;
+  }
+  if (!can('sales:view')) {
+    return <PageWrapper title={t('myActivity')}><AccessDenied /></PageWrapper>;
+  }
 
   if (shopLoading || loading) {
     return (
@@ -42,7 +53,7 @@ export default function EmployeeActivityPage() {
   }
 
   return (
-    <PageWrapper title={t('myActivity')} description={t('mySales')} breadcrumb={['Employee', t('myActivity')]}>
+    <PageWrapper title={t('myActivity')} description={t('mySales')} breadcrumb={[t('employeePortal'), t('myActivity')]}>
       <Stagger className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <StaggerItem>
           <ChartWrapper title={t('mySales')} subtitle={t('salesHistory')}>

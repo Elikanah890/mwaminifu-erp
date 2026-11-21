@@ -80,13 +80,21 @@ function LoginForm() {
 
   useEffect(() => {
     const code = searchParams.get('error');
-    if (!code) return;
-    if (code === 'not_registered') {
-      setError(sw ? 'Barua pepe hii haijasajiliwa. Wasiliana na Agent.' : 'Email not registered. Contact your Agent.');
-    } else if (code === 'inactive') {
-      setError(sw ? 'Akaunti imezimwa. Wasiliana na msaada.' : 'Account inactive. Contact support.');
-    } else {
-      setError(sw ? 'Imeshindikana kuingia. Jaribu tena.' : 'Sign-in failed. Please try again.');
+    if (code) {
+      if (code === 'not_registered') {
+        setError(sw ? 'Barua pepe hii haijasajiliwa. Wasiliana na Agent.' : 'Email not registered. Contact your Agent.');
+      } else if (code === 'inactive') {
+        setError(sw ? 'Akaunti imezimwa. Wasiliana na msaada.' : 'Account inactive. Contact support.');
+      } else {
+        setError(sw ? 'Imeshindikana kuingia. Jaribu tena.' : 'Sign-in failed. Please try again.');
+      }
+    }
+    if (searchParams.get('changed') === '1') {
+      setInfo(
+        sw
+          ? 'Nenosiri limebadilishwa. Tafadhali ingia tena kwa nenosiri jipya.'
+          : 'Password changed successfully. Please sign in again with your new password.'
+      );
     }
   }, [searchParams, sw]);
 

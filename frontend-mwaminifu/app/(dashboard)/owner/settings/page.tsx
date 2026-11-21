@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
@@ -12,7 +13,7 @@ import { SkeletonCard } from '@/components/Spinner';
 import { Reveal, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
 import { clearOfflineData } from '@/lib/offline/db';
-import { Save, Trash2 } from 'lucide-react';
+import { Save, Trash2, Store } from 'lucide-react';
 
 export default function OwnerSettingsPage() {
   const { activeShopId, loading: shopLoading } = useShop();
@@ -24,7 +25,7 @@ export default function OwnerSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
 
-  const [profileForm, setProfileForm] = useState({ name: '', address: '' });
+  const [profileForm, setProfileForm] = useState({ name: '', address: '', businessCategory: '', region: '', district: '', ward: '', street: '' });
   const [receiptForm, setReceiptForm] = useState({ receiptHeader: '', receiptFooter: '' });
   const [language, setLanguage] = useState<string>(locale);
 
@@ -39,7 +40,15 @@ export default function OwnerSettingsPage() {
         const shopData = s.data;
         if (shopData) {
           setShop(shopData);
-          setProfileForm({ name: shopData.name, address: shopData.address ?? '' });
+          setProfileForm({
+            name: shopData.name,
+            address: shopData.address ?? '',
+            businessCategory: shopData.businessCategory ?? '',
+            region: shopData.region ?? '',
+            district: shopData.district ?? '',
+            ward: shopData.ward ?? '',
+            street: shopData.street ?? '',
+          });
           setReceiptForm({ receiptHeader: shopData.receiptHeader ?? '', receiptFooter: shopData.receiptFooter ?? '' });
         }
         const stData = st.data;
@@ -55,7 +64,7 @@ export default function OwnerSettingsPage() {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await apiClient.put(`/shops/${activeShopId}`, { name: profileForm.name, address: profileForm.address });
+      await apiClient.put(`/shops/${activeShopId}`, profileForm);
       toast(t('update'), 'success');
     } catch (err) {
       toast(errorMessage(err), 'error');
@@ -117,7 +126,17 @@ export default function OwnerSettingsPage() {
     );
 
   return (
-    <PageWrapper title={t('settings')} description={t('settings')} breadcrumb={['Owner', t('settings')]}>
+    <PageWrapper title={t('settings')} description={t('settings')} breadcrumb={[t('businessOwner'), t('settings')]}>
+      <Link href="/owner/settings/shops" className="mb-6 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-muted">
+        <span className="flex items-center gap-3">
+          <Store size={18} className="text-secondary" />
+          <span>
+            <span className="block text-sm font-semibold text-foreground">{t('shops')}</span>
+            <span className="block text-xs text-muted-foreground">{t('manageShops')}</span>
+          </span>
+        </span>
+        <span className="text-sm font-medium text-secondary">{t('viewAll')}</span>
+      </Link>
       <Reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartWrapper title={t('shopProfile')} subtitle={t('shopProfile')}>
           <div className="space-y-4">
@@ -128,6 +147,28 @@ export default function OwnerSettingsPage() {
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('address')}</label>
               <input value={profileForm.address} onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} className="input-field" />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{t('shopCategory')}</label>
+                <input value={profileForm.businessCategory} onChange={(e) => setProfileForm({ ...profileForm, businessCategory: e.target.value })} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{t('region')}</label>
+                <input value={profileForm.region} onChange={(e) => setProfileForm({ ...profileForm, region: e.target.value })} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{t('district')}</label>
+                <input value={profileForm.district} onChange={(e) => setProfileForm({ ...profileForm, district: e.target.value })} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{t('ward')}</label>
+                <input value={profileForm.ward} onChange={(e) => setProfileForm({ ...profileForm, ward: e.target.value })} className="input-field" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">{t('street')}</label>
+                <input value={profileForm.street} onChange={(e) => setProfileForm({ ...profileForm, street: e.target.value })} className="input-field" />
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Currency</span>

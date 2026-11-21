@@ -14,7 +14,8 @@ import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { useToast } from '@/components/Toast';
-import { PackageMinus, Plus, Search, Pencil, Trash2, Upload, X, Download, Percent, ScanBarcode, Wand2 } from 'lucide-react';
+import { usePermissions } from '@/lib/context/PermissionsContext';
+import { Package, PackageMinus, Plus, Search, Pencil, Trash2, Upload, X, Download, Percent, ScanBarcode, Wand2 } from 'lucide-react';
 
 const UNITS = ['piece', 'pack', 'bottle', 'box', 'carton', 'kg', 'gram', 'litre', 'millilitre', 'metre', 'dozen', 'tray', 'loaf', 'tube', 'ream'];
 
@@ -76,6 +77,7 @@ export default function OwnerInventoryPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const { can } = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState('');
@@ -370,7 +372,7 @@ export default function OwnerInventoryPage() {
     <PageWrapper
       title={t('products')}
       description={t('products')}
-      breadcrumb={['Owner', t('inventory'), t('products')]}
+      breadcrumb={[t('businessOwner'), t('inventory'), t('products')]}
       actions={
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => apiClient.download(`/shops/${activeShopId}/reports/products/export?format=csv`, 'products.csv')} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>
@@ -390,7 +392,12 @@ export default function OwnerInventoryPage() {
       {shopLoading || loading ? (
         <SkeletonTable rows={8} />
       ) : products.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState
+          icon={<Package size={22} />}
+          title={t('noProductsYet')}
+          description={t('noProductsDesc')}
+          action={can('products:create') ? <button onClick={openCreate} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addProduct')}</button> : undefined}
+        /></div></Reveal>
       ) : (
         <Reveal><div className="surface-card overflow-x-auto">
           <table className="w-full text-sm">

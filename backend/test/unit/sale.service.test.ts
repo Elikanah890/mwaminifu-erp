@@ -123,7 +123,7 @@ describe('saleService suspend / resume', () => {
 
   it('completes a suspended sale and decrements stock', async () => {
     mockPrisma.sale.findFirst.mockResolvedValue({ id: 's1', items: [{ productId: 'p1', quantity: 2 }] });
-    mockPrisma.product.update.mockResolvedValue({});
+    mockPrisma.product.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.sale.update.mockResolvedValue({ id: 's1', status: 'COMPLETED' });
     expect((await saleService.completeSuspendedSale('s1', SHOP, USER, [{ method: 'cash', amount: 2000 }])).status).toBe('COMPLETED');
   });
@@ -163,7 +163,10 @@ describe('saleService.refundSale', () => {
     mockRefundEffects();
     const refund = await saleService.refundSale('s1', SHOP, USER, { reason: 'Damaged' });
     expect(refund.id).toBe('r1');
-    expect(mockPrisma.product.update).toHaveBeenCalled();
+    expect(mockPrisma.product.update).toHaveBeenCalledWith({
+      where: { id: 'p1' },
+      data: { stockQuantity: { increment: 2 }, baseUnitStock: { increment: 2 } },
+    });
     expect(mockPrisma.cashTransaction.create).toHaveBeenCalled();
   });
 

@@ -62,7 +62,7 @@ export default function EmployeeDashboardPage() {
     : "Here's a quick look at your activity today.";
 
   return (
-    <PageWrapper title={friendlyTitle} description={friendlyDesc} breadcrumb={['Employee', t('dashboard')]}>
+    <PageWrapper title={friendlyTitle} description={friendlyDesc} breadcrumb={[t('employeePortal'), t('dashboard')]}>
       {error && <Reveal><div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div></Reveal>}
 
       <Reveal className="mb-6">
@@ -112,13 +112,11 @@ export default function EmployeeDashboardPage() {
                   <Link href="/employee/sales" className="btn-teal inline-flex items-center gap-2"><ShoppingCart size={16} /> {t('newSale')}</Link>
                 </motion.div>
               )}
-              <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
-                {isOpen ? (
-                  <Link href="/employee/shift" className="btn-gold inline-flex items-center gap-2"><Clock size={16} /> {t('closeShift')}</Link>
-                ) : (
-                  <Link href="/employee/shift" className="btn-navy inline-flex items-center gap-2"><Clock size={16} /> {t('openShift')}</Link>
-                )}
-              </motion.div>
+              {(can('shift:view') || can('shift:open') || can('shift:close')) && (
+                <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }}>
+                  <Link href="/employee/shift" className="btn-gold inline-flex items-center gap-2"><Clock size={16} /> {isOpen ? t('closeShift') : t('openShift')}</Link>
+                </motion.div>
+              )}
             </div>
           </div>
         </MotionCard>

@@ -37,7 +37,7 @@ export default function RegionsPage() {
       setLoading(true);
       setError('');
       try {
-        const shopsRes = await apiClient.get<Shop[]>('/admin/shops?limit=1000');
+        const shopsRes = await apiClient.get<Shop[]>('/admin/shops?limit=200');
         if (cancelled) return;
         if (shopsRes.data) setShops(shopsRes.data);
       } catch (err) {
@@ -55,7 +55,7 @@ export default function RegionsPage() {
   const rows: RegionRow[] = useMemo(() => {
     const map = new Map<string, { shops: number; owners: Set<string> }>();
     for (const shop of shops) {
-      const region = extractRegion(shop.address);
+      const region = shop.region?.trim() || extractRegion(shop.address);
       const entry = map.get(region) ?? { shops: 0, owners: new Set<string>() };
       entry.shops += 1;
       if (shop.ownerId) entry.owners.add(shop.ownerId);
@@ -73,7 +73,9 @@ export default function RegionsPage() {
       .sort((a, b) => b.shops - a.shops);
   }, [shops]);
 
-  const chart = rows.slice(0, 12).map((r) => ({ name: r.region, shops: r.shops }));
+  const regionalRows = rows.filter((r) => r.region !== 'Unspecified');
+  const hasRegionData = regionalRows.length > 0;
+  const chart = regionalRows.slice(0, 12).map((r) => ({ name: r.region, shops: r.shops }));
 
   if (loading)
     return (
@@ -100,8 +102,8 @@ export default function RegionsPage() {
       breadcrumb={['System', 'Regions']}
     >
       <ChartWrapper title="Shop Density by Region" subtitle="Top regions by shop count" className="mb-6">
-        {chart.length === 0 ? (
-          <EmptyState message="No shop data available" />
+        {!hasRegionData ? (
+          <EmptyState message="No region data available. Add shops with region info to see this map." />
         ) : (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -128,14 +130,14 @@ export default function RegionsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {rows.length === 0 ? (
+            {!hasRegionData ? (
               <tr>
                 <td colSpan={3}>
-                  <EmptyState message="No geographic data available" />
+                  <EmptyState message="No region data available. Add shops with region info to see this map." />
                 </td>
               </tr>
             ) : (
-              rows.map((r) => (
+              regionalRows.map((r) => (
                 <tr key={r.region} className="transition-colors hover:bg-muted">
                   <td className="py-3 px-6 font-medium text-foreground">{r.region}</td>
                   <td className="py-3 px-6">{formatNumber(r.shops)}</td>

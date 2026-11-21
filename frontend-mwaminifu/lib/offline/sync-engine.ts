@@ -165,15 +165,30 @@ class SyncEngine {
   private async pull(): Promise<void> {
     const shopId = await kvGet<string>('activeShopId');
     if (!shopId) return;
-    const since = (await kvGet<string>('lastPullAt')) || new Date(0).toISOString();
-    const params = new URLSearchParams({ shopId, since, limit: '500' });
-    const { response, data } = await rawFetch(`/sync/pull?${params.toString()}`);
-    if (!response.ok || !data || typeof data !== 'object') return;
-    const payload = (data as { data?: { changes?: Record<string, unknown>; serverVersion?: string } }).data;
-    if (!payload) return;
-    if (payload.serverVersion) await kvSet('lastPullAt', payload.serverVersion);
-    const products = (payload.changes?.products as SnapshotProduct[]) || [];
-    if (products.length) await this.detectPriceChanges(products);
+
+    let since = (await kvGet<string>('lastPullAt')) || new Date(0).toISOString();
+
+    // Drain all pages so a shop with more than one page of changes does not
+    // have to wait for the next 5-minute poll to become current.
+    for (let page = 0; page < 10; page++) {
+      const params = new URLSearchParams({ shopId, since, limit: '500' });
+      const { response, data } = await rawFetch(`/sync/pull?${params.toString()}`);
+      if (!response.ok || !data || typeof data !== 'object') return;
+
+      const payload = (data as {
+        data?: { changes?: Record<string, unknown>; serverVersion?: string; hasMore?: boolean };
+      }).data;
+      if (!payload) return;
+
+      const products = (payload.changes?.products as SnapshotProduct[]) || [];
+      if (products.length) await this.detectPriceChanges(products);
+
+      if (!payload.serverVersion) return;
+      await kvSet('lastPullAt', payload.serverVersion);
+      since = payload.serverVersion;
+
+      if (!payload.hasMore) return;
+    }
   }
 
   private async detectPriceChanges(products: SnapshotProduct[]): Promise<void> {

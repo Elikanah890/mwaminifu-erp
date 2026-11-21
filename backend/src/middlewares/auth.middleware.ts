@@ -3,6 +3,27 @@ import { verifyToken, JwtPayload } from '../utils/jwt.util';
 import logger from '../utils/logger.util';
 import prisma from '../config/database';
 
+function firstString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) return value[0].trim();
+  return null;
+}
+
+/**
+ * Resolve the shop the caller is actually operating on. The active shop is
+ * sent by the client as X-Shop-Id, or appears in the route/body/query. Never
+ * fall back to an arbitrary assignment: employees are resolved against this
+ * shop, so a token issued for Shop A cannot carry Shop A permissions into B.
+ */
+function requestedShopId(req: Request): string | null {
+  return (
+    firstString(req.headers['x-shop-id']) ||
+    firstString(req.params?.shopId) ||
+    firstString((req.body as Record<string, unknown> | undefined)?.shopId) ||
+    firstString(req.query?.shopId)
+  );
+}
+
 export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
@@ -42,13 +63,34 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     // Reload employee permissions/shop from DB so permission changes
     // take effect immediately (JWT permissions can be stale).
     if (role === 'EMPLOYEE') {
-      const employee = await prisma.employee.findFirst({
-        where: { userId: decoded.sub, isActive: true, deletedAt: null },
-      });
+      const targetShopId = requestedShopId(req);
+
+      // If the client names a shop, the assignment must be for that exact shop.
+      const employee = targetShopId
+        ? await prisma.employee.findFirst({
+            where: { userId: decoded.sub, shopId: targetShopId, isActive: true, deletedAt: null },
+          })
+        : await prisma.employee.findFirst({
+            where: { userId: decoded.sub, isActive: true, deletedAt: null },
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          });
+
       if (!employee) {
+        const anyActive = targetShopId
+          ? await prisma.employee.findFirst({
+              where: { userId: decoded.sub, isActive: true, deletedAt: null },
+              select: { id: true },
+            })
+          : null;
+        const code = targetShopId && anyActive ? 'SHOP_ACCESS_DENIED' : 'NO_ACTIVE_ASSIGNMENT';
         res.status(403).json({
           success: false,
-          error: { code: 'NO_ACTIVE_ASSIGNMENT', message: 'Your staff assignment is no longer active.' },
+          error: {
+            code,
+            message: code === 'SHOP_ACCESS_DENIED'
+              ? 'You are not assigned to this shop.'
+              : 'Your staff assignment is no longer active.',
+          },
           timestamp: new Date().toISOString(),
         });
         return;

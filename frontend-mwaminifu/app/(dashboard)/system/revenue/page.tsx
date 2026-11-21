@@ -11,13 +11,6 @@ import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal, motion } from '@/components/motion';
 import { Pill } from '@/components/StatusBadge';
 
-function monthlyFactor(cycle: string): number {
-  const c = (cycle || '').toLowerCase();
-  if (c.includes('year')) return 1 / 12;
-  if (c.includes('week')) return 4.33;
-  return 1;
-}
-
 export default function RevenuePage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -36,7 +29,7 @@ export default function RevenuePage() {
     setError('');
     try {
       const [subsRes, plansRes, dashRes] = await Promise.all([
-        apiClient.get<Subscription[]>('/admin/subscriptions?limit=1000'),
+        apiClient.get<Subscription[]>('/admin/subscriptions?limit=200'),
         apiClient.get<SubscriptionPlan[]>('/admin/subscriptions/plans'),
         apiClient.get<AdminDashboard>('/admin/dashboard?granularity=monthly'),
       ]);
@@ -54,44 +47,24 @@ export default function RevenuePage() {
     load();
   }, [load]);
 
-  const active = useMemo(() => subscriptions.filter((s) => s.isActive), [subscriptions]);
+  const active = useMemo(() => subscriptions.filter((s) => s.status === 'ACTIVE' && !s.shop?.isArchived), [subscriptions]);
 
   const filtered = useMemo(() => {
-    if (statusFilter === 'active') return subscriptions.filter((s) => s.isActive);
-    if (statusFilter === 'expired') return subscriptions.filter((s) => !s.isActive);
+    if (statusFilter === 'active') return subscriptions.filter((s) => s.status === 'ACTIVE');
+    if (statusFilter === 'expired') return subscriptions.filter((s) => s.status !== 'ACTIVE');
     return subscriptions;
   }, [subscriptions, statusFilter]);
 
-  const planMap = useMemo(() => {
-    const m = new Map<string, SubscriptionPlan>();
-    for (const p of plans) m.set(p.name.toLowerCase(), p);
-    return m;
-  }, [plans]);
-
-  const agacRevenue = useMemo(
-    () =>
-      active.reduce((sum, s) => {
-        const plan = planMap.get((s.plan || '').toLowerCase());
-        if (!plan) return sum;
-        return sum + plan.price * monthlyFactor(plan.billingCycle);
-      }, 0),
-    [active, planMap]
-  );
-
   const byPlan = useMemo(() => {
-    const m = new Map<string, { count: number; revenue: number }>();
+    const m = new Map<string, number>();
     for (const s of active) {
-      const plan = planMap.get((s.plan || '').toLowerCase());
       const key = s.plan || 'Unknown';
-      const entry = m.get(key) ?? { count: 0, revenue: 0 };
-      entry.count += 1;
-      entry.revenue += plan ? plan.price * monthlyFactor(plan.billingCycle) : 0;
-      m.set(key, entry);
+      m.set(key, (m.get(key) ?? 0) + 1);
     }
     return Array.from(m.entries())
-      .map(([plan, v]) => ({ plan, ...v }))
+      .map(([plan, count]) => ({ plan, count }))
       .sort((a, b) => b.count - a.count);
-  }, [active, planMap]);
+  }, [active]);
 
   return (
     <PageWrapper title="Platform Revenue" description="AGAC revenue from shop subscriptions" breadcrumb={['System', 'Revenue']}>
@@ -119,10 +92,10 @@ export default function RevenuePage() {
       ) : (
         <>
           <Stagger className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StaggerItem><StatsCard title="Total Subscriptions" value={formatNumber(active.length)} tone="navy" sub="active subscriptions" /></StaggerItem>
-            <StaggerItem><StatsCard title="Total AGAC Revenue" value={formatCurrency(agacRevenue)} tone="teal" sub="monthly subscription revenue" /></StaggerItem>
-            <StaggerItem><StatsCard title="Commissions Paid" value={formatCurrency(money?.commissionsPaid ?? 0)} tone="gold" sub="paid to agents" /></StaggerItem>
-            <StaggerItem><StatsCard title="Net AGAC Income" value={formatCurrency(money?.netIncome ?? agacRevenue)} tone="navy" sub="revenue less commissions" /></StaggerItem>
+            <StaggerItem><StatsCard title="Active Subscriptions" value={formatNumber(active.length)} tone="navy" sub="active shops only" /></StaggerItem>
+            <StaggerItem><StatsCard title="Total Subscription Revenue" value={formatCurrency(money?.totalRevenue ?? 0)} tone="teal" sub="from payments received" /></StaggerItem>
+            <StaggerItem><StatsCard title="MRR (This Month)" value={formatCurrency(money?.monthlyRevenue ?? 0)} tone="gold" sub="payments this month" /></StaggerItem>
+            <StaggerItem><StatsCard title="Net Platform Income" value={formatCurrency(money?.netIncome ?? 0)} tone="navy" sub={`after ${formatCurrency(money?.commissionsPaid ?? 0)} commissions`} /></StaggerItem>
           </Stagger>
 
           <Reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -136,7 +109,7 @@ export default function RevenuePage() {
                     <tr className="border-b border-border">
                       <th className="py-3 px-3 font-semibold">Plan</th>
                       <th className="py-3 px-3 font-semibold">Subscriptions</th>
-                      <th className="py-3 px-3 text-right font-semibold">Monthly Revenue</th>
+                      <th className="py-3 px-3 text-right font-semibold">Share</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -144,7 +117,9 @@ export default function RevenuePage() {
                       <tr key={row.plan} className="transition-colors hover:bg-muted">
                         <td className="py-2.5 px-3 font-medium text-foreground">{row.plan}</td>
                         <td className="py-2.5 px-3 text-muted-foreground">{row.count}</td>
-                        <td className="py-2.5 px-3 text-right font-medium text-secondary">{formatCurrency(row.revenue)}</td>
+                        <td className="py-2.5 px-3 text-right font-medium text-secondary">
+                          {active.length ? `${Math.round((row.count / active.length) * 100)}%` : '0%'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

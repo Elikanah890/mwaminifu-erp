@@ -5,6 +5,25 @@ import { uuid } from '@/lib/offline/ids';
 
 const PROXY_BASE = '/api/proxy';
 
+// Active shop for all authenticated requests. Set by ShopContext and sent as
+// X-Shop-Id so the backend resolves permissions for the exact assignment the
+// user is working in (critical for employees assigned to multiple shops).
+let activeShopId: string | null = null;
+
+export function setApiActiveShopId(shopId: string | null): void {
+  activeShopId = shopId;
+}
+
+export function getApiActiveShopId(): string | null {
+  return activeShopId;
+}
+
+function shopHeaders(endpoint: string): Record<string, string> {
+  if (!activeShopId) return {};
+  if (endpoint === '/shops' || endpoint.startsWith('/auth')) return {};
+  return { 'X-Shop-Id': activeShopId };
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -130,6 +149,26 @@ function offlineCacheRuleFor(endpoint: string): CacheRule | undefined {
   return OFFLINE_CACHE_RULES.find((r) => r.test.test(path));
 }
 
+// Only these writes are safe to replay: they are idempotent on the backend
+// (clientId / natural idempotency). Other POST actions need a connection so a
+// replayed request can never create duplicate records.
+const OFFLINE_WRITE_RULES: Array<{ method: string; test: RegExp }> = [
+  { method: 'POST', test: /^\/shops\/[^/]+\/sales$/ },
+  { method: 'POST', test: /^\/shops\/[^/]+\/expenses$/ },
+  { method: 'POST', test: /^\/shops\/[^/]+\/customers$/ },
+  { method: 'POST', test: /^\/shops\/[^/]+\/products$/ },
+  { method: 'POST', test: /^\/customers\/[^/]+\/credit-payment$/ },
+  { method: 'POST', test: /^\/products\/[^/]+\/adjust-stock$/ },
+  { method: 'PUT', test: /^\/products\/[^/]+$/ },
+  { method: 'PUT', test: /^\/customers\/[^/]+$/ },
+  { method: 'PUT', test: /^\/expenses\/[^/]+$/ },
+];
+
+function isOfflineWritable(method: string, endpoint: string): boolean {
+  const path = endpoint.split('?')[0];
+  return OFFLINE_WRITE_RULES.some((rule) => rule.method === method && rule.test.test(path));
+}
+
 function isOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
@@ -216,7 +255,7 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
   // ---------------- GET ----------------
   if (method === 'GET') {
     try {
-      const response = await fetch(`${PROXY_BASE}${endpoint}`);
+      const response = await fetch(`${PROXY_BASE}${endpoint}`, { headers: shopHeaders(endpoint) });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         await authExpiredIfNeeded(response.status);
@@ -244,7 +283,13 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
   const clientId = uuid();
   const payload = withClientId(options.body, clientId);
 
-  if (!isOnline() && !isSensitive(endpoint)) {
+  if (!isOnline()) {
+    if (isSensitive(endpoint) || !isOfflineWritable(method, endpoint)) {
+      throw new ApiErrorException(0, {
+        code: 'OFFLINE',
+        message: 'This action needs an internet connection. Nothing was saved.',
+      });
+    }
     const offlineBody = withOfflineFlags(options.body, clientId);
     await enqueue({ method: method as 'POST' | 'PUT' | 'PATCH' | 'DELETE', endpoint, body: offlineBody, clientId });
     return optimistic<T>(offlineBody, clientId);
@@ -257,6 +302,7 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
       headers: {
         'Content-Type': 'application/json',
         ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        ...shopHeaders(endpoint),
       },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
@@ -270,7 +316,7 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
     return data as ApiResponse<T>;
   } catch (e) {
     if (e instanceof ApiErrorException) throw e;
-    if (isSensitive(endpoint)) throw e;
+    if (isSensitive(endpoint) || !isOfflineWritable(method, endpoint)) throw e;
     // Network failure mid-write: queue it. The server never processed this
     // request, so replaying it will not create a duplicate.
     const offlineBody = withOfflineFlags(options.body, clientId);
@@ -298,6 +344,7 @@ class ApiClient {
       }
       const user = (data as ApiResponse<{ user: PublicUser }>)?.data?.user;
       if (user) {
+        setApiActiveShopId(null);
         await cacheCredential(normalized, password, user);
         this.setUser(user);
       }
@@ -361,6 +408,7 @@ class ApiClient {
       if (isOnline()) await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
       currentUser = null;
+      setApiActiveShopId(null);
       if (typeof document !== 'undefined') {
         document.cookie = 'user=; Max-Age=0; path=/;';
       }

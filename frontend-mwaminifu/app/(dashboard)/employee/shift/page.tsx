@@ -14,6 +14,8 @@ import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Stagger, StaggerItem, motion } from '@/components/motion';
 import { Clock, Lock, CheckCircle2 } from 'lucide-react';
+import { usePermissions } from '@/lib/context/PermissionsContext';
+import AccessDenied from '@/components/AccessDenied';
 
 type CloseResult = { shift: Shift; discrepancy: number };
 
@@ -21,6 +23,7 @@ export default function EmployeeShiftPage() {
   const { toast } = useToast();
   const { t } = useI18n();
   const { activeShopId } = useShop();
+  const { can, loading: permsLoading } = usePermissions();
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [history, setHistory] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,8 +47,9 @@ export default function EmployeeShiftPage() {
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    if (activeShopId && (can('shift:view') || can('shift:open') || can('shift:close'))) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeShopId, can]);
 
   const openShift = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,8 +93,15 @@ export default function EmployeeShiftPage() {
     }
   };
 
+  if (permsLoading) {
+    return <PageWrapper title={t('shifts')}><SkeletonCard rows={5} /></PageWrapper>;
+  }
+  if (!(can('shift:view') || can('shift:open') || can('shift:close'))) {
+    return <PageWrapper title={t('shifts')}><AccessDenied /></PageWrapper>;
+  }
+
   return (
-    <PageWrapper title={t('shifts')} description={t('currentShift')} breadcrumb={['Employee', t('shifts')]}>
+    <PageWrapper title={t('shifts')} description={t('currentShift')} breadcrumb={[t('employeePortal'), t('shifts')]}>
       {loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SkeletonCard rows={5} />
@@ -100,7 +111,9 @@ export default function EmployeeShiftPage() {
         <Stagger className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StaggerItem>
             <ChartWrapper title={activeShift ? t('closeShift') : t('openShift')} subtitle={activeShift ? t('countedCash') : t('openingBalance')}>
-              {activeShift ? (
+              {activeShift ? (!can('shift:close') ? (
+                <EmptyState icon={<Lock size={20} />} title={t('accessDenied')} description={t('accessDeniedDesc')} />
+              ) : (
                 <form onSubmit={closeShift} className="space-y-4">
                   <div className="bg-warning/10 border border-warning/25 rounded-lg p-3 text-sm text-warning flex items-start gap-2">
                     <Lock size={16} className="mt-0.5 shrink-0" />
@@ -125,6 +138,8 @@ export default function EmployeeShiftPage() {
                     <Clock size={16} /> {submitting ? t('loading') : t('closeShift')}
                   </motion.button>
                 </form>
+              )) : !can('shift:open') ? (
+                <EmptyState icon={<Clock size={20} />} title={t('accessDenied')} description={t('accessDeniedDesc')} />
               ) : (
                 <form onSubmit={openShift} className="space-y-4">
                   <div>
@@ -149,7 +164,7 @@ export default function EmployeeShiftPage() {
           <StaggerItem>
             <ChartWrapper title={t('history')} subtitle={t('shifts')}>
               {history.length === 0 ? (
-                <EmptyState message={t('noData')} />
+                <EmptyState icon={<Clock size={20} />} title={t('noShiftsYet')} description={t('noShiftsDesc')} />
               ) : (
                 <ul className="divide-y divide-border max-h-[60vh] overflow-y-auto">
                   {history.map((s) => (

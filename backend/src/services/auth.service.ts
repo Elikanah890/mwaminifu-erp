@@ -293,7 +293,8 @@ export class AuthService {
     let permissions: string[] = [];
     if (user.role === 'EMPLOYEE') {
       const employee = await prisma.employee.findFirst({
-        where: { userId: user.id, isActive: true },
+        where: { userId: user.id, isActive: true, deletedAt: null },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       });
       if (employee) {
         permissions = (employee.permissions as string[]) || [];
@@ -348,7 +349,8 @@ export class AuthService {
     }
 
     const employee = await prisma.employee.findFirst({
-      where: { userId: user.id, isActive: true },
+      where: { userId: user.id, isActive: true, deletedAt: null },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       include: { shop: true },
     });
 
@@ -360,6 +362,7 @@ export class AuthService {
       // First login with temp PIN
       const empWithTemp = await prisma.employee.findFirst({
         where: { userId: user.id, tempPinHash: { not: null } },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       });
 
       if (!empWithTemp) {
@@ -479,12 +482,24 @@ export class AuthService {
     if (!isValid) {
       throw { status: 401, code: 'UNAUTHORIZED', message: 'Current password is incorrect' };
     }
-    if (!newPassword || newPassword.length < 6) {
-      throw { status: 422, code: 'VALIDATION_ERROR', message: 'New password must be at least 6 characters' };
+    if (!newPassword || newPassword.length < 8) {
+      throw { status: 422, code: 'VALIDATION_ERROR', message: 'New password must be at least 8 characters' };
+    }
+    if (await comparePassword(newPassword, user.passwordHash)) {
+      throw { status: 422, code: 'VALIDATION_ERROR', message: 'New password must be different from the current password' };
     }
 
     const hashed = await hashPassword(newPassword);
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash: hashed } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: hashed,
+        mustChangePassword: false,
+        passwordResetTokenHash: null,
+        passwordResetExpires: null,
+        passwordResetAt: new Date(),
+      },
+    });
 
     if (user.role === 'AGENT' && user.agentId) {
       await prisma.agent.updateMany({ where: { id: user.agentId }, data: { passwordHash: hashed } });
@@ -690,14 +705,30 @@ export class AuthService {
       };
     }
 
-    const shops = await prisma.shop.findFirst({ where: { ownerId: user.id, isArchived: false } });
+    const ownedShop = await prisma.shop.findFirst({ where: { ownerId: user.id, isArchived: false } });
     let permissions: string[] = [];
+    let sessionShop: { id: string; name: string } | null = ownedShop
+      ? { id: ownedShop.id, name: ownedShop.name }
+      : null;
+
     if (user.role === 'EMPLOYEE') {
-      const employee = await prisma.employee.findFirst({ where: { userId: user.id, isActive: true, deletedAt: null } });
-      if (employee) permissions = (employee.permissions as string[]) || [];
+      // Employees may hold several assignments. The primary assignment is the
+      // deterministic session shop; the client can switch with X-Shop-Id after
+      // login, and authMiddleware validates that assignment on every request.
+      const employee = await prisma.employee.findFirst({
+        where: { userId: user.id, isActive: true, deletedAt: null },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        include: { shop: { select: { id: true, name: true } } },
+      });
+      if (employee) {
+        permissions = (employee.permissions as string[]) || [];
+        sessionShop = { id: employee.shop.id, name: employee.shop.name };
+      } else {
+        sessionShop = null;
+      }
     }
 
-    const accessToken = signAccessToken({ sub: user.id, role: user.role, shopId: shops?.id, permissions });
+    const accessToken = signAccessToken({ sub: user.id, role: user.role, shopId: sessionShop?.id, permissions });
     const refreshToken = signRefreshToken({ sub: user.id, role: user.role });
     await prisma.refreshToken.create({
       data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS) },
@@ -708,7 +739,7 @@ export class AuthService {
       refreshToken,
       requiresPasswordChange: false,
       user: { id: user.id, email: user.email, phone: user.phone, name: user.name, role: user.role, avatarUrl: user.avatarUrl },
-      shop: shops ? { id: shops.id, name: shops.name } : null,
+      shop: sessionShop,
       permissions,
     };
   }
@@ -722,6 +753,14 @@ export class AuthService {
     }
     if (user.isActive === false || user.deletedAt) {
       throw { status: 403, code: 'FORBIDDEN', message: 'Account is inactive. Contact support.' };
+    }
+    const maintenanceMode = await settingsService.get('maintenanceMode');
+    if (maintenanceMode && user.role !== 'SYSTEM_OWNER' && user.role !== 'AGENT') {
+      throw {
+        status: 503,
+        code: 'MAINTENANCE',
+        message: 'System is under maintenance. Please try again later.',
+      };
     }
     if (user.blockedUntil && user.blockedUntil > new Date()) {
       throw { status: 429, code: 'RATE_LIMITED', message: 'Account locked. Try again later.' };
@@ -744,6 +783,23 @@ export class AuthService {
       where: { id: user.id },
       data: { failedLoginAttempts: 0, blockedUntil: null, lastLoginAt: new Date() },
     });
+
+    // Spec 4.3 — the AGAC Owner is limited to 2 concurrent sessions. The
+    // unified email login must enforce this too (the old admin login is gone).
+    // A third login evicts the oldest session instead of blocking the owner.
+    if (user.role === 'SYSTEM_OWNER' && !user.mustChangePassword) {
+      const activeSessions = await prisma.refreshToken.findMany({
+        where: { userId: user.id, isRevoked: false, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (activeSessions.length >= 2) {
+        await prisma.refreshToken.updateMany({
+          where: { id: { in: activeSessions.slice(0, activeSessions.length - 1).map((s) => s.id) } },
+          data: { isRevoked: true },
+        });
+      }
+    }
 
     return this.buildSession(user as {
       id: string; email: string | null; phone: string | null; name: string;

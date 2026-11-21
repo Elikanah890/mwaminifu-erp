@@ -7,6 +7,7 @@ import { getPagination, getSort } from '../utils/pagination.util';
 import { generateOtp, generateTempPassword } from '../utils/otp.util';
 import { emailService } from './email.service';
 import { settingsService } from './settings.service';
+import { billingStatusForShop } from '../utils/billing-status';
 
 function isUniqueConstraintError(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
@@ -69,8 +70,6 @@ const BUSINESS_EVENT_ACTIONS: Record<string, string> = {
 
 type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
-// 60-second cache for the System Owner dashboard (keyed by granularity).
-let dashboardCache: { at: number; byGranularity: Record<string, unknown> } = { at: 0, byGranularity: {} };
 
 /** Group a daily subscription-revenue series into the requested granularity. */
 function bucketRevenueTrend(rows: Array<{ day: Date; revenue: number }>, granularity: Granularity) {
@@ -207,19 +206,22 @@ export class AdminService {
     ]);
 
     const agentIds = agents.map((a) => a.id);
-    const [earned, paid] = agentIds.length
+    const [earned, paid, pending] = agentIds.length
       ? await Promise.all([
           prisma.commission.groupBy({ by: ['agentId'], where: { agentId: { in: agentIds } }, _sum: { amount: true } }),
           prisma.commission.groupBy({ by: ['agentId'], where: { agentId: { in: agentIds }, status: 'PAID' }, _sum: { amount: true } }),
+          prisma.commission.groupBy({ by: ['agentId'], where: { agentId: { in: agentIds }, status: 'PENDING' }, _sum: { amount: true } }),
         ])
-      : [[], []];
+      : [[], [], []];
     const earnedMap = new Map(earned.map((r) => [r.agentId, r._sum.amount || 0]));
     const paidMap = new Map(paid.map((r) => [r.agentId, r._sum.amount || 0]));
+    const pendingMap = new Map(pending.map((r) => [r.agentId, r._sum.amount || 0]));
 
     const data = agents.map((a) => ({
       ...a,
       commissionEarned: earnedMap.get(a.id) || 0,
       commissionPaid: paidMap.get(a.id) || 0,
+      commissionPending: pendingMap.get(a.id) || 0,
     }));
 
     return { agents: data, total, page, limit };
@@ -239,16 +241,21 @@ export class AdminService {
       throw { status: 404, code: 'NOT_FOUND', message: 'Agent not found' };
     }
 
-    const [commissions, payouts, earnedAgg, paidAgg] = await Promise.all([
+    const [commissions, payouts, earnedAgg, paidAgg, pendingAgg] = await Promise.all([
       prisma.commission.findMany({
         where: { agentId },
         orderBy: { createdAt: 'desc' },
         take: 50,
-        include: { owner: { select: { name: true, phone: true } }, payout: { select: { id: true, reference: true } } },
+        include: {
+          owner: { select: { name: true, phone: true } },
+          payout: { select: { id: true, reference: true } },
+          payment: { select: { amount: true, subscription: { select: { plan: true } } } },
+        },
       }),
       prisma.payout.findMany({ where: { agentId }, orderBy: { createdAt: 'desc' }, take: 50 }),
       prisma.commission.aggregate({ where: { agentId }, _sum: { amount: true } }),
       prisma.commission.aggregate({ where: { agentId, status: 'PAID' }, _sum: { amount: true } }),
+      prisma.commission.aggregate({ where: { agentId, status: 'PENDING' }, _sum: { amount: true } }),
     ]);
 
     return {
@@ -260,6 +267,7 @@ export class AdminService {
         activeUsers: agent.onboardedUsers.filter((u) => u.isActive).length,
         commissionEarned: earnedAgg._sum.amount || 0,
         commissionPaid: paidAgg._sum.amount || 0,
+        commissionPending: pendingAgg._sum.amount || 0,
         revenue: 0,
         transactions: 0,
       },
@@ -315,14 +323,19 @@ export class AdminService {
       throw { status: 404, code: 'NOT_FOUND', message: 'Agent not found' };
     }
 
-    const pending = await prisma.commission.findMany({ where: { agentId, status: 'PENDING' } });
-    const amount = Math.round(pending.reduce((s, c) => s + c.amount, 0) * 100) / 100;
-    if (pending.length === 0 || amount <= 0) {
-      throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'No pending commission to pay out' };
-    }
-
-    const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
     const payout = await prisma.$transaction(async (tx) => {
+      // Re-read inside the transaction. The conditional update below ensures a
+      // concurrent payout can never pay the same commission twice.
+      const pending = await tx.commission.findMany({
+        where: { agentId, status: 'PENDING' },
+        select: { id: true, amount: true },
+      });
+      const amount = Math.round(pending.reduce((sum, c) => sum + c.amount, 0) * 100) / 100;
+      if (pending.length === 0 || amount <= 0) {
+        throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'No pending commission to pay out' };
+      }
+
+      const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
       const created = await tx.payout.create({
         data: {
           agentId,
@@ -334,14 +347,24 @@ export class AdminService {
           completedAt: new Date(),
         },
       });
-      await tx.commission.updateMany({
-        where: { agentId, status: 'PENDING' },
+
+      const updated = await tx.commission.updateMany({
+        where: { id: { in: pending.map((c) => c.id) }, status: 'PENDING' },
         data: { status: 'PAID', payoutId: created.id, paidAt: new Date() },
       });
+      if (updated.count !== pending.length) {
+        throw { status: 409, code: 'CONFLICT', message: 'Commission payout changed. Please retry.' };
+      }
+
       return created;
     });
 
-    await auditService.log(actorId, 'AGENT_PAYOUT', { agentId, agentName: agent.name, amount, reference }, ctx);
+    await auditService.log(actorId, 'AGENT_PAYOUT', {
+      agentId,
+      agentName: agent.name,
+      amount: payout.amount,
+      reference: payout.reference,
+    }, ctx);
     return payout;
   }
 
@@ -1208,47 +1231,48 @@ export class AdminService {
         lastLoginAt: true,
         createdAt: true,
         agent: { select: { name: true } },
-        ownedShops: { select: { id: true } },
+        ownedShops: {
+          select: {
+            id: true,
+            name: true,
+            region: true,
+            district: true,
+            isArchived: true,
+            subscriptions: {
+              select: { plan: true, status: true, isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    const ownerIds = owners.map((o) => o.id);
-    const [salesAgg, shopCounts] = await Promise.all([
-      ownerIds.length
-        ? prisma.sale.groupBy({
-            by: ['userId'],
-            where: { userId: { in: ownerIds }, status: 'COMPLETED', deletedAt: null },
-            _count: { _all: true },
-            _sum: { grandTotal: true },
-          })
-        : Promise.resolve([]),
-      prisma.shop.groupBy({ by: ['ownerId'], where: { ownerId: { in: ownerIds } }, _count: { _all: true } }),
-    ]);
-
-    const salesByUser = new Map(salesAgg.map((r) => [r.userId, r]));
-    const shopMap = new Map(shopCounts.map((r) => [r.ownerId, r._count._all]));
-
+    // CRM data only — never expose shop sales/revenue to the System Owner.
     return {
       summary: {
         totalOwners: owners.length,
         activeOwners: owners.filter((o) => o.isActive).length,
-        totalRevenue: salesAgg.reduce((s, r) => s + (r._sum.grandTotal || 0), 0),
-        totalTransactions: salesAgg.reduce((s, r) => s + (r._count._all || 0), 0),
       },
-      data: owners.map((o) => ({
-        ownerId: o.id,
-        name: o.name,
-        phone: o.phone,
-        email: o.email,
-        isActive: o.isActive,
-        agentName: o.agent?.name || null,
-        shops: shopMap.get(o.id) || 0,
-        transactions: salesByUser.get(o.id)?._count._all || 0,
-        revenue: salesByUser.get(o.id)?._sum.grandTotal || 0,
-        lastLoginAt: o.lastLoginAt,
-        createdAt: o.createdAt,
-      })),
+      data: owners.map((o) => {
+        const primaryShop = o.ownedShops[0];
+        const subscription = primaryShop?.subscriptions?.[0];
+        return {
+          ownerId: o.id,
+          name: o.name,
+          phone: o.phone,
+          email: o.email,
+          location: [primaryShop?.district, primaryShop?.region].filter(Boolean).join(', ') || null,
+          plan: subscription?.plan ?? null,
+          linkedShops: o.ownedShops.map((shop) => ({ id: shop.id, name: shop.name, isArchived: shop.isArchived })),
+          isActive: o.isActive,
+          agentName: o.agent?.name || null,
+          lastLoginAt: o.lastLoginAt,
+          createdAt: o.createdAt,
+        };
+      }),
     };
   }
 
@@ -1321,6 +1345,14 @@ export class AdminService {
       ];
     }
 
+    // System Owner activity feed is platform-only. Shop operational events
+    // (sales, stock, customers, shifts, etc.) stay private to the Business Owner.
+    where.NOT = [
+      'SALE_', 'EXPENSE_', 'STOCK_', 'CUSTOMER_', 'CREDIT_', 'SHIFT_',
+      'PRODUCT_', 'PURCHASE_', 'SUPPLIER_', 'LOAN_', 'CASH_', 'REFUND_',
+      'EMPLOYEE_',
+    ].map((prefix) => ({ action: { startsWith: prefix } }));
+
     const [total, logs] = await Promise.all([
       prisma.activityLog.count({ where }),
       prisma.activityLog.findMany({
@@ -1364,6 +1396,45 @@ export class AdminService {
         include: {
           user: { select: { id: true, name: true, phone: true } },
           shop: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    return { notifications, total, page, limit };
+  }
+
+  /**
+   * Platform/AGAC alerts only. Operational shop notifications (cash
+   * discrepancy, stock alerts, etc.) must never reach the System Owner.
+   */
+  async listPlatformNotifications(query: AdminListQuery = {}) {
+    const { page, limit, skip } = getPagination(query);
+    const platformTypes = ['ADMIN', 'PLATFORM', 'SYSTEM', 'SUBSCRIPTION', 'SUBSCRIPTION_PAYMENT', 'AGENT', 'BUSINESS', 'MAINTENANCE'];
+    const where: Record<string, unknown> = { type: { in: platformTypes } };
+
+    if (query.isRead === 'true') where.isRead = true;
+    else if (query.isRead === 'false') where.isRead = false;
+    if (query.search) {
+      where.OR = [
+        { title: { contains: query.search, ...INSENSITIVE } },
+        { body: { contains: query.search, ...INSENSITIVE } },
+      ];
+    }
+
+    const [total, notifications] = await Promise.all([
+      prisma.notification.count({ where }),
+      prisma.notification.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          body: true,
+          type: true,
+          isRead: true,
+          createdAt: true,
         },
       }),
     ]);
@@ -1671,6 +1742,17 @@ export class AdminService {
       throw { status: 404, code: 'NOT_FOUND', message: 'Plan not found' };
     }
 
+    const activeUses = await prisma.subscription.count({
+      where: { planId, status: 'ACTIVE' },
+    });
+    if (activeUses > 0) {
+      throw {
+        status: 409,
+        code: 'PLAN_IN_USE',
+        message: `This plan has ${activeUses} active subscription(s). Deactivate or move them before deleting.`,
+      };
+    }
+
     const updated = await prisma.subscriptionPlan.update({
       where: { id: planId },
       data: { deletedAt: new Date(), isActive: false, isDefault: false, name: `${plan.name} (deleted ${Date.now()})` },
@@ -1698,8 +1780,11 @@ export class AdminService {
       ];
     }
 
-    const [total, subscriptions] = await Promise.all([
+    const [total, activeCount, subscriptions] = await Promise.all([
       prisma.subscription.count({ where }),
+      prisma.subscription.count({
+        where: { status: 'ACTIVE', shop: { isArchived: false } },
+      }),
       prisma.subscription.findMany({
         where,
         skip,
@@ -1720,7 +1805,7 @@ export class AdminService {
       }),
     ]);
 
-    return { subscriptions, total, page, limit };
+    return { subscriptions, total, activeCount, page, limit };
   }
 
   async updateSubscription(subscriptionId: string, data: { plan?: string; planId?: string; status?: string; endDate?: string; isActive?: boolean; billingCycle?: string; autoRenew?: boolean }, actorId: string, ctx: AuditContext = {}) {
@@ -1801,75 +1886,26 @@ export class AdminService {
   // ---------------- Demo Accounts ----------------
 
   async listDemoAccounts() {
-    const [owners, employees, agents] = await Promise.all([
-      prisma.user.findMany({
-        where: { role: 'BUSINESS_OWNER', deletedAt: null },
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          email: true,
-          isActive: true,
-          isPinSet: true,
-          agent: { select: { name: true } },
-          ownedShops: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      }),
-      prisma.employee.findMany({
-        where: { deletedAt: null },
-        select: {
-          id: true,
-          role: true,
-          permissions: true,
-          isActive: true,
-          user: { select: { id: true, name: true, phone: true } },
-          shop: { select: { id: true, name: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      }),
-      prisma.agent.findMany({
-        where: { deletedAt: null },
-        select: {
-          id: true,
-          username: true,
-          name: true,
-          phone: true,
-          isActive: true,
-          _count: { select: { onboardedUsers: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      }),
-    ]);
+    // No dedicated DemoAccount model exists yet. Only expose explicitly demo
+    // labelled accounts and never contact details or permissions.
+    const users = await prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { username: { startsWith: 'demo', mode: 'insensitive' } },
+          { email: { startsWith: 'demo', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, name: true, role: true, isActive: true, lastLoginAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    // SECURITY: never expose passwords or PINs (even placeholder demo values)
-    // from an API response.
     return {
-      agents: agents.map((a) => ({
-        ...a,
-        role: 'AGENT',
-        username: a.username,
-      })),
-      owners: owners.map((o) => ({
-        id: o.id,
-        name: o.name,
-        phone: o.phone,
-        email: o.email,
-        isActive: o.isActive,
-        isPinSet: o.isPinSet,
-        agentName: o.agent?.name || null,
-        shops: o.ownedShops,
-        role: 'BUSINESS_OWNER',
-      })),
-      employees: employees.map((e) => ({
-        id: e.id,
-        name: e.user.name,
-        phone: e.user.phone,
-        role: e.role,
-        shopName: e.shop.name,
-        isActive: e.isActive,
-        permissions: (e.permissions as string[]) || [],
-        roleType: 'EMPLOYEE',
+      accounts: users.map((u) => ({
+        id: u.id,
+        label: `${u.role.replace(/_/g, ' ')} — ${u.name}`,
+        lastUsed: u.lastLoginAt,
+        status: u.isActive ? 'Active' : 'Inactive',
       })),
     };
   }
@@ -1917,17 +1953,18 @@ export class AdminService {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const [
-      totalBusinesses, totalAgents, activeAgents, deactivatedAgents, totalShops,
+      totalBusinesses, activeBusinessOwners, totalAgents, activeAgents, deactivatedAgents, totalShops,
       totalSubscriptions, activeSubscriptions,
       totalRevenueAgg, monthlyRevenueAgg, pendingTickets,
     ] = await Promise.all([
       prisma.user.count({ where: { role: 'BUSINESS_OWNER', deletedAt: null } }),
+      prisma.user.count({ where: { role: 'BUSINESS_OWNER', deletedAt: null, isActive: true } }),
       prisma.agent.count({ where: { deletedAt: null } }),
       prisma.agent.count({ where: { deletedAt: null, isActive: true } }),
       prisma.agent.count({ where: { OR: [{ isActive: false }, { deletedAt: { not: null } }] } }),
       prisma.shop.count({ where: { isArchived: false } }),
       prisma.subscription.count(),
-      prisma.subscription.count({ where: { isActive: true } }),
+      prisma.subscription.count({ where: { status: 'ACTIVE', endDate: { gt: now }, shop: { isArchived: false } } }),
       prisma.subscriptionPayment.aggregate({ where: { status: 'COMPLETED' }, _sum: { amount: true } }),
       prisma.subscriptionPayment.aggregate({ where: { status: 'COMPLETED', paidAt: { gte: monthStart } }, _sum: { amount: true } }),
       prisma.supportTicket.count({ where: { status: 'OPEN' } }),
@@ -1935,6 +1972,7 @@ export class AdminService {
 
     return {
       totalBusinesses,
+      activeBusinessOwners,
       totalAgents,
       activeAgents,
       deactivatedAgents,
@@ -1952,16 +1990,9 @@ export class AdminService {
    * never shop sales. Cached for 60 seconds per granularity.
    */
   async getDashboard(granularity: Granularity = 'daily') {
-    const CACHE_MS = 60 * 1000;
-    const startedAt = Date.now();
-    if (dashboardCache.at && startedAt - dashboardCache.at < CACHE_MS && dashboardCache.byGranularity[granularity]) {
-      return dashboardCache.byGranularity[granularity];
-    }
-
     const now = new Date();
     const nowMs = now.getTime();
     const DAY = 24 * 60 * 60 * 1000;
-    const GRACE_DAYS = 5;
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const since = new Date(nowMs - 365 * DAY);
 
@@ -1969,7 +2000,18 @@ export class AdminService {
       this.getPlatformStats(),
       prisma.subscriptionPayment.aggregate({ where: { status: 'COMPLETED' }, _sum: { amount: true } }),
       prisma.subscriptionPayment.aggregate({ where: { status: 'COMPLETED', paidAt: { gte: monthStart } }, _sum: { amount: true } }),
-      prisma.subscription.findMany({ select: { id: true, plan: true, billingCycle: true, isActive: true, endDate: true } }),
+      prisma.subscription.findMany({
+        where: { shop: { isArchived: false } },
+        select: {
+          id: true,
+          plan: true,
+          billingCycle: true,
+          isActive: true,
+          status: true,
+          endDate: true,
+          payments: { where: { status: 'COMPLETED' }, select: { id: true }, take: 1 },
+        },
+      }),
       prisma.$queryRaw`
         SELECT date_trunc('day', "paidAt")::date AS day,
                COALESCE(SUM("amount"), 0)::float8 AS revenue
@@ -2000,13 +2042,13 @@ export class AdminService {
       }),
     ]);
 
-    const health = { active: 0, grace: 0, lapsed: 0 };
+    const health = { active: 0, grace: 0, lapsed: 0, pendingPayment: 0 };
     const breakdown = { basic: 0, premium: 0, monthly: 0, weekly: 0, daily: 0, yearly: 0 };
     for (const s of subs) {
-      const end = s.endDate ? new Date(s.endDate).getTime() : null;
-      if (!s.isActive) health.lapsed += 1;
-      else if (end == null || end >= nowMs) health.active += 1;
-      else if (nowMs <= end + GRACE_DAYS * DAY) health.grace += 1;
+      const status = billingStatusForShop(s, now);
+      if (status === 'PENDING_PAYMENT') health.pendingPayment += 1;
+      else if (status === 'ACTIVE') health.active += 1;
+      else if (status === 'GRACE') health.grace += 1;
       else health.lapsed += 1;
 
       const plan = (s.plan || '').toLowerCase();
@@ -2023,11 +2065,14 @@ export class AdminService {
     const totalHealth = health.active + health.grace + health.lapsed;
     const churnRate = totalHealth ? Math.round((health.lapsed / totalHealth) * 1000) / 10 : 0;
 
-    const [paidCommissionAgg, pendingCommissionAgg] = await Promise.all([
-      prisma.commission.aggregate({ where: { status: 'PAID' }, _sum: { amount: true } }),
+    const [paidPayoutAgg, pendingCommissionAgg] = await Promise.all([
+      prisma.payout.aggregate({
+        where: { status: 'COMPLETED', completedAt: { gte: monthStart } },
+        _sum: { amount: true },
+      }),
       prisma.commission.aggregate({ where: { status: 'PENDING' }, _sum: { amount: true } }),
     ]);
-    const commissionsPaid = Math.round((paidCommissionAgg._sum.amount || 0) * 100) / 100;
+    const commissionsPaid = Math.round((paidPayoutAgg._sum.amount || 0) * 100) / 100;
     const pendingPayouts = Math.round((pendingCommissionAgg._sum.amount || 0) * 100) / 100;
     void referredPaidRows;
 
@@ -2066,6 +2111,7 @@ export class AdminService {
     const data = {
       platform: {
         totalBusinessOwners: stats.totalBusinesses,
+        activeBusinessOwners: stats.activeBusinessOwners,
         totalAgents: stats.totalAgents,
         activeAgents: stats.activeAgents,
         deactivatedAgents: stats.deactivatedAgents,
@@ -2077,12 +2123,13 @@ export class AdminService {
         totalRevenue,
         monthlyRevenue,
         commissionsPaid,
-        netIncome: Math.max(0, Math.round(totalRevenue - commissionsPaid)),
+        netIncome: Math.round((totalRevenue - commissionsPaid) * 100) / 100,
       },
       revenueTrend: { granularity, points: trendPoints },
       actionRequired: {
         expiringSoon,
         gracePeriod: health.grace,
+        pendingPaymentShops: health.pendingPayment,
         pendingPayouts,
         failedPayments,
       },
@@ -2092,7 +2139,6 @@ export class AdminService {
       generatedAt: new Date().toISOString(),
     };
 
-    dashboardCache = { at: startedAt, byGranularity: { ...dashboardCache.byGranularity, [granularity]: data } };
     return data;
   }
 

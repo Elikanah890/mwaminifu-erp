@@ -14,7 +14,7 @@
  * is kept so the app can show an "update available" prompt, and clientsClaim()
  * plus navigation preload keep navigation fast.
  */
-const VERSION = 'mwaminifu-v7';
+const VERSION = 'mwaminifu-v8';
 
 // The page registers `/sw.js?mode=dev` during development. In dev we must never
 // serve cached Next.js build chunks, otherwise edits (and even method signatures

@@ -63,8 +63,8 @@ export default function AgentDashboardPage() {
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StaggerItem><StatsCard featured title="Total Customers" value={formatNumber(stats?.totalBusinesses ?? 0)} tone="navy" icon={<Users size={20} />} /></StaggerItem>
-        <StaggerItem><StatsCard title="Active Customers" value={formatNumber(stats?.activeBusinesses ?? 0)} tone="teal" sub={`${stats?.inactiveBusinesses ?? 0} inactive`} /></StaggerItem>
+        <StaggerItem><StatsCard featured title="Total Customers" value={formatNumber(stats?.totalCustomers ?? stats?.totalShops ?? 0)} tone="navy" icon={<Users size={20} />} /></StaggerItem>
+        <StaggerItem><StatsCard title="Active Customers" value={formatNumber(stats?.activeBusinesses ?? 0)} tone="teal" sub={`${stats?.pendingBusinesses ?? 0} pending payment`} /></StaggerItem>
         <StaggerItem><StatsCard title="New This Month" value={formatNumber(stats?.businessesThisMonth ?? 0)} tone="teal" /></StaggerItem>
         <StaggerItem><StatsCard title="Total Shops" value={formatNumber(stats?.totalShops ?? 0)} tone="navy" icon={<Store size={20} />} /></StaggerItem>
       </Stagger>
@@ -122,9 +122,16 @@ export default function AgentDashboardPage() {
                     <p className="text-xs text-subtle-foreground">{b.ownedShops?.[0]?.address || b.ownedShops?.[0]?.name || '—'}</p>
                   </div>
                   <div className="text-right">
-                    <Pill tone={!b.isActive ? 'gray' : b.isPinSet ? 'green' : 'amber'}>
-                      {!b.isActive ? 'Inactive' : b.isPinSet ? 'Active' : 'Pending'}
-                    </Pill>
+                    {(() => {
+                      const status = !b.isActive
+                        ? { label: 'Inactive', tone: 'gray' as const }
+                        : b.billingStatus === 'ACTIVE'
+                          ? { label: 'Active', tone: 'green' as const }
+                          : b.billingStatus === 'LAPSED'
+                            ? { label: 'Lapsed', tone: 'red' as const }
+                            : { label: 'Pending Payment', tone: 'amber' as const };
+                      return <Pill tone={status.tone}>{status.label}</Pill>;
+                    })()}
                     <p className="text-xs text-subtle-foreground mt-1">{formatDate(b.createdAt)}</p>
                   </div>
                 </li>

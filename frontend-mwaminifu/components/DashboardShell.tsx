@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState, ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
 import Sidebar, { PortalRole } from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -22,7 +21,6 @@ export default function DashboardShell({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -54,18 +52,12 @@ export default function DashboardShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <Header role={role} onMenu={() => setSidebarOpen((v) => !v)} />
         <SubscriptionBanner />
-        <main className="flex-1">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+        <main className="min-h-[calc(100vh-4rem)] flex-1 bg-background">
+          {/* No page transition animation and no role-level loading boundary:
+              Next keeps the current page visible until the next route is ready,
+              then swaps it in one paint. Animating here or adding loading.tsx
+              makes the old page disappear first, which reads as a flash. */}
+          <div className="min-h-[calc(100vh-4rem)]">{children}</div>
         </main>
       </div>
       <IdleMonitor />

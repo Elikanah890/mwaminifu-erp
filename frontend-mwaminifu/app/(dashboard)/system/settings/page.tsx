@@ -14,7 +14,7 @@ interface SettingField {
   key: string;
   label: string;
   description: string;
-  type: 'text' | 'number' | 'select';
+  type: 'text' | 'number' | 'select' | 'boolean';
   options?: Array<{ value: string; label: string }>;
   placeholder?: string;
 }
@@ -72,6 +72,18 @@ const SECTIONS: SettingSection[] = [
       { key: 'maxAgents', label: 'Max Agents', description: 'Maximum number of agents', type: 'number', placeholder: '50' },
       { key: 'commissionRate', label: 'Commission Rate (%)', description: 'Agent commission as a percentage', type: 'number', placeholder: '5' },
       { key: 'agentCodePrefix', label: 'Agent Code Prefix', description: 'Prefix used for agent codes', type: 'text', placeholder: 'AGAC-' },
+    ],
+  },
+  {
+    title: 'Platform Controls',
+    description: 'Live platform availability controls',
+    fields: [
+      {
+        key: 'maintenanceMode',
+        label: 'Maintenance Mode',
+        description: 'When ON, business owners and employees cannot log in. System owners and agents keep access.',
+        type: 'boolean',
+      },
     ],
   },
   {
@@ -148,6 +160,7 @@ export default function SettingsPage() {
       for (const f of section.fields) {
         const raw = values[f.key];
         if (f.type === 'number') body[f.key] = raw === '' || raw === undefined || raw === null ? 0 : Number(raw) || 0;
+        else if (f.type === 'boolean') body[f.key] = raw === true || raw === 'true';
         else body[f.key] = typeof raw === 'string' ? raw : String(raw ?? '');
       }
       await apiClient.put('/admin/settings', body);
@@ -199,7 +212,19 @@ export default function SettingsPage() {
                   <div key={f.key} className="px-6 py-4">
                     <label className="block text-sm font-semibold text-foreground mb-1">{f.label}</label>
                     <p className="text-xs text-subtle-foreground mb-2">{f.description}</p>
-                    {f.type === 'select' ? (
+                    {f.type === 'boolean' ? (
+                      <label className="inline-flex cursor-pointer items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={values[f.key] === true || values[f.key] === 'true'}
+                          onChange={(e) => setValue(f.key, e.target.checked)}
+                          className="h-4 w-4 rounded"
+                        />
+                        <span className="text-sm font-medium text-foreground">
+                          {values[f.key] === true || values[f.key] === 'true' ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </label>
+                    ) : f.type === 'select' ? (
                       <select className="input-field w-full" value={String(values[f.key] ?? '')} onChange={(e) => setValue(f.key, e.target.value)}>
                         <option value="">Select…</option>
                         {(f.options ?? []).map((o) => (

@@ -82,7 +82,7 @@ export default function StockPage() {
     <PageWrapper
       title={t('stock')}
       description={t('inventoryOverview')}
-      breadcrumb={['Owner', t('inventory'), t('stock')]}
+      breadcrumb={[t('businessOwner'), t('inventory'), t('stock')]}
       actions={<button onClick={() => setScanOpen(true)} className="btn-teal inline-flex items-center gap-2"><ScanBarcode size={16} /> {t('scan')}</button>}
     >
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}

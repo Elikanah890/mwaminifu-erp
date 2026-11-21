@@ -39,8 +39,8 @@ const MODEL_NAMES = [
   'notification', 'activityLog', 'subscription', 'subscriptionPayment',
   'subscriptionPlan', 'systemSetting', 'supportTicket', 'supportMessage',
   'shift', 'ownerCapitalTransaction', 'recurringExpense', 'deviceSession',
-  'productUnitConfig', 'productImage', 'supplier', 'purchase', 'stockMovement',
-  'cashTransaction', 'creditLedgerEntry', 'auditLog', 'smsLog',
+  'productUnitConfig', 'productImage', 'shopProductPrice', 'supplier', 'purchase', 'stockMovement',
+  'cashTransaction', 'creditLedgerEntry', 'auditLog', 'smsLog', 'commission', 'payout',
 ];
 
 function createModel(): MockModel {

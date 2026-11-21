@@ -40,7 +40,7 @@ export default function StockMovementsPage() {
     <PageWrapper
       title={t('stockMovements')}
       description={t('stockMovements')}
-      breadcrumb={['Owner', t('inventory'), t('stockMovements')]}
+      breadcrumb={[t('businessOwner'), t('inventory'), t('stockMovements')]}
       actions={
         <select value={type} onChange={(e) => setType(e.target.value)} className="input-field max-w-[180px]">
           <option value="">{t('all')}</option>

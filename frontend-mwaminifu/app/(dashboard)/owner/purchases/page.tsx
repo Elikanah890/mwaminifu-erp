@@ -164,13 +164,18 @@ export default function PurchasesPage() {
     <PageWrapper
       title={t('purchases')}
       description={t('purchases')}
-      breadcrumb={['Owner', t('inventory'), t('purchases')]}
+      breadcrumb={[t('businessOwner'), t('inventory'), t('purchases')]}
       actions={<button onClick={() => setCreateOpen(true)} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addPurchase')}</button>}
     >
       {shopLoading || loading ? (
         <SkeletonTable rows={8} />
       ) : purchases.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState
+          icon={<PackageCheck size={22} />}
+          title={t('noPurchasesYet')}
+          description={t('noPurchasesDesc')}
+          action={<button onClick={() => setCreateOpen(true)} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addPurchase')}</button>}
+        /></div></Reveal>
       ) : (
         <Reveal><div className="surface-card overflow-x-auto">
           <table className="w-full text-sm">

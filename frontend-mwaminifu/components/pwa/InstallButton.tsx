@@ -21,9 +21,10 @@ export default function InstallButton({ onDark = false }: { onDark?: boolean }) 
   const sw = locale === 'sw';
   const label = sw ? 'Sakinisha' : 'Install';
 
-  const handleClick = () => {
+  const handleClick = async () => {
     if (canInstall) {
-      void promptInstall();
+      const result = await promptInstall();
+      if (result === 'unavailable') setShowHelp(true);
     } else {
       setShowHelp(true);
     }
@@ -34,7 +35,7 @@ export default function InstallButton({ onDark = false }: { onDark?: boolean }) 
       <motion.button
         whileHover={{ y: -1 }}
         whileTap={{ scale: 0.97 }}
-        onClick={handleClick}
+        onClick={() => { void handleClick(); }}
         aria-label={sw ? 'Sakinisha Mwaminifu' : 'Install Mwaminifu'}
         className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-brand ${
           onDark ? 'text-white/85 hover:bg-white/10 hover:text-white' : 'text-foreground hover:bg-muted'

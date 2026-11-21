@@ -116,8 +116,8 @@ export const featuresPageText: Record<
       {
         key: 'inventory',
         title: 'Bidhaa',
-        desc: 'Fuatilia kila bidhaa, kipimo na eneo kwa tahadhari za hisa ndogo kabla ya kuisha.',
-        bullets: ['Vipimo na pakiti mbalimbali', 'Tahadhari za hisa ndogo', 'Historia ya mienendo ya hisa', 'Kiwango cha kuagiza kwa bidhaa'],
+        desc: 'Fuatilia kila bidhaa, kipimo na eneo kwa tahadhari za bidhaa chache kabla ya kuisha.',
+        bullets: ['Vipimo na pakiti mbalimbali', 'Tahadhari za bidhaa chache', 'Historia ya bidhaa zilizoingia na kutoka', 'Kiwango cha kuagiza kwa bidhaa'],
       },
       {
         key: 'customers',
@@ -134,8 +134,8 @@ export const featuresPageText: Record<
       {
         key: 'finance',
         title: 'Fedha',
-        desc: 'Dhibiti fedha taslimu, gharama, mikopo na madeni kwa wasambazaji sehemu moja.',
-        bullets: ['Uidhinishaji wa gharama', 'Daftari la fedha ndani/nje', 'Madeni kwa wasambazaji', 'Ufuatiliaji wa mikopo'],
+        desc: 'Dhibiti fedha taslimu, matumizi, mikopo na madeni kwa wasambazaji sehemu moja.',
+        bullets: ['Uidhinishaji wa matumizi', 'Daftari la fedha ndani/nje', 'Madeni kwa wasambazaji', 'Ufuatiliaji wa mikopo'],
       },
       {
         key: 'employees',
@@ -209,7 +209,7 @@ export const pricingPageText: Record<
   sw: {
     eyebrow: 'Bei',
     title: 'Bei rahisi kwa kila duka',
-    subtitle: 'Malipo moja kwa mwezi. Hakuna gharama za siri. Acha wakati wowote.',
+    subtitle: 'Malipo moja kwa mwezi. Hakuna malipo ya siri. Acha wakati wowote.',
     comparisonTitle: 'Linganisha mipango',
     included: 'Ipo',
     featureCol: 'Kipengele',

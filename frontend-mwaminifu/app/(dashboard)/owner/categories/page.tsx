@@ -12,6 +12,7 @@ import { Stagger, StaggerItem, MotionCard, Reveal } from '@/components/motion';
 import Modal from '@/components/Modal';
 import { useToast } from '@/components/Toast';
 import { Plus, Pencil, Trash2, Search, FolderTree } from 'lucide-react';
+import { usePermissions } from '@/lib/context/PermissionsContext';
 
 type CategoryWithChildren = Category & { children?: Array<Category & { _count?: { products: number } }> };
 
@@ -19,6 +20,7 @@ export default function CategoriesPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const { can } = usePermissions();
   const [categories, setCategories] = useState<CategoryWithChildren[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -93,8 +95,8 @@ export default function CategoriesPage() {
     <PageWrapper
       title={t('categories')}
       description={t('categories')}
-      breadcrumb={['Owner', t('inventory'), t('categories')]}
-      actions={<button onClick={() => openCreate()} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addCategory')}</button>}
+      breadcrumb={[t('businessOwner'), t('inventory'), t('categories')]}
+      actions={can('products:create') ? <button onClick={() => openCreate()} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addCategory')}</button> : undefined}
     >
       <Reveal className="mb-6"><div className="surface-card p-4">
         <div className="relative max-w-md">
@@ -106,7 +108,14 @@ export default function CategoriesPage() {
       {shopLoading || loading ? (
         <div className="space-y-4"><SkeletonCard /><SkeletonCard rows={2} /></div>
       ) : filtered.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState
+          icon={<FolderTree size={22} />}
+          title={t('noCategoriesYet')}
+          description={t('noCategoriesDesc')}
+          action={can('products:create') ? (
+            <button onClick={() => openCreate()} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addCategory')}</button>
+          ) : undefined}
+        /></div></Reveal>
       ) : (
         <Stagger className="space-y-4">
           {filtered.map((c) => (
@@ -121,9 +130,9 @@ export default function CategoriesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => openCreate(c.id)} className="text-xs font-medium text-secondary hover:underline">+ {t('subcategory')}</button>
-                  <button onClick={() => openEdit(c)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"><Pencil size={13} /> {t('edit')}</button>
-                  <button onClick={() => remove(c)} className="text-xs font-medium text-danger hover:underline inline-flex items-center gap-1"><Trash2 size={13} /> {t('delete')}</button>
+                  {can('products:create') && <button onClick={() => openCreate(c.id)} className="text-xs font-medium text-secondary hover:underline">+ {t('subcategory')}</button>}
+                  {can('products:update') && <button onClick={() => openEdit(c)} className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"><Pencil size={13} /> {t('edit')}</button>}
+                  {can('products:delete') && <button onClick={() => remove(c)} className="text-xs font-medium text-danger hover:underline inline-flex items-center gap-1"><Trash2 size={13} /> {t('delete')}</button>}
                 </div>
               </div>
 

@@ -1,8 +1,9 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useToast } from '@/components/Toast';
+import { useI18n } from '@/lib/context/I18nContext';
 
 type PermissionsValue = {
   permissions: string[];
@@ -24,15 +25,20 @@ export function usePermissions(): PermissionsValue {
 
 export function PermissionsProvider({ role, children }: { role: string; children: ReactNode }) {
   const { toast } = useToast();
+  const { locale } = useI18n();
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(role === 'EMPLOYEE');
+  const requestSeq = useRef(0);
 
   const refresh = useCallback(async () => {
     if (role !== 'EMPLOYEE') {
       setLoading(false);
       return;
     }
+    const seq = ++requestSeq.current;
     const result = await apiClient.loadPermissions();
+    // Ignore a slower response for a shop the user has already switched away from.
+    if (seq !== requestSeq.current) return;
     setPermissions(result.permissions);
     setLoading(false);
   }, [role]);
@@ -56,15 +62,27 @@ export function PermissionsProvider({ role, children }: { role: string; children
     };
   }, [role, refresh]);
 
+  // Employee permissions are per shop. Reload them immediately after a switch.
+  useEffect(() => {
+    if (role !== 'EMPLOYEE') return;
+    const onShopChanged = () => void refresh();
+    window.addEventListener('shop:changed', onShopChanged);
+    return () => window.removeEventListener('shop:changed', onShopChanged);
+  }, [role, refresh]);
+
   // Surface a friendly toast whenever the API rejects an action with 403.
   useEffect(() => {
-    const onDenied = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { message?: string } | undefined;
-      toast(detail?.message || 'You do not have permission to perform this action', 'error');
+    const onDenied = () => {
+      toast(
+        locale === 'sw'
+          ? 'Huna ruhusa ya kufanya hivi.'
+          : 'You do not have permission for this action.',
+        'error'
+      );
     };
     window.addEventListener('permission:denied', onDenied);
     return () => window.removeEventListener('permission:denied', onDenied);
-  }, [toast]);
+  }, [toast, locale]);
 
   const can = useCallback(
     (permission: string) => (role !== 'EMPLOYEE' ? true : permissions.includes(permission)),

@@ -61,6 +61,50 @@ function priceErrorForUnit(
   return null;
 }
 
+const BASE_PRICE_KEY = 'base';
+
+/**
+ * Keep the shop-specific price table in sync with the product's current
+ * defaults. Product itself is shop-owned today; this table is the authoritative
+ * price source for POS and future shared-catalog products.
+ */
+async function syncShopPrices(shopId: string, productId: string): Promise<void> {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: { unitConfigs: true },
+  });
+  if (!product) return;
+
+  const rows = [
+    {
+      unitKey: BASE_PRICE_KEY,
+      sellingPrice: product.sellingPrice,
+      minPrice: product.minPrice,
+      maxPrice: product.maxPrice,
+    },
+    ...product.unitConfigs.map((c) => ({
+      unitKey: c.id,
+      sellingPrice: c.sellingPrice,
+      minPrice: c.minPrice,
+      maxPrice: c.maxPrice,
+    })),
+  ];
+
+  await prisma.$transaction(
+    rows.map((row) =>
+      prisma.shopProductPrice.upsert({
+        where: { shopId_productId_unitKey: { shopId, productId, unitKey: row.unitKey } },
+        update: { sellingPrice: row.sellingPrice, minPrice: row.minPrice, maxPrice: row.maxPrice },
+        create: { shopId, productId, ...row },
+      })
+    )
+  );
+
+  await prisma.shopProductPrice.deleteMany({
+    where: { shopId, productId, unitKey: { notIn: rows.map((r) => r.unitKey) } },
+  });
+}
+
 export class InventoryService {
   async listProducts(shopId: string, filters: {
     page?: number;
@@ -92,7 +136,7 @@ export class InventoryService {
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: { category: { select: { name: true } }, unitConfigs: true },
+        include: { category: { select: { name: true } }, unitConfigs: true, shopPrices: { where: { shopId } } },
         orderBy: { updatedAt: 'desc' },
         skip,
         take: limit,
@@ -119,6 +163,8 @@ export class InventoryService {
       where: { id: productId },
       include: {
         category: { select: { id: true, name: true } },
+        unitConfigs: true,
+        shopPrices: true,
         stockAdjustments: {
           orderBy: { createdAt: 'desc' },
           take: 20,
@@ -133,6 +179,7 @@ export class InventoryService {
   }
 
   async createProduct(shopId: string, userId: string, data: {
+    clientId?: string;
     name: string;
     sku?: string;
     categoryId?: string;
@@ -166,6 +213,17 @@ export class InventoryService {
     barcode?: string;
     priceOverride?: boolean;
   }, opts: { isOwner?: boolean } = {}) {
+    if (data.clientId) {
+      const existing = await prisma.product.findFirst({
+        where: { shopId, clientId: data.clientId },
+        include: { unitConfigs: true },
+      });
+      if (existing) {
+        await syncShopPrices(shopId, existing.id);
+        return existing;
+      }
+    }
+
     // Spec 8.4.1 — reject a selling/min price at or below cost unless the Owner
     // has explicitly confirmed an override.
     const costPrice = data.costPrice || 0;
@@ -202,9 +260,10 @@ export class InventoryService {
     const baseStock = data.baseUnitStock ?? data.stockQuantity ?? 0;
     const baseUnitName = data.baseUnitName || data.unit || 'piece';
 
-    return prisma.product.create({
+    const created = await prisma.product.create({
       data: {
         shopId,
+        clientId: data.clientId ?? null,
         needsPriceReview: Boolean((priceError && overrideApproved) || configOverrideUsed),
         name: data.name,
         sku: data.sku,
@@ -245,6 +304,8 @@ export class InventoryService {
       },
       include: { unitConfigs: true },
     });
+    await syncShopPrices(shopId, created.id);
+    return created;
   }
 
   async updateProduct(productId: string, data: {
@@ -358,8 +419,8 @@ export class InventoryService {
       updateData.stockQuantity = baseUnitStock;
     }
 
-    return prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({ where: { id: productId }, data: updateData });
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.product.update({ where: { id: productId }, data: updateData });
       if (unitConfigs) {
         await tx.productUnitConfig.deleteMany({ where: { productId } });
         if (unitConfigs.length) {
@@ -377,8 +438,10 @@ export class InventoryService {
           });
         }
       }
-      return updated;
+      return row;
     });
+    await syncShopPrices(existing.shopId, productId);
+    return updated;
   }
 
   /** Recompute the needs_price_review flag for a product across its unit configs. */
@@ -404,8 +467,28 @@ export class InventoryService {
     });
   }
 
-  async adjustStock(productId: string, shopId: string, userId: string, data: { quantityChange: number; reason: string; unitConfigId?: string; baseUnits?: number }) {
+  async adjustStock(productId: string, shopId: string, userId: string, data: { clientId?: string; quantityChange: number; reason: string; unitConfigId?: string; baseUnits?: number }) {
     const result = await prisma.$transaction(async (tx) => {
+      if (data.clientId) {
+        const existing = await tx.stockAdjustment.findFirst({
+          where: { shopId, clientId: data.clientId },
+        });
+        if (existing) {
+          const current = await tx.product.findUnique({
+            where: { id: productId },
+            select: { stockQuantity: true, reorderLevel: true, name: true },
+          });
+          return {
+            productId,
+            previousStock: (current?.stockQuantity ?? 0) - existing.quantityChange,
+            newQuantity: current?.stockQuantity ?? 0,
+            change: existing.quantityChange,
+            reorderLevel: current?.reorderLevel ?? 0,
+            productName: current?.name ?? '',
+          };
+        }
+      }
+
       const product = await tx.product.findFirst({
         where: { id: productId, shopId },
       });
@@ -445,6 +528,7 @@ export class InventoryService {
 
       await tx.stockAdjustment.create({
         data: {
+          clientId: data.clientId ?? null,
           productId,
           quantityChange: baseChange,
           reason: data.reason,
@@ -623,7 +707,7 @@ export class InventoryService {
   async findByBarcode(shopId: string, barcode: string) {
     return prisma.product.findFirst({
       where: { shopId, barcode, isActive: true },
-      include: { category: { select: { name: true } }, unitConfigs: true },
+      include: { category: { select: { name: true } }, unitConfigs: true, shopPrices: { where: { shopId } } },
     });
   }
 

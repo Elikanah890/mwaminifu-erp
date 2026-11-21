@@ -2,8 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
-import { Business, Agent, Shop, Employee, PaginationMeta } from '@/lib/types';
-import { formatDate, formatNumber, errorMessage } from '@/lib/format';
+import { Business, Agent, Shop, PaginationMeta } from '@/lib/types';
+import { formatDate, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
 import StatusBadge, { Pill } from '@/components/StatusBadge';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
@@ -150,7 +150,7 @@ export default function BusinessesPage() {
 
   const loadAgents = useCallback(async () => {
     try {
-      const res = await apiClient.get<Agent[]>('/admin/agents?limit=1000');
+      const res = await apiClient.get<Agent[]>('/admin/agents?limit=200');
       if (res.data) setAgents(res.data.filter((a) => a.isActive));
     } catch {
       // ignore — the dropdown will simply be empty
@@ -163,6 +163,12 @@ export default function BusinessesPage() {
     setShowAdd(true);
     loadAgents();
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('create') === '1') {
+      setShowAdd(true);
+    }
+  }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,17 +330,17 @@ export default function BusinessesPage() {
               {businesses.length === 0 ? (
                 <EmptyState message="No businesses found" />
               ) : (
-                <div className="overflow-x-auto">
+                <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                     <tr className="border-b border-border">
                       <th className="w-10 py-4 px-4" />
                       <th className="py-3 px-4 font-semibold">Business</th>
-                      <th className="py-3 px-4 font-semibold">Phone</th>
-                      <th className="py-3 px-4 font-semibold">Agent</th>
+                      <th className="hidden py-3 px-4 font-semibold sm:table-cell">Phone</th>
+                      <th className="hidden py-3 px-4 font-semibold md:table-cell">Agent</th>
                       <th className="py-3 px-4 font-semibold">Shops</th>
                       <th className="py-3 px-4 font-semibold">Status</th>
-                      <th className="py-3 px-4 font-semibold">Created</th>
+                      <th className="hidden py-3 px-4 font-semibold lg:table-cell">Created</th>
                       <th className="py-3 px-4 font-semibold text-right">Actions</th>
                     </tr>
                   </thead>
@@ -351,11 +357,11 @@ export default function BusinessesPage() {
                               {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </td>
                             <td className="py-3 px-4 font-medium text-foreground">{b.name}</td>
-                            <td className="py-3 px-4 text-muted-foreground">{b.phone || '-'}</td>
-                            <td className="py-3 px-4 text-muted-foreground">{b.agentName || '-'}</td>
+                            <td className="hidden py-3 px-4 text-muted-foreground sm:table-cell">{b.phone || '-'}</td>
+                            <td className="hidden py-3 px-4 text-muted-foreground md:table-cell">{b.agentName || '-'}</td>
                             <td className="py-3 px-4">{b.shopCount}</td>
                             <td className="py-3 px-4"><StatusBadge active={b.isActive} /></td>
-                            <td className="py-3 px-4 text-muted-foreground text-xs">{formatDate(b.createdAt)}</td>
+                            <td className="hidden py-3 px-4 text-muted-foreground text-xs lg:table-cell">{formatDate(b.createdAt)}</td>
                             <td className="py-3 px-4">
                               <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                                 <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline" title="Reset access">
@@ -438,6 +444,30 @@ export default function BusinessesPage() {
                 </table>
                 </div>
               )}
+              {businesses.length > 0 && (
+                <div className="divide-y divide-border md:hidden">
+                  {businesses.map((b) => (
+                    <div key={`mobile-${b.id}`} className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-foreground">{b.name}</p>
+                          <p className="text-xs text-muted-foreground">{b.phone || 'No phone'}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Agent: {b.agentName || '-'} · {b.shopCount} shop(s)</p>
+                        </div>
+                        <StatusBadge active={b.isActive} />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium">
+                        <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-secondary hover:underline">
+                          <KeyRound size={14} /> Reset password
+                        </button>
+                        <button onClick={() => removeOwner(b)} className="inline-flex items-center gap-1 text-danger hover:underline">
+                          <Trash2 size={14} /> Remove owner
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="px-6 py-3 border-t border-border">
                 <Pagination page={meta.page} total={meta.total} limit={PER_PAGE} onPageChange={load} />
               </div>
@@ -452,7 +482,7 @@ export default function BusinessesPage() {
         <Reveal><div className="surface-card"><EmptyState message="No shops found" /></div></Reveal>
       ) : (
         <Reveal className="surface-card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
               <tr className="border-b border-border">
@@ -475,6 +505,20 @@ export default function BusinessesPage() {
               ))}
             </tbody>
           </table>
+          </div>
+          <div className="divide-y divide-border md:hidden">
+            {shops.map((s) => (
+              <div key={`mobile-${s.id}`} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{s.name}</p>
+                    <p className="text-xs text-muted-foreground">{s.owner?.name ?? 'No owner'}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{s.address || 'No location'}</p>
+                  </div>
+                  <StatusBadge active={!s.isArchived} activeLabel="Active" inactiveLabel="Archived" />
+                </div>
+              </div>
+            ))}
           </div>
         </Reveal>
       ))}

@@ -13,12 +13,14 @@ import Modal from '@/components/Modal';
 import StatsCard from '@/components/StatsCard';
 import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
+import { usePermissions } from '@/lib/context/PermissionsContext';
 import { Plus, Landmark, HandCoins, History, Pencil, Trash2 } from 'lucide-react';
 
 export default function OwnerLoansPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const { can } = usePermissions();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -125,7 +127,7 @@ export default function OwnerLoansPage() {
     <PageWrapper
       title={t('loans')}
       description={t('loans')}
-      breadcrumb={['Owner', t('finance'), t('loans')]}
+      breadcrumb={[t('businessOwner'), t('finance'), t('loans')]}
       actions={<button onClick={openCreate} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('create')}</button>}
     >
       <Stagger className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -137,7 +139,12 @@ export default function OwnerLoansPage() {
       {shopLoading || loading ? (
         <SkeletonTable rows={6} />
       ) : loans.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState
+          icon={<Landmark size={22} />}
+          title={t('noLoansYet')}
+          description={t('noLoansDesc')}
+          action={can('loans:write') ? <button onClick={openCreate} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('add')}</button> : undefined}
+        /></div></Reveal>
       ) : (
         <Reveal><div className="surface-card overflow-x-auto">
           <table className="w-full text-sm">
@@ -227,7 +234,7 @@ export default function OwnerLoansPage() {
               <div className="bg-muted rounded-lg p-4"><p className="text-xs text-muted-foreground">{t('remainingBalance')}</p><p className="text-lg font-bold text-danger">{formatCurrency(historyTarget.remainingBalance)}</p></div>
             </div>
             {(historyTarget.repayments ?? []).length === 0 ? (
-              <EmptyState message={t('noData')} />
+              <EmptyState icon={<Landmark size={20} />} title={t('noLoansYet')} description={t('noLoansDesc')} />
             ) : (
               <ul className="divide-y divide-border max-h-64 overflow-y-auto">
                 {(historyTarget.repayments ?? []).map((r) => (

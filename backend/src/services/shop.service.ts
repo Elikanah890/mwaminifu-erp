@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { settingsService } from './settings.service';
 
 function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -102,13 +103,23 @@ export class ShopService {
     return shop;
   }
 
-  async createShop(ownerId: string, data: { name: string; address?: string; currency?: string }) {
+  async createShop(ownerId: string, data: {
+    name: string;
+    address?: string;
+    businessCategory?: string;
+    region?: string;
+    district?: string;
+    ward?: string;
+    street?: string;
+    currency?: string;
+  }) {
     const shopCount = await prisma.shop.count({
       where: { ownerId, isArchived: false },
     });
+    const maxShops = Number(settingsService.getSync('maxShopsPerOwner')) || 5;
 
-    if (shopCount >= 5) {
-      throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Maximum 5 shops allowed' };
+    if (shopCount >= maxShops) {
+      throw { status: 422, code: 'BUSINESS_RULE_VIOLATION', message: `Maximum ${maxShops} shops allowed` };
     }
 
     const shop = await prisma.shop.create({
@@ -116,6 +127,11 @@ export class ShopService {
         ownerId,
         name: data.name,
         address: data.address,
+        businessCategory: data.businessCategory,
+        region: data.region,
+        district: data.district,
+        ward: data.ward,
+        street: data.street,
         currency: data.currency || 'TZS',
       },
     });
@@ -145,6 +161,11 @@ export class ShopService {
   async updateShop(shopId: string, ownerId: string, data: {
     name?: string;
     address?: string;
+    businessCategory?: string;
+    region?: string;
+    district?: string;
+    ward?: string;
+    street?: string;
     logoUrl?: string;
     coverUrl?: string;
     currency?: string;

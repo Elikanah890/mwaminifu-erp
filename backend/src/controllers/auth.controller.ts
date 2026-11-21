@@ -188,7 +188,7 @@ export class AuthController {
       const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { role: true } });
       if (user?.role === 'EMPLOYEE') {
         const employee = await prisma.employee.findFirst({
-          where: { userId: req.user!.userId, isActive: true },
+          where: { userId: req.user!.userId, shopId: req.user!.shopId, isActive: true, deletedAt: null },
           select: { permissions: true, shopId: true },
         });
         // Expand legacy strings so the client's canonical `can()` checks match

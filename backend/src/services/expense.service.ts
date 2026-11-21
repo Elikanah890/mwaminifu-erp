@@ -51,6 +51,7 @@ export class ExpenseService {
   }
 
   async createExpense(shopId: string, userId: string, data: {
+    clientId?: string;
     category: string;
     amount: number;
     description?: string;
@@ -58,9 +59,15 @@ export class ExpenseService {
     expenseDate?: string;
     paymentMethod?: string;
   }) {
+    if (data.clientId) {
+      const existing = await prisma.expense.findFirst({ where: { shopId, clientId: data.clientId } });
+      if (existing) return existing;
+    }
+
     const expense = await prisma.expense.create({
       data: {
         shopId,
+        clientId: data.clientId ?? null,
         userId,
         category: data.category,
         amount: data.amount,

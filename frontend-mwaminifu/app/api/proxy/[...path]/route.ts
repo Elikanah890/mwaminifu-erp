@@ -65,12 +65,14 @@ async function proxy(request: NextRequest, ctx: Ctx) {
     }
   }
 
+  const shopId = request.headers.get('x-shop-id');
   const doFetch = (token?: string) =>
     fetch(url, {
       method,
       headers: {
         ...(contentType ? { 'Content-Type': contentType } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(shopId ? { 'X-Shop-Id': shopId } : {}),
       },
       body,
       cache: 'no-store',

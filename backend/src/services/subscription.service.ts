@@ -23,15 +23,33 @@ async function createFirstPaymentCommission(
   const agentId = shop?.owner?.agentId;
   if (!shop || !agentId) return;
 
-  const existing = await tx.commission.findFirst({ where: { ownerId: shop.ownerId } });
+  // Strict first-payment rule: only the owner's first completed payment across
+  // all their shops can generate a commission. This closes the case where an
+  // agent is linked after the owner has already paid.
+  const completedPayments = await tx.subscriptionPayment.count({
+    where: {
+      status: 'COMPLETED',
+      subscription: { shop: { ownerId: shop.ownerId } },
+    },
+  });
+  if (completedPayments > 1) return;
+
+  const existing = await tx.commission.findUnique({ where: { ownerId: shop.ownerId } });
   if (existing) return;
 
   const commission = Math.round(amount * COMMISSION_RATE * 100) / 100;
   if (commission <= 0) return;
 
-  await tx.commission.create({
-    data: { agentId, ownerId: shop.ownerId, paymentId, amount: commission, status: 'PENDING' },
-  });
+  try {
+    await tx.commission.create({
+      data: { agentId, ownerId: shop.ownerId, paymentId, amount: commission, status: 'PENDING' },
+    });
+  } catch (err) {
+    // The unique ownerId constraint is the final guard against duplicate
+    // commissions under concurrent first payments.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return;
+    throw err;
+  }
 }
 
 export const PLAN_FEATURES = [

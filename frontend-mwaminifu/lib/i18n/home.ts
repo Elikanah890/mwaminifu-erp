@@ -137,10 +137,10 @@ export const homeText: Record<Locale, HomeText> = {
     featuresSubtitle: 'Mfumo kamili wa mauzo ya kila siku, deni, stoo, wafanyakazi na ripoti za usimamizi.',
     features: [
       { title: 'POS (Mauzo)', desc: 'Rekodi mauzo haraka, gawanya malipo na toa risiti.' },
-      { title: 'Bidhaa', desc: 'Fuatilia hisa, vitengo mbalimbali na kengele za hisa ndogo.' },
+      { title: 'Bidhaa', desc: 'Fuatilia bidhaa, vitengo mbalimbali na kengele za bidhaa chache.' },
       { title: 'Wateja', desc: 'Simamia deni, malipo ya sehemu na taarifa za wateja.' },
       { title: 'Ripoti', desc: 'Mauzo, faida, stoo na thamani ya biashara.' },
-      { title: 'Fedha', desc: 'Gharama, usimamizi wa fedha taslimu, mikopo na malipo.' },
+      { title: 'Fedha', desc: 'Matumizi, usimamizi wa fedha taslimu, mikopo na malipo.' },
       { title: 'Wafanyakazi', desc: 'Simamia timu kwa ruhusa maalumu.' },
       { title: 'Maduka Mengi', desc: 'Unganisha hadi maduka 5 chini ya akaunti moja.' },
       { title: 'Bila Mtandao', desc: 'Inafanya kazi bila mtandao na inasawazisha baadaye.' },

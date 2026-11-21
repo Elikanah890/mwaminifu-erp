@@ -12,6 +12,7 @@ import { Reveal } from '@/components/motion';
 import Modal from '@/components/Modal';
 import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
+import { usePermissions } from '@/lib/context/PermissionsContext';
 import { Plus, HandCoins, FileText, Search, Pencil, Trash2, Download, User } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,6 +22,7 @@ export default function OwnerCustomersPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const { can } = usePermissions();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -138,9 +140,9 @@ export default function OwnerCustomersPage() {
 
   return (
     <PageWrapper
-      title={`${t('customers')} & ${t('credit')}`}
+      title={t('customersCredit')}
       description={t('receivables')}
-      breadcrumb={['Owner', t('customers')]}
+      breadcrumb={[t('businessOwner'), t('customers')]}
       actions={
         <div className="flex items-center gap-2">
           <button onClick={() => apiClient.download(`/shops/${activeShopId}/reports/customers/export?format=csv`, 'customers.csv')} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>
@@ -158,7 +160,12 @@ export default function OwnerCustomersPage() {
       {shopLoading || loading ? (
         <SkeletonTable rows={8} />
       ) : customers.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState
+          icon={<User size={22} />}
+          title={t('noCustomersYet')}
+          description={t('noCustomersDesc')}
+          action={can('customers:create') ? <button onClick={openCreate} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('addCustomer')}</button> : undefined}
+        /></div></Reveal>
       ) : (
         <Reveal><div className="surface-card overflow-x-auto">
           <table className="w-full text-sm">

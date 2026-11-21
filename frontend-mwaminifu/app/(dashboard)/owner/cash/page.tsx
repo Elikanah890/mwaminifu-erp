@@ -69,7 +69,7 @@ export default function CashPage() {
     <PageWrapper
       title={t('cashManagement')}
       description={t('cashManagement')}
-      breadcrumb={['Owner', t('finance'), t('cash')]}
+      breadcrumb={[t('businessOwner'), t('finance'), t('cash')]}
       actions={<button onClick={() => setModalOpen(true)} className="btn-navy inline-flex items-center gap-2"><Plus size={16} /> {t('add')}</button>}
     >
       {shopLoading || loading ? (

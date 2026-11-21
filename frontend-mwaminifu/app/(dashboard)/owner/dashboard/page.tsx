@@ -156,7 +156,7 @@ export default function OwnerDashboardPage() {
     <PageWrapper
       title={`${t('dashboard')} — ${activeShop?.name ?? ''}`}
       description={activeShop ? `${activeShop.name} — ${t('salesOverview')}` : t('dashboard')}
-      breadcrumb={['Owner', t('dashboard')]}
+      breadcrumb={[t('businessOwner'), t('dashboard')]}
       actions={
         <Link href="/owner/sales" className="btn-gold inline-flex items-center gap-2">
           <ShoppingCart size={16} /> {t('newSale')}
@@ -189,7 +189,7 @@ export default function OwnerDashboardPage() {
                 <Building2 size={14} /> {t('businessValuation')}
               </p>
               <p className="mt-2 text-4xl font-bold tabular-nums text-secondary">{formatCurrency(dash?.netBusinessValue ?? 0)}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{t('netBusinessValue')} = Stock + Cash + Credit − Loans</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t('netBusinessValue')} = {t('stockValue')} + {t('cashBalance')} + {t('customerCreditReceivable')} − {t('businessLoansOutstanding')}</p>
             </div>
             <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4 lg:min-w-[430px]">
               <Metric label={t('stockValue')} value={formatCurrency(dash?.stockValue ?? inventory?.summary.totalValue ?? 0)} />

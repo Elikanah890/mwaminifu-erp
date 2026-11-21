@@ -13,10 +13,14 @@ import StatsCard from '@/components/StatsCard';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 import { Pill } from '@/components/StatusBadge';
 import { Clock, TrendingUp, Hash, Scale } from 'lucide-react';
+import { usePermissions } from '@/lib/context/PermissionsContext';
+import AccessDenied from '@/components/AccessDenied';
 
 export default function EmployeeReportsPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
+  const { can, loading: permsLoading } = usePermissions();
+  const canViewShifts = can('shift:view') || can('shift:open') || can('shift:close');
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,14 +28,16 @@ export default function EmployeeReportsPage() {
   const userId = apiClient.getUser()?.id;
 
   useEffect(() => {
-    if (!activeShopId) return;
+    if (!activeShopId || !can('reports:sales')) return;
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError('');
       try {
         const [s, salesRes] = await Promise.all([
-          apiClient.get<Shift[]>('/shifts'),
+          canViewShifts
+            ? apiClient.get<Shift[]>('/shifts')
+            : Promise.resolve({ data: [] as Shift[] }),
           apiClient.get<SaleListItem[]>(`/shops/${activeShopId}/sales?userId=${userId}&limit=200`),
         ]);
         if (cancelled) return;
@@ -45,11 +51,18 @@ export default function EmployeeReportsPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [activeShopId, userId]);
+  }, [activeShopId, userId, can, canViewShifts]);
 
   const totalSales = sales.reduce((s, x) => s + x.grandTotal, 0);
   const closedShifts = shifts.filter((s) => !s.isActive && s.discrepancy != null);
   const totalDiscrepancy = closedShifts.reduce((s, x) => s + (x.discrepancy ?? 0), 0);
+
+  if (permsLoading) {
+    return <PageWrapper title={t('myActivity')}><SkeletonTable rows={6} /></PageWrapper>;
+  }
+  if (!can('reports:sales')) {
+    return <PageWrapper title={t('myActivity')}><AccessDenied /></PageWrapper>;
+  }
 
   if (shopLoading || loading) {
     return (
@@ -67,7 +80,7 @@ export default function EmployeeReportsPage() {
   }
 
   return (
-    <PageWrapper title={t('myActivity')} description={t('myActivity')} breadcrumb={['Employee', t('reports')]}>
+    <PageWrapper title={t('myActivity')} description={t('myActivity')} breadcrumb={[t('employeePortal'), t('reports')]}>
       {error && <Reveal><div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div></Reveal>}
 
       <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

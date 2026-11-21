@@ -53,6 +53,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productsError, setProductsError] = useState('');
+  const [productsReload, setProductsReload] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [discount, setDiscount] = useState(0);
@@ -82,21 +84,28 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     window.clearTimeout(searchRef.current);
     searchRef.current = window.setTimeout(() => {
       setLoadingProducts(true);
+      setProductsError('');
       const q = search ? `&search=${encodeURIComponent(search)}` : '';
       apiClient
         .get<Product[]>(`/shops/${shopId}/products?limit=100${q}`)
         .then((res) => setProducts(res.data ?? []))
-        .catch(() => {})
+        .catch(() => setProductsError(t('failedLoadProducts')))
         .finally(() => setLoadingProducts(false));
     }, 250);
     return () => window.clearTimeout(searchRef.current);
-  }, [shopId, search]);
+  }, [shopId, search, productsReload, t]);
 
   const totals = useMemo(() => {
     const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
     const total = Math.max(0, subtotal - discount);
     return { subtotal, total };
   }, [cart, discount]);
+
+  const shopPriceFor = (product: Product, unitKey: string) =>
+    product.shopPrices?.find((price) => price.unitKey === unitKey);
+
+  const isDecimalUnit = (name: string) =>
+    /^(kg|kgs|kilogram|kilograms|g|gram|grams|mg|l|ltr|litre|liter|litres|liters|ml|m|meter|metre|cm|mm)$/i.test(name.trim());
 
   const addLine = (
     product: Product,
@@ -132,8 +141,21 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       addLine(
         product,
         cfg
-          ? { unitConfigId: cfg.id, unitName: cfg.unitName, baseUnits: cfg.baseUnits, price: cfg.sellingPrice, minPrice: cfg.minPrice, maxPrice: cfg.maxPrice }
-          : { unitName: product.baseUnitName || product.unit || 'piece', baseUnits: 1, price: product.sellingPrice, minPrice: product.minPrice, maxPrice: product.maxPrice }
+          ? {
+              unitConfigId: cfg.id,
+              unitName: cfg.unitName,
+              baseUnits: cfg.baseUnits,
+              price: shopPriceFor(product, cfg.id)?.sellingPrice ?? cfg.sellingPrice,
+              minPrice: shopPriceFor(product, cfg.id)?.minPrice ?? cfg.minPrice,
+              maxPrice: shopPriceFor(product, cfg.id)?.maxPrice ?? cfg.maxPrice,
+            }
+          : {
+              unitName: product.baseUnitName || product.unit || 'piece',
+              baseUnits: 1,
+              price: shopPriceFor(product, 'base')?.sellingPrice ?? product.sellingPrice,
+              minPrice: shopPriceFor(product, 'base')?.minPrice ?? product.minPrice,
+              maxPrice: shopPriceFor(product, 'base')?.maxPrice ?? product.maxPrice,
+            }
       );
       return;
     }
@@ -147,9 +169,22 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     const configs = pickerProduct.unitConfigs ?? [];
     const cfg = configs.find((c) => c.id === pickerUnitId);
     if (cfg) {
-      addLine(pickerProduct, { unitConfigId: cfg.id, unitName: cfg.unitName, baseUnits: cfg.baseUnits, price: cfg.sellingPrice, minPrice: cfg.minPrice, maxPrice: cfg.maxPrice });
+      addLine(pickerProduct, {
+        unitConfigId: cfg.id,
+        unitName: cfg.unitName,
+        baseUnits: cfg.baseUnits,
+        price: shopPriceFor(pickerProduct, cfg.id)?.sellingPrice ?? cfg.sellingPrice,
+        minPrice: shopPriceFor(pickerProduct, cfg.id)?.minPrice ?? cfg.minPrice,
+        maxPrice: shopPriceFor(pickerProduct, cfg.id)?.maxPrice ?? cfg.maxPrice,
+      });
     } else {
-      addLine(pickerProduct, { unitName: pickerProduct.baseUnitName || pickerProduct.unit || 'piece', baseUnits: 1, price: pickerProduct.sellingPrice, minPrice: pickerProduct.minPrice, maxPrice: pickerProduct.maxPrice });
+      addLine(pickerProduct, {
+        unitName: pickerProduct.baseUnitName || pickerProduct.unit || 'piece',
+        baseUnits: 1,
+        price: shopPriceFor(pickerProduct, 'base')?.sellingPrice ?? pickerProduct.sellingPrice,
+        minPrice: shopPriceFor(pickerProduct, 'base')?.minPrice ?? pickerProduct.minPrice,
+        maxPrice: shopPriceFor(pickerProduct, 'base')?.maxPrice ?? pickerProduct.maxPrice,
+      });
     }
     setPickerProduct(null);
   };
@@ -317,8 +352,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     if (!receipt) return;
     const number = (receipt.receiptNumber as string) || '-';
     const total = Number(receipt.grandTotal) || 0;
-    const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; product?: { name: string } }>) || [];
-    const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
+    const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>) || [];
+    const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
     const text = `*Receipt ${number}*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(total)}*\n\nThank you!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -327,8 +362,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     if (!receipt) return;
     const number = (receipt.receiptNumber as string) || '-';
     const total = Number(receipt.grandTotal) || 0;
-    const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; product?: { name: string } }>) || [];
-    const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
+    const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>) || [];
+    const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
     window.location.href = `mailto:?subject=${encodeURIComponent(`Receipt ${number}`)}&body=${encodeURIComponent(`Receipt ${number}\n${lines.join('\n')}\n\nTotal: ${formatCurrency(total)}`)}`;
   };
 
@@ -375,6 +410,13 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                   <Skeleton className="h-4 w-1/3" />
                 </div>
               ))
+            ) : productsError ? (
+              <div className="col-span-full flex flex-col items-center gap-3 py-10 text-center">
+                <p className="text-sm font-medium text-danger">{productsError}</p>
+                <button type="button" onClick={() => setProductsReload((v) => v + 1)} className="btn-outline text-sm">
+                  {t('retry')}
+                </button>
+              </div>
             ) : products.length === 0 ? (
               <p className="col-span-full text-sm text-subtle-foreground py-8 text-center">{t('noResults')}</p>
             ) : (
@@ -394,7 +436,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                   </p>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-sm font-bold text-secondary">
-                      {formatCurrency(p.unitConfigs?.[0]?.sellingPrice ?? p.sellingPrice)}
+                      {formatCurrency(shopPriceFor(p, p.unitConfigs?.[0]?.id ?? 'base')?.sellingPrice ?? p.unitConfigs?.[0]?.sellingPrice ?? p.sellingPrice)}
                     </span>
                     <span className={`text-xs ${p.stockQuantity <= p.reorderLevel ? 'text-danger' : 'text-subtle-foreground'}`}>
                       {formatStockWithUnits(p)}
@@ -426,7 +468,19 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => changeQty(key, -1)} className="p-1 text-muted-foreground hover:text-primary"><Minus size={14} /></button>
-                      <span className="text-sm font-semibold w-6 text-center">{item.quantity}</span>
+                      <input
+                        type="number"
+                        min={isDecimalUnit(item.unitName) ? 0.01 : 1}
+                        step={isDecimalUnit(item.unitName) ? 0.1 : 1}
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value) || 0;
+                          const quantity = isDecimalUnit(item.unitName) ? raw : Math.round(raw);
+                          setCart((prev) => prev.map((line) => lineKey(line) === key ? { ...line, quantity } : line).filter((line) => line.quantity > 0));
+                        }}
+                        className="w-14 rounded border border-border-strong px-1 py-0.5 text-center text-sm"
+                        aria-label={`Quantity ${item.unitName}`}
+                      />
                       <button onClick={() => changeQty(key, 1)} className="p-1 text-muted-foreground hover:text-primary"><Plus size={14} /></button>
                       <button onClick={() => removeItem(key)} className="p-1 text-danger"><Trash2 size={14} /></button>
                     </div>
@@ -441,10 +495,24 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === 'base') {
-                            setItemUnit(key, { unitName: item.product.baseUnitName || item.product.unit, baseUnits: 1, price: item.product.sellingPrice, unitConfigId: undefined, minPrice: item.product.minPrice, maxPrice: item.product.maxPrice });
+                            setItemUnit(key, {
+                              unitName: item.product.baseUnitName || item.product.unit,
+                              baseUnits: 1,
+                              price: shopPriceFor(item.product, 'base')?.sellingPrice ?? item.product.sellingPrice,
+                              unitConfigId: undefined,
+                              minPrice: shopPriceFor(item.product, 'base')?.minPrice ?? item.product.minPrice,
+                              maxPrice: shopPriceFor(item.product, 'base')?.maxPrice ?? item.product.maxPrice,
+                            });
                           } else {
                             const cfg = item.product.unitConfigs!.find((u) => u.id === val);
-                            if (cfg) setItemUnit(key, { unitName: cfg.unitName, baseUnits: cfg.baseUnits, price: cfg.sellingPrice, unitConfigId: cfg.id, minPrice: cfg.minPrice, maxPrice: cfg.maxPrice });
+                            if (cfg) setItemUnit(key, {
+                              unitName: cfg.unitName,
+                              baseUnits: cfg.baseUnits,
+                              price: shopPriceFor(item.product, cfg.id)?.sellingPrice ?? cfg.sellingPrice,
+                              unitConfigId: cfg.id,
+                              minPrice: shopPriceFor(item.product, cfg.id)?.minPrice ?? cfg.minPrice,
+                              maxPrice: shopPriceFor(item.product, cfg.id)?.maxPrice ?? cfg.maxPrice,
+                            });
                           }
                         }}
                         className="px-2 py-1 border border-border-strong rounded-md text-xs"
@@ -457,7 +525,9 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                         ))}
                       </select>
                     )}
-                    {editingPriceId === key ? (
+                    {!can('products:update') ? (
+                      <span className="text-sm text-muted-foreground">{formatCurrency(item.unitPrice)}</span>
+                    ) : editingPriceId === key ? (
                       <div className="flex items-center gap-2 flex-1">
                         <input
                           type="range"
@@ -504,9 +574,11 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <button type="button" onClick={() => setAddCustomerOpen(true)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline shrink-0">
-                <UserPlus size={14} /> {t('addNewCustomer')}
-              </button>
+              {can('customers:create') && (
+                <button type="button" onClick={() => setAddCustomerOpen(true)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline shrink-0">
+                  <UserPlus size={14} /> {t('addNewCustomer')}
+                </button>
+              )}
               {customerId && (
                 <button type="button" onClick={() => openQuickView(customerId)} className="text-xs text-primary hover:underline shrink-0 inline-flex items-center gap-1">
                   <Eye size={14} /> {t('view')}
@@ -566,7 +638,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               onChange={(e) => setPayMethod(e.target.value)}
               className="flex-1 px-2 py-2 border border-border-strong rounded-md text-sm"
             >
-              {PAYMENT_METHODS.map((m) => (
+              {PAYMENT_METHODS.filter((m) => m.id !== 'credit' || can('credit:create')).map((m) => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
@@ -608,9 +680,9 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               <p className="font-mono text-lg font-bold text-primary">{receipt.receiptNumber as string}</p>
             </div>
             <div className="border-t border-dashed border-border py-3 space-y-1">
-              {(receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; product?: { name: string } }>).map((i, idx) => (
+              {(receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>).map((i, idx) => (
                 <div key={idx} className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{i.product?.name ?? 'Item'} — {i.unitName ?? i.unit ?? ''} × {i.quantity}</span>
+                  <span className="text-muted-foreground">{i.product?.name ?? 'Item'} — {i.unitName ?? i.unit ?? ''}{(i.baseUnitsPerConfig ?? 1) > 1 ? ` (${i.baseUnitsPerConfig}×)` : ''} × {i.quantity}</span>
                   <span className="font-medium">{formatCurrency(i.total)}</span>
                 </div>
               ))}

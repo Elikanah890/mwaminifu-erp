@@ -33,14 +33,14 @@ export default function PayablesPage() {
   if (shopLoading || loading) return <PageWrapper title={t('payables')}><SkeletonTable rows={6} /></PageWrapper>;
 
   return (
-    <PageWrapper title={t('payables')} description={t('payables')} breadcrumb={['Owner', t('finance'), t('payables')]}>
+    <PageWrapper title={t('payables')} description={t('payables')} breadcrumb={[t('businessOwner'), t('finance'), t('payables')]}>
       <Stagger className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <StaggerItem><StatsCard title={t('payables')} value={formatCurrency(data?.totalPayable ?? 0)} tone="red" icon={<Wallet size={20} />} /></StaggerItem>
         <StaggerItem><StatsCard title={t('suppliers')} value={data?.count ?? 0} tone="navy" /></StaggerItem>
       </Stagger>
 
       {!data || data.items.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState icon={<Wallet size={22} />} title={t('noPayablesYet')} description={t('noPayablesDesc')} /></div></Reveal>
       ) : (
         <Reveal><div className="surface-card overflow-x-auto">
           <table className="w-full text-sm">

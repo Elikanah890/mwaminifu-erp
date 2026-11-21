@@ -10,6 +10,12 @@ type SendEmailInput = {
   text: string;
 };
 
+function redactEmailText(text: string): string {
+  return text
+    .replace(/(password|pin|code|otp)[^\n:]*[:-]?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\b\d{4,8}\b/g, '[redacted]');
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -22,11 +28,12 @@ export class EmailService {
   /** Sends via Resend when configured; otherwise logs the full email. Never throws. */
   async send(input: SendEmailInput): Promise<boolean> {
     if (!env.RESEND_API_KEY) {
+      const safeText = redactEmailText(input.text);
       logger.info(
-        `[EMAIL][CONSOLE] to=${input.to} subject="${input.subject}"\n${input.text}`
+        `[EMAIL][CONSOLE] to=${input.to} subject="${input.subject}"\n${safeText}`
       );
       // eslint-disable-next-line no-console
-      console.log(`\n[EMAIL][CONSOLE]\nTo: ${input.to}\nSubject: ${input.subject}\n\n${input.text}\n`);
+      console.log(`\n[EMAIL][CONSOLE]\nTo: ${input.to}\nSubject: ${input.subject}\n\n${safeText}\n`);
       return true;
     }
 

@@ -20,13 +20,13 @@ import { Plus, KeyRound, ShieldCheck, Activity } from 'lucide-react';
 // Canonical grantable permissions (matches backend config/permissions.ts).
 // General Reports and Finance Overview are owner-only and intentionally absent.
 const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label: string }> }> = [
-  { title: 'Sales', items: [
+  { title: 'sales', items: [
     { id: 'sales:create', label: 'Record sale' },
     { id: 'sales:view', label: 'View sales' },
     { id: 'sales:refund', label: 'Process refund' },
     { id: 'sales:cancel', label: 'Void/cancel sale' },
   ] },
-  { title: 'Products & Inventory', items: [
+  { title: 'productsInventory', items: [
     { id: 'products:view', label: 'View products' },
     { id: 'products:create', label: 'Add product' },
     { id: 'products:update', label: 'Edit product' },
@@ -34,7 +34,7 @@ const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label
     { id: 'inventory:view', label: 'View stock' },
     { id: 'inventory:adjust', label: 'Adjust stock' },
   ] },
-  { title: 'Customers & Credit', items: [
+  { title: 'customersCredit', items: [
     { id: 'customers:view', label: 'View customers' },
     { id: 'customers:create', label: 'Add customer' },
     { id: 'customers:update', label: 'Edit customer' },
@@ -43,7 +43,7 @@ const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label
     { id: 'credit:read', label: 'View credit balances' },
     { id: 'credit:writeoff', label: 'Write off bad debt' },
   ] },
-  { title: 'Expenses & Purchases', items: [
+  { title: 'expensesPurchases', items: [
     { id: 'expenses:create', label: 'Record expenses' },
     { id: 'expenses:read', label: 'View expenses' },
     { id: 'expenses:approve', label: 'Approve expenses' },
@@ -51,12 +51,12 @@ const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label
     { id: 'purchases:create', label: 'Create purchases' },
     { id: 'purchases:approve', label: 'Approve purchases' },
   ] },
-  { title: 'Shifts', items: [
+  { title: 'shifts', items: [
     { id: 'shift:open', label: 'Open shift' },
     { id: 'shift:close', label: 'Close shift' },
     { id: 'shift:view', label: 'View shifts' },
   ] },
-  { title: 'Reports', items: [
+  { title: 'reports', items: [
     { id: 'reports:sales', label: 'Sales report' },
     { id: 'reports:inventory', label: 'Inventory report' },
     { id: 'reports:credit', label: 'Credit (deni) report' },
@@ -65,14 +65,14 @@ const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label
     { id: 'reports:valuation', label: 'Stock value / valuation' },
     { id: 'reports:communications', label: 'Send SMS / WhatsApp (Premium)' },
   ] },
-  { title: 'Financial Controls', items: [
+  { title: 'financialControls', items: [
     { id: 'loans:read', label: 'View loans' },
     { id: 'loans:write', label: 'Manage loans' },
     { id: 'cash:read', label: 'View cash' },
     { id: 'cash:write', label: 'Manage cash' },
     { id: 'finance:read', label: 'View payables / capital' },
   ] },
-  { title: 'Staff', items: [
+  { title: 'staff', items: [
     { id: 'employees:view', label: 'View employees' },
   ] },
 ];
@@ -92,7 +92,7 @@ const DEFAULT_EMPLOYEE_PERMISSIONS = [
 ];
 
 export default function OwnerEmployeesPage() {
-  const { activeShopId, loading: shopLoading } = useShop();
+  const { activeShopId, shops, setActiveShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
@@ -103,7 +103,7 @@ export default function OwnerEmployeesPage() {
   const [activitySales, setActivitySales] = useState<SaleListItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', role: 'Cashier' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', role: 'Cashier', shopId: '' });
   const [credentials, setCredentials] = useState<{ name: string; email: string; tempPassword: string } | null>(null);
   const [selectedPerms, setSelectedPerms] = useState<string[]>(DEFAULT_EMPLOYEE_PERMISSIONS);
 
@@ -125,22 +125,34 @@ export default function OwnerEmployeesPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    const targetShopId = form.shopId || activeShopId;
+    if (!targetShopId) {
+      toast('Select a shop first', 'error');
+      setSubmitting(false);
+      return;
+    }
     try {
-      const res = await apiClient.post<{ tempPassword?: string }>(`/shops/${activeShopId}/employees`, {
+      const res = await apiClient.post<{ tempPassword?: string }>(`/shops/${targetShopId}/employees`, {
         name: form.name,
         email: form.email.trim().toLowerCase(),
         phone: form.phone.trim() || undefined,
         role: form.role,
         permissions: selectedPerms,
       });
-      toast('Employee added. Welcome email sent.', 'success');
+      toast(
+        res.data?.tempPassword
+          ? 'Employee added. Welcome email sent.'
+          : 'Employee assigned to this shop. Their existing password was not changed.',
+        'success'
+      );
       if (res.data?.tempPassword) {
         setCredentials({ name: form.name, email: form.email.trim().toLowerCase(), tempPassword: res.data.tempPassword });
       }
       setAddOpen(false);
-      setForm({ name: '', email: '', phone: '', role: 'Cashier' });
+      setForm({ name: '', email: '', phone: '', role: 'Cashier', shopId: '' });
       setSelectedPerms(DEFAULT_EMPLOYEE_PERMISSIONS);
-      load();
+      if (targetShopId !== activeShopId) setActiveShopId(targetShopId);
+      else load();
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -201,9 +213,9 @@ export default function OwnerEmployeesPage() {
     <PageWrapper
       title={t('employees')}
       description={t('employees')}
-      breadcrumb={['Owner', t('people'), t('employees')]}
+      breadcrumb={[t('businessOwner'), t('people'), t('employees')]}
       actions={
-        <button onClick={() => { setAddOpen(true); setSelectedPerms(DEFAULT_EMPLOYEE_PERMISSIONS); }} className="btn-navy inline-flex items-center gap-2">
+        <button onClick={() => { setAddOpen(true); setSelectedPerms(DEFAULT_EMPLOYEE_PERMISSIONS); setForm((prev) => ({ ...prev, shopId: activeShopId ?? shops[0]?.id ?? '' })); }} className="btn-navy inline-flex items-center gap-2">
           <Plus size={16} /> {t('add')}
         </button>
       }
@@ -261,6 +273,13 @@ export default function OwnerEmployeesPage() {
       <Modal open={addOpen} title="Add Employee" onClose={() => setAddOpen(false)}>
         <form onSubmit={submit} className="space-y-4">
           <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Assign to shop <span className="text-danger">*</span></label>
+            <select required value={form.shopId} onChange={(e) => setForm({ ...form, shopId: e.target.value })} className="input-field">
+              <option value="">Select shop</option>
+              {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-foreground mb-1">Name</label>
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" />
           </div>
@@ -281,11 +300,11 @@ export default function OwnerEmployeesPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Permissions</label>
+            <label className="block text-sm font-medium text-foreground mb-2">{t('permissions')}</label>
             <div className="space-y-4">
               {PERMISSION_GROUPS.map((group) => (
                 <div key={group.title}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{group.title}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{t(group.title)}</p>
                   <div className="space-y-2">
                     {group.items.map((p) => (
                       <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -304,11 +323,11 @@ export default function OwnerEmployeesPage() {
         </form>
       </Modal>
 
-      <Modal open={!!permTarget} title={`Permissions — ${permTarget?.user?.name ?? ''}`} onClose={() => setPermTarget(null)}>
+      <Modal open={!!permTarget} title={`${t('permissions')} — ${permTarget?.user?.name ?? ''}`} onClose={() => setPermTarget(null)}>
         <div className="space-y-4 mb-4">
           {PERMISSION_GROUPS.map((group) => (
             <div key={group.title}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{group.title}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{t(group.title)}</p>
               <div className="space-y-2">
               {group.items.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -321,7 +340,7 @@ export default function OwnerEmployeesPage() {
           ))}
         </div>
         <button onClick={savePermissions} disabled={submitting} className="btn-navy w-full">
-          {submitting ? 'Saving...' : 'Save Permissions'}
+          {submitting ? t('loading') : `${t('save')} ${t('permissions')}`}
         </button>
       </Modal>
 

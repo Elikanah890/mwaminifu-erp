@@ -54,7 +54,7 @@ describe('RBAC — loans & cash permissions', () => {
       .get(`/api/v1/shops/${SHOP}/loans`)
       .set('Authorization', `Bearer ${employeeToken}`);
     expect(res.status).toBe(403);
-    expect(res.body.error.message).toMatch(/loans:read/);
+    expect(res.body.error.message).toBe('You do not have permission for this action.');
   });
 
   it('denies an employee without cash:read', async () => {
@@ -63,7 +63,7 @@ describe('RBAC — loans & cash permissions', () => {
       .get(`/api/v1/shops/${SHOP}/cash`)
       .set('Authorization', `Bearer ${employeeToken}`);
     expect(res.status).toBe(403);
-    expect(res.body.error.message).toMatch(/cash:read/);
+    expect(res.body.error.message).toBe('You do not have permission for this action.');
   });
 
   it('allows an employee explicitly granted cash:read', async () => {
@@ -205,7 +205,7 @@ describe('Employee data-access boundaries', () => {
       .get('/api/v1/expenses/exp_1')
       .set('Authorization', `Bearer ${employeeToken}`);
     expect(res.status).toBe(403);
-    expect(res.body.error.message).toMatch(/expenses:read/);
+    expect(res.body.error.message).toBe('You do not have permission for this action.');
   });
 });
 

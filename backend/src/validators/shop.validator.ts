@@ -10,12 +10,22 @@ const permissionName = z.string().refine((p) => GRANTABLE_PERMISSIONS.includes(p
 export const createShopSchema = z.object({
   name: z.string().min(2).max(100),
   address: z.string().optional(),
+  businessCategory: z.string().max(100).optional(),
+  region: z.string().max(100).optional(),
+  district: z.string().max(100).optional(),
+  ward: z.string().max(100).optional(),
+  street: z.string().max(150).optional(),
   currency: z.string().optional(),
 });
 
 export const updateShopSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   address: z.string().optional(),
+  businessCategory: z.string().max(100).optional(),
+  region: z.string().max(100).optional(),
+  district: z.string().max(100).optional(),
+  ward: z.string().max(100).optional(),
+  street: z.string().max(150).optional(),
   logoUrl: z.string().optional(),
   coverUrl: z.string().optional(),
   currency: z.string().optional(),
@@ -51,6 +61,7 @@ export const createSaleSchema = z.object({
 });
 
 export const createProductSchema = z.object({
+  clientId: z.string().optional(),
   name: z.string().min(1).max(200),
   sku: z.string().optional(),
   categoryId: z.string().optional(),
@@ -83,6 +94,7 @@ export const createProductSchema = z.object({
 });
 
 export const adjustStockSchema = z.object({
+  clientId: z.string().optional(),
   quantityChange: z.number().int(),
   reason: z.string().min(1),
   // Optional: express the adjustment in a unit configuration (e.g. +1 carton).
@@ -91,6 +103,7 @@ export const adjustStockSchema = z.object({
 });
 
 export const createExpenseSchema = z.object({
+  clientId: z.string().optional(),
   category: z.string().min(1),
   amount: z.number().positive(),
   description: z.string().optional(),
@@ -99,6 +112,7 @@ export const createExpenseSchema = z.object({
 });
 
 export const createCustomerSchema = z.object({
+  clientId: z.string().optional(),
   name: z.string().min(1).max(200),
   phone: z.string().optional(),
   email: z.string().email().optional(),
@@ -107,6 +121,7 @@ export const createCustomerSchema = z.object({
 });
 
 export const creditPaymentSchema = z.object({
+  clientId: z.string().optional(),
   amount: z.number().positive(),
   paymentDate: z.string().optional(),
   method: z.string().optional(),

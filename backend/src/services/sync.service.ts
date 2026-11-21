@@ -144,7 +144,9 @@ export class SyncService {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'Invalid since parameter' };
     }
 
-    const lastPullTimestamp = new Date();
+    // Capture the cursor BEFORE querying. Anything written after this instant
+    // must be picked up by the next pull instead of being silently skipped.
+    const pullStartedAt = new Date();
 
     const [sales, products, customers, expenses, loans, stockAdjustments, employees] = await Promise.all([
       prisma.sale.findMany({
@@ -155,35 +157,57 @@ export class SyncService {
       }),
       prisma.product.findMany({
         where: { shopId, updatedAt: { gt: sinceDate } },
+        orderBy: { updatedAt: 'asc' },
         take: limit,
       }),
       prisma.customer.findMany({
         where: { shopId, updatedAt: { gt: sinceDate } },
+        orderBy: { updatedAt: 'asc' },
         take: limit,
       }),
       prisma.expense.findMany({
         where: { shopId, updatedAt: { gt: sinceDate } },
+        orderBy: { updatedAt: 'asc' },
         take: limit,
       }),
       prisma.loan.findMany({
         where: { shopId, updatedAt: { gt: sinceDate } },
         include: { repayments: true },
+        orderBy: { updatedAt: 'asc' },
         take: limit,
       }),
       prisma.stockAdjustment.findMany({
         where: { shopId, createdAt: { gt: sinceDate } },
+        orderBy: { createdAt: 'asc' },
         take: limit,
       }),
       prisma.employee.findMany({
         where: { shopId, updatedAt: { gt: sinceDate } },
         include: { user: { select: { name: true, phone: true, isActive: true } } },
+        orderBy: { updatedAt: 'asc' },
         take: limit,
       }),
     ]);
 
-    const hasMore = [sales, products, customers, expenses, loans, stockAdjustments, employees].some(
-      (records) => records.length >= limit
-    );
+    const collections: Array<{ rows: Array<{ updatedAt?: Date; createdAt?: Date }> }> = [
+      { rows: sales }, { rows: products }, { rows: customers }, { rows: expenses },
+      { rows: loans }, { rows: stockAdjustments }, { rows: employees },
+    ];
+    const hasMore = collections.some(({ rows }) => rows.length >= limit);
+
+    // If any entity hit the page limit, advance only to just before the oldest
+    // returned tail timestamp. Re-reading a few records is safe (idempotent
+    // merges); skipping records is not.
+    let nextCursor = pullStartedAt;
+    for (const { rows } of collections) {
+      if (rows.length < limit) continue;
+      const last = rows[rows.length - 1];
+      const stamp = last.updatedAt ?? last.createdAt;
+      if (!stamp) continue;
+      const candidate = new Date(stamp.getTime() - 1);
+      if (candidate < nextCursor) nextCursor = candidate;
+    }
+    const lastPullTimestamp = nextCursor;
 
     await prisma.syncMetadata.upsert({
       where: { shopId },

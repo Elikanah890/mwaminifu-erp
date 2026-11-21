@@ -4,6 +4,12 @@ import { generateReceiptNumber } from '../utils/otp.util';
 import { shopService } from './shop.service';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+// Fractional quantities are only meaningful for measured units. Pieces,
+// cartons, boxes and similar packaged units must be whole numbers.
+const DECIMAL_UNIT_RE = /^(kg|kgs|kilogram|kilograms|g|gram|grams|mg|l|ltr|litre|liter|litres|liters|ml|m|meter|metre|cm|mm)$/i;
+const isDecimalUnit = (name: string) => DECIMAL_UNIT_RE.test(name.trim());
 
 export class SaleService {
   async createSale(
@@ -90,6 +96,11 @@ export class SaleService {
           throw { status: 404, code: 'NOT_FOUND', message: `Product ${item.productId} not found` };
         }
 
+        const shopPrices = await tx.shopProductPrice.findMany({
+          where: { shopId, productId: product.id },
+        });
+        const priceByKey = new Map(shopPrices.map((p) => [p.unitKey, p]));
+
         // Resolve the sold unit configuration (must belong to this product/shop).
         let baseUnitsPerConfig = item.baseUnitsPerConfig ?? item.baseUnits ?? 1;
         let unitName = item.unitName ?? item.unit ?? product.unit;
@@ -108,19 +119,35 @@ export class SaleService {
           }
           baseUnitsPerConfig = cfg.baseUnits;
           unitName = cfg.unitName;
-          if (unitPrice == null) unitPrice = cfg.sellingPrice;
-          if (cfg.pricingMode === 'FLUCTUATING') {
-            if (cfg.minPrice != null && unitPrice < cfg.minPrice) unitPrice = cfg.minPrice;
-            if (cfg.maxPrice != null && unitPrice > cfg.maxPrice) unitPrice = cfg.maxPrice;
-          }
+          const shopPrice = priceByKey.get(cfg.id);
+          const listPrice = shopPrice?.sellingPrice ?? cfg.sellingPrice;
+          const minPrice = shopPrice?.minPrice ?? cfg.minPrice;
+          const maxPrice = shopPrice?.maxPrice ?? cfg.maxPrice;
+          if (unitPrice == null) unitPrice = listPrice;
+          // Price overrides are always constrained to the shop's min/max range.
+          if (minPrice != null && unitPrice < minPrice) unitPrice = minPrice;
+          if (maxPrice != null && unitPrice > maxPrice) unitPrice = maxPrice;
         } else {
-          // Product-level price bounds apply only to the base unit.
-          if (unitPrice == null) unitPrice = product.sellingPrice;
-          if (product.minPrice != null && unitPrice < product.minPrice) unitPrice = product.minPrice;
-          if (product.maxPrice != null && unitPrice > product.maxPrice) unitPrice = product.maxPrice;
+          // Base-unit price comes from the shop-specific price row, falling
+          // back to the legacy product columns for oldest records.
+          const shopPrice = priceByKey.get('base');
+          const listPrice = shopPrice?.sellingPrice ?? product.sellingPrice;
+          const minPrice = shopPrice?.minPrice ?? product.minPrice;
+          const maxPrice = shopPrice?.maxPrice ?? product.maxPrice;
+          if (unitPrice == null) unitPrice = listPrice;
+          if (minPrice != null && unitPrice < minPrice) unitPrice = minPrice;
+          if (maxPrice != null && unitPrice > maxPrice) unitPrice = maxPrice;
         }
 
-        const totalBaseUnits = item.quantity * baseUnitsPerConfig;
+        if (!Number.isInteger(item.quantity) && !isDecimalUnit(unitName)) {
+          throw {
+            status: 422,
+            code: 'VALIDATION_ERROR',
+            message: `Decimals are only allowed for measured units (Kg, Litre). "${unitName}" must be a whole number.`,
+          };
+        }
+
+        const totalBaseUnits = round3(item.quantity * baseUnitsPerConfig);
         const resolvedUnitPrice = unitPrice ?? product.sellingPrice;
 
         if (!data.allowNegativeStock && product.stockQuantity < totalBaseUnits && product.isActive) {
@@ -479,12 +506,20 @@ export class SaleService {
     return prisma.$transaction(async (tx) => {
       for (const item of sale.items) {
         const baseUnits = item.quantity * (item.baseUnitsPerConfig || 1);
-        const product = await tx.product.findUnique({ where: { id: item.productId }, select: { stockQuantity: true } });
-        const newStock = (product?.stockQuantity ?? 0) - baseUnits;
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stockQuantity: newStock, baseUnitStock: newStock },
+        const decremented = await tx.product.updateMany({
+          where: { id: item.productId, shopId, stockQuantity: { gte: baseUnits } },
+          data: {
+            stockQuantity: { decrement: baseUnits },
+            baseUnitStock: { decrement: baseUnits },
+          },
         });
+        if (decremented.count === 0) {
+          throw {
+            status: 422,
+            code: 'BUSINESS_RULE_VIOLATION',
+            message: `Insufficient stock for product ${item.productId}`,
+          };
+        }
       }
 
       const updatedSale = await tx.sale.update({
@@ -591,6 +626,7 @@ export class SaleService {
       productId: string;
       name: string;
       quantity: number;
+      baseUnits: number;
       unitPrice: number;
       total: number;
       unit: string;
@@ -611,6 +647,7 @@ export class SaleService {
         productId: item.productId,
         name: item.product.name,
         quantity: qty,
+        baseUnits: qty * (item.baseUnitsPerConfig || 1),
         unitPrice: item.unitPrice,
         total: round2(qty * item.unitPrice),
         unit: item.unit || item.product.unit,
@@ -694,7 +731,7 @@ export class SaleService {
     tx: Prisma.TransactionClient,
     shopId: string,
     sale: { id: string; customerId: string | null; receiptNumber: string | null; paymentDetails: unknown; grandTotal: number },
-    lines: Array<{ productId: string; quantity: number; total: number }>,
+    lines: Array<{ productId: string; quantity: number; baseUnits?: number; total: number }>,
     refundAmount: number,
     userId: string,
     reason: string,
@@ -704,15 +741,23 @@ export class SaleService {
     for (const line of lines) {
       const product = await tx.product.findUnique({ where: { id: line.productId } });
       if (!product) continue;
-      const newStock = product.stockQuantity + line.quantity;
-      await tx.product.update({
+      const baseUnits = line.baseUnits ?? line.quantity;
+
+      // Atomic increments keep stock and base-unit stock in sync even when a
+      // sale and refund for the same product happen concurrently.
+      const updatedProduct = await tx.product.update({
         where: { id: line.productId },
-        data: { stockQuantity: newStock },
+        data: {
+          stockQuantity: { increment: baseUnits },
+          baseUnitStock: { increment: baseUnits },
+        },
       });
+      const newStock = updatedProduct.stockQuantity;
+
       await tx.stockAdjustment.create({
         data: {
           productId: line.productId,
-          quantityChange: line.quantity,
+          quantityChange: baseUnits,
           reason: `${type}: ${reason}`,
           performedBy: userId,
           shopId: product.shopId,
@@ -723,7 +768,7 @@ export class SaleService {
           shopId: product.shopId,
           productId: line.productId,
           type: type === 'VOID' ? 'REVERSAL' : 'REFUND',
-          quantity: line.quantity,
+          quantity: baseUnits,
           balanceAfter: newStock,
           reference,
           userId,
@@ -793,6 +838,7 @@ export class SaleService {
       productId: item.productId,
       name: item.product.name,
       quantity: item.quantity,
+      baseUnits: item.quantity * (item.baseUnitsPerConfig || 1),
       total: item.total,
       unit: item.unit || item.product.unit,
     }));

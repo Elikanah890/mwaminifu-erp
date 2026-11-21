@@ -14,7 +14,7 @@ export default function EmployeeProfilePage() {
   useEffect(() => setUser(apiClient.getUser()), []);
 
   return (
-    <PageWrapper title={t('profile')} description={locale === 'sw' ? 'Taarifa zako na mapendeleo ya akaunti' : 'Your details and account preferences'} breadcrumb={['Employee', t('profile')]}>
+    <PageWrapper title={t('profile')} description={locale === 'sw' ? 'Taarifa zako na mapendeleo ya akaunti' : 'Your details and account preferences'} breadcrumb={[t('employeePortal'), t('profile')]}>
       <Stagger className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <StaggerItem className="lg:col-span-2">
           <div className="surface-card h-full p-6">

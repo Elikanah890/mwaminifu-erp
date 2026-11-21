@@ -12,6 +12,12 @@ import { Reveal, motion } from '@/components/motion';
 
 const PER_PAGE = 15;
 
+/** Historical labels kept readable after the email/password migration. */
+function actionLabel(action: string): string {
+  if (action === 'OWNER_PIN_RESET') return 'PASSWORD_RESET';
+  return action.replace(/_/g, ' ');
+}
+
 const FINANCIAL_KEYS = /grandtotal|totalamount|amount|revenue|price|balance|payment|credit|discount|tax|cost|profit|unitprice/i;
 
 function redact(value: unknown): unknown {
@@ -86,7 +92,7 @@ export default function ActivityLogsPage() {
           value={search}
           onChange={(e) => { setSearch(e.target.value); load(1); }}
         />
-        <input className="input-field max-w-[240px]" placeholder="Action filter (e.g. SALE_CREATED)" value={action} onChange={(e) => { setAction(e.target.value); load(1); }} />
+        <input className="input-field max-w-[240px]" placeholder="Action filter (e.g. AGENT_CREATED)" value={action} onChange={(e) => { setAction(e.target.value); load(1); }} />
         <input type="date" className="input-field max-w-[160px]" value={from} onChange={(e) => { setFrom(e.target.value); load(1); }} />
         <input type="date" className="input-field max-w-[160px]" value={to} onChange={(e) => { setTo(e.target.value); load(1); }} />
       </Reveal>
@@ -116,7 +122,7 @@ export default function ActivityLogsPage() {
                     <td className="py-3 px-6 text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</td>
                     <td className="py-3 px-6">
                       <button onClick={() => setDetail(log)} className="text-secondary font-medium hover:underline">
-                        {log.action.replace(/_/g, ' ')}
+                        {actionLabel(log.action)}
                       </button>
                     </td>
                     <td className="py-3 px-6 text-foreground">{log.user?.name || 'System'}</td>
@@ -139,7 +145,7 @@ export default function ActivityLogsPage() {
         {detail && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Action</p><p className="font-semibold text-foreground">{detail.action.replace(/_/g, ' ')}</p></div>
+              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Action</p><p className="font-semibold text-foreground">{actionLabel(detail.action)}</p></div>
               <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Time</p><p className="font-semibold text-foreground">{formatDateTime(detail.createdAt)}</p></div>
               <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Actor</p><p className="font-semibold text-foreground">{detail.user?.name || 'System'} ({detail.user?.role || '-'})</p></div>
               <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">IP / Agent</p><p className="font-semibold text-foreground truncate">{detail.ipAddress || '-'} {detail.userAgent ? `· ${detail.userAgent}` : ''}</p></div>

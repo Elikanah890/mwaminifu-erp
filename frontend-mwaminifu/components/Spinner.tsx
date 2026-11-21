@@ -46,11 +46,13 @@ export function SkeletonTable({ rows = 6 }: { rows?: number }) {
 
 export function EmptyState({
   message,
+  description,
   title,
   action,
   icon,
 }: {
-  message: string;
+  message?: string;
+  description?: string;
   title?: string;
   action?: ReactNode;
   icon?: ReactNode;
@@ -61,7 +63,7 @@ export function EmptyState({
         {icon ?? <span className="text-xl">•</span>}
       </div>
       {title ? <h3 className="mb-1 text-base font-semibold text-foreground">{title}</h3> : null}
-      <p className="text-sm text-subtle-foreground">{message}</p>
+      <p className="text-sm text-subtle-foreground">{description ?? message}</p>
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );

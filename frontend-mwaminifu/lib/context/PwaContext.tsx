@@ -2,11 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-}
-
 type PwaContextValue = {
   installed: boolean;
   canInstall: boolean;
@@ -23,7 +18,6 @@ const DISMISS_KEY = 'mwaminifu_install_dismissed';
 const PwaContext = createContext<PwaContextValue | null>(null);
 
 export function PwaProvider({ children }: { children: ReactNode }) {
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -50,15 +44,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
 
-    const onBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setInstallEvent(e as BeforeInstallPromptEvent);
-    };
-    const onInstalled = () => {
-      setInstalled(true);
-      setInstallEvent(null);
-    };
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    const onInstalled = () => setInstalled(true);
     window.addEventListener('appinstalled', onInstalled);
 
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -120,7 +106,6 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
       window.removeEventListener('appinstalled', onInstalled);
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
       document.removeEventListener('visibilitychange', onVisible);
@@ -128,21 +113,11 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const promptInstall = useCallback(async () => {
-    if (!installEvent) return 'unavailable' as const;
-    await installEvent.prompt();
-    const choice = await installEvent.userChoice;
-    if (choice.outcome === 'dismissed') {
-      setDismissed(true);
-      try {
-        window.localStorage.setItem(DISMISS_KEY, '1');
-      } catch {
-        /* ignore */
-      }
-    }
-    setInstallEvent(null);
-    return choice.outcome;
-  }, [installEvent]);
+  // The custom button uses the browser's native install menu/help flow.
+  // We intentionally do not intercept `beforeinstallprompt`; intercepting it
+  // requires preventDefault(), which produces Chrome's "Banner not shown"
+  // console warning.
+  const promptInstall = useCallback(async () => 'unavailable' as const, []);
 
   const dismissInstall = useCallback(() => {
     setDismissed(true);
@@ -164,7 +139,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PwaContextValue>(
     () => ({
       installed,
-      canInstall: !!installEvent,
+      canInstall: false,
       isIos,
       dismissed,
       promptInstall,
@@ -173,7 +148,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       updateNow,
       updateLater,
     }),
-    [installed, installEvent, isIos, dismissed, promptInstall, dismissInstall, updateReady, updateNow, updateLater]
+    [installed, isIos, dismissed, promptInstall, dismissInstall, updateReady, updateNow, updateLater]
   );
 
   return <PwaContext.Provider value={value}>{children}</PwaContext.Provider>;

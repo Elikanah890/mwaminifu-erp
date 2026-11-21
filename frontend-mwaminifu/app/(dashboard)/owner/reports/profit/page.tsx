@@ -64,7 +64,7 @@ export default function ProfitReportPage() {
     <PageWrapper
       title={t('profit')}
       description={t('profitOverview')}
-      breadcrumb={['Owner', t('reports'), t('profit')]}
+      breadcrumb={[t('businessOwner'), t('reports'), t('profit')]}
       actions={
         <div className="flex items-center gap-2">
           <button onClick={exportCsv} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>

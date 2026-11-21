@@ -75,7 +75,7 @@ export default function CustomerProfilePage() {
     <PageWrapper
       title={t('customerProfile')}
       description={profile?.name ?? ''}
-      breadcrumb={['Owner', t('customers'), t('customerProfile')]}
+      breadcrumb={[t('businessOwner'), t('customers'), t('customerProfile')]}
       actions={
         <div className="flex items-center gap-2">
           <button onClick={() => router.push('/owner/customers')} className="btn-outline inline-flex items-center gap-2 text-sm"><ArrowLeft size={16} /> {t('back')}</button>

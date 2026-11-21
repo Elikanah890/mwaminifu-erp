@@ -3,6 +3,7 @@ import { env, validateProductionConfig } from './config/env';
 import logger from './config/logger';
 import prisma from './config/database';
 import { settingsService } from './services/settings.service';
+import { subscriptionService } from './services/subscription.service';
 import type { Server } from 'http';
 
 const WEAK_JWT_SECRETS = new Set([
@@ -14,6 +15,10 @@ const WEAK_JWT_SECRETS = new Set([
 
 function assertProductionConfig() {
   if (env.NODE_ENV !== 'production') return;
+
+  if (!env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required in production.');
+  }
 
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32 || WEAK_JWT_SECRETS.has(env.JWT_SECRET)) {
     throw new Error(
@@ -38,6 +43,8 @@ async function main() {
 
     await settingsService.load();
     logger.info('System settings loaded');
+    // Keep at least the default Basic/Premium plans available for new shops.
+    await subscriptionService.ensureDefaultPlans();
 
     // Bind to 0.0.0.0 so the API is reachable from Android emulators (10.0.2.2),
     // physical devices on the LAN, and Docker/reverse-proxy deployments.

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, LogOut, Menu, Store, Repeat, Globe, Search, ChevronDown, UserRound } from 'lucide-react';
+import { Bell, LogOut, Menu, Store, Repeat, Globe, Search, ChevronDown, UserRound, Settings, ShieldCheck } from 'lucide-react';
 import { apiClient, PublicUser } from '@/lib/api/client';
 import { useOptionalShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
@@ -20,6 +21,9 @@ const QUICK_LINKS: Record<PortalRole, Array<{ href: string; label: string }>> = 
     { href: '/system/businesses', label: 'businesses' },
     { href: '/system/revenue', label: 'revenue' },
     { href: '/system/subscriptions', label: 'subscriptions' },
+    { href: '/system/reports', label: 'reports' },
+    { href: '/system/activity-logs', label: 'activityLogs' },
+    { href: '/system/support', label: 'support' },
     { href: '/system/settings', label: 'settings' },
   ],
   AGENT: [
@@ -141,13 +145,14 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
               >
                 {filteredLinks.length ? (
                   filteredLinks.map((link) => (
-                    <a
+                    <Link
                       key={link.href}
                       href={link.href}
+                      onClick={() => setSearchFocused(false)}
                       className="block rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-brand"
                     >
                       {t(link.label)}
-                    </a>
+                    </Link>
                   ))
                 ) : (
                   <p className="px-3 py-2 text-sm text-subtle-foreground">{t('noResults')}</p>
@@ -168,17 +173,39 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
           </button>
 
           <ThemeToggle />
-          <InstallButton />
-          <SyncStatusButton />
+          {role === 'SYSTEM_OWNER' ? (
+            <>
+              <span
+                className="hidden items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-2 text-xs font-semibold text-success sm:flex"
+                title={locale === 'sw' ? 'Mifumo yote inafanya kazi' : 'All systems operational'}
+              >
+                <ShieldCheck size={15} />
+                {locale === 'sw' ? 'Mfumo Salama' : 'System Healthy'}
+              </span>
+              <Link
+                href="/system/settings"
+                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Settings"
+                title={locale === 'sw' ? 'Mipangilio' : 'Settings'}
+              >
+                <Settings size={19} />
+              </Link>
+            </>
+          ) : (
+            <>
+              <InstallButton />
+              <SyncStatusButton />
+            </>
+          )}
 
           {shopCtx && shopCtx.shops.length > 0 && (
-            <div className="hidden items-center gap-2 text-sm sm:flex">
-              <Store size={16} className="text-secondary" />
-              {role === 'BUSINESS_OWNER' ? (
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <Store size={16} className="hidden text-secondary sm:block" />
+              {role === 'BUSINESS_OWNER' || shopCtx.shops.length > 1 ? (
                 <select
                   value={shopCtx.activeShopId ?? ''}
                   onChange={(e) => shopCtx.setActiveShopId(e.target.value)}
-                  className="max-w-[180px] truncate rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-secondary/40"
+                  className="max-w-[118px] truncate rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-secondary/40 sm:max-w-[180px]"
                   aria-label="Select shop"
                 >
                   {shopCtx.shops.map((s) => (
@@ -188,13 +215,13 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
                   ))}
                 </select>
               ) : (
-                <span className="max-w-[180px] truncate text-muted-foreground">{shopCtx.activeShop?.name ?? ''}</span>
+                <span className="max-w-[118px] truncate text-muted-foreground sm:max-w-[180px]">{shopCtx.activeShop?.name ?? ''}</span>
               )}
             </div>
           )}
 
           {notificationsHref ? (
-            <a
+            <Link
               href={notificationsHref}
               className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-brand"
               aria-label="Notifications"
@@ -204,7 +231,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
               </span>
-            </a>
+            </Link>
           ) : (
             <button
               className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-brand"

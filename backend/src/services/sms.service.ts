@@ -18,6 +18,13 @@ interface GatewayResult {
 
 const GSM_SEGMENT_CHARS = 160;
 
+/** Never persist OTPs, PINs or passwords in the SMS audit log. */
+function redactSensitiveMessage(message: string): string {
+  return message
+    .replace(/(password|pin|code|otp)[^\n:]*[:-]?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\b\d{4,8}\b/g, '[redacted]');
+}
+
 function estimateCost(message: string): { segments: number; cost: number } {
   const segments = Math.max(1, Math.ceil(message.length / GSM_SEGMENT_CHARS));
   return { segments, cost: Number((segments * env.SMS_COST_PER_SEGMENT).toFixed(4)) };
@@ -59,7 +66,7 @@ export class SmsService {
       await prisma.smsLog.create({
         data: {
           phone,
-          message,
+          message: redactSensitiveMessage(message),
           type: purpose,
           status: result.ok ? (result.gateway === 'mock' ? 'mocked' : 'sent') : 'failed',
           gateway: result.gateway,

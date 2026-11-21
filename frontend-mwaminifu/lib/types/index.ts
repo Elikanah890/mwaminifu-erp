@@ -19,10 +19,12 @@ export interface Agent {
   _count?: { onboardedUsers: number };
   commissionEarned?: number;
   commissionPaid?: number;
+  commissionPending?: number;
 }
 
 export interface PlatformStats {
   totalBusinesses: number;
+  activeBusinessOwners: number;
   totalAgents: number;
   activeAgents: number;
   deactivatedAgents: number;
@@ -39,6 +41,7 @@ export type RevenueGranularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 export interface AdminDashboard {
   platform: {
     totalBusinessOwners: number;
+    activeBusinessOwners: number;
     totalAgents: number;
     activeAgents: number;
     deactivatedAgents: number;
@@ -56,11 +59,12 @@ export interface AdminDashboard {
   actionRequired: {
     expiringSoon: number;
     gracePeriod: number;
+    pendingPaymentShops: number;
     pendingPayouts: number;
     failedPayments: number;
   };
   breakdown: { basic: number; premium: number; monthly: number; weekly: number; daily: number; yearly: number };
-  health: { active: number; grace: number; lapsed: number; total: number; churnRate: number };
+  health: { active: number; grace: number; lapsed: number; pendingPayment: number; total: number; churnRate: number };
   recentActivity: Array<{ id: string; type: string; title: string; subtitle: string; at: string }>;
   generatedAt: string;
 }
@@ -70,7 +74,9 @@ export interface AgentStats {
   activeBusinesses: number;
   inactiveBusinesses: number;
   pendingBusinesses: number;
+  lapsedBusinesses: number;
   totalShops: number;
+  totalCustomers: number;
   businessesThisMonth: number;
   businessesThisYear: number;
   shopsThisMonth: number;
@@ -88,6 +94,7 @@ export interface AgentBusiness {
   // Spec 12.2 — Agents never receive owner phone/email.
   isActive: boolean;
   isPinSet: boolean;
+  billingStatus?: 'PENDING_PAYMENT' | 'ACTIVE' | 'GRACE' | 'LAPSED';
   createdAt: string;
   agentId: string;
   ownedShops: Array<{
@@ -97,7 +104,7 @@ export interface AgentBusiness {
     isArchived: boolean;
     createdAt: string;
     _count?: { employees: number; products: number; sales: number };
-    subscriptions?: Array<{ plan: string; status: string; isActive: boolean; endDate: string | null }>;
+    subscriptions?: Array<{ status: string; isActive: boolean; endDate: string | null; payments?: Array<{ id: string }> }>;
   }>;
   _count: {
     ownedShops: number;
@@ -122,13 +129,14 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   total: number;
+  activeCount?: number;
 }
 
 export interface AgentDetail extends Agent {
   onboardedUsers: Array<{ id: string; name: string; phone: string | null; isActive: boolean; createdAt: string }>;
-  commissions?: Array<{ id: string; amount: number; status: string; createdAt: string; owner?: { name: string } | null; payout?: { reference?: string | null } | null }>;
+  commissions?: Array<{ id: string; amount: number; status: string; createdAt: string; owner?: { name: string } | null; payout?: { reference?: string | null } | null; payment?: { amount?: number; subscription?: { plan?: string } | null } | null }>;
   payouts?: Array<{ id: string; amount: number; method: string; reference?: string | null; status: string; createdAt: string }>;
-  stats: { onboardedUsers: number; activeUsers: number; transactions: number; revenue: number; commissionEarned?: number; commissionPaid?: number };
+  stats: { onboardedUsers: number; activeUsers: number; transactions: number; revenue: number; commissionEarned?: number; commissionPaid?: number; commissionPending?: number };
 }
 
 export interface BusinessOwner {
@@ -177,6 +185,11 @@ export interface Shop {
   ownerId: string;
   name: string;
   address?: string | null;
+  businessCategory?: string | null;
+  region?: string | null;
+  district?: string | null;
+  ward?: string | null;
+  street?: string | null;
   isArchived: boolean;
   currency: string;
   receiptHeader?: string | null;
@@ -331,38 +344,11 @@ export interface ShopSubscription {
 }
 
 export interface DemoAccounts {
-  agents: Array<{
+  accounts: Array<{
     id: string;
-    username: string;
-    name: string;
-    phone?: string;
-    isActive: boolean;
-    role: string;
-    password: string;
-    _count?: { onboardedUsers: number };
-  }>;
-  owners: Array<{
-    id: string;
-    name: string;
-    phone?: string;
-    email?: string;
-    isActive: boolean;
-    isPinSet: boolean;
-    agentName?: string | null;
-    pin: string;
-    shops: Array<{ id: string; name: string }>;
-    role: string;
-  }>;
-  employees: Array<{
-    id: string;
-    name: string;
-    phone?: string;
-    role: string;
-    shopName: string;
-    isActive: boolean;
-    permissions: string[];
-    pin: string;
-    roleType: string;
+    label: string;
+    lastUsed: string | null;
+    status: string;
   }>;
 }
 
@@ -381,6 +367,7 @@ export interface AgentDetail extends Agent {
     revenue: number;
     commissionEarned?: number;
     commissionPaid?: number;
+    commissionPending?: number;
   };
 }
 
@@ -402,6 +389,10 @@ export interface Subscription {
   shopId: string;
   plan: string;
   status: string;
+  billingCycle?: string;
+  planConfig?: SubscriptionPlan | null;
+  payments?: Array<{ id: string; amount: number; status: string; paidAt?: string | null }>;
+
   startDate: string;
   endDate?: string | null;
   isActive: boolean;
@@ -464,6 +455,16 @@ export interface Category {
   _count?: { products: number };
 }
 
+export interface ShopProductPrice {
+  id: string;
+  shopId: string;
+  productId: string;
+  unitKey: string;
+  sellingPrice: number;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+}
+
 export interface Product {
   id: string;
   shopId: string;
@@ -483,6 +484,7 @@ export interface Product {
   baseUnitStock?: number;
   baseUnitName?: string;
   unitConfigs?: ProductUnitConfig[];
+  shopPrices?: ShopProductPrice[];
   barcode?: string | null;
   isActive: boolean;
   isService?: boolean;

@@ -37,7 +37,7 @@ export default function CreditPage() {
   const buckets = data?.summary.buckets ?? {};
 
   return (
-    <PageWrapper title={t('receivables')} description={t('aging')} breadcrumb={['Owner', t('customers'), t('receivables')]}>
+    <PageWrapper title={t('receivables')} description={t('aging')} breadcrumb={[t('businessOwner'), t('customers'), t('receivables')]}>
       <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <StaggerItem><StatsCard title={t('outstandingCredit')} value={formatCurrency(data?.summary.totalOutstanding ?? 0)} tone="red" icon={<Wallet size={20} />} /></StaggerItem>
         {Object.entries(bucketLabel).map(([k, label]) => (

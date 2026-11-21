@@ -30,6 +30,7 @@ export class CustomerService {
   }
 
   async createCustomer(shopId: string, data: {
+    clientId?: string;
     name: string;
     phone?: string;
     email?: string;
@@ -37,17 +38,34 @@ export class CustomerService {
     notes?: string;
     creditLimit?: number;
   }, userId?: string) {
-    const customer = await prisma.customer.create({
-      data: {
-        shopId,
-        name: data.name,
-        phone: data.phone,
-        email: data.email,
-        address: data.address,
-        notes: data.notes,
-        creditLimit: data.creditLimit || 0,
-      },
-    });
+    if (data.clientId) {
+      const existing = await prisma.customer.findFirst({
+        where: { shopId, clientId: data.clientId },
+      });
+      if (existing) return existing;
+    }
+
+    let customer;
+    try {
+      customer = await prisma.customer.create({
+        data: {
+          shopId,
+          clientId: data.clientId ?? null,
+          name: data.name,
+          phone: data.phone,
+          email: data.email,
+          address: data.address,
+          notes: data.notes,
+          creditLimit: data.creditLimit || 0,
+        },
+      });
+    } catch (err) {
+      if (data.clientId && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing = await prisma.customer.findFirst({ where: { shopId, clientId: data.clientId } });
+        if (existing) return existing;
+      }
+      throw err;
+    }
 
     await auditService.logDetailed({
       shopId,
@@ -171,12 +189,18 @@ export class CustomerService {
   }
 
   async recordCreditPayment(customerId: string, data: {
+    clientId?: string;
     amount: number;
     paymentDate?: string;
     method?: string;
     saleId?: string;
     notes?: string;
   }, userId?: string) {
+    if (data.clientId) {
+      const existing = await prisma.creditPayment.findFirst({ where: { clientId: data.clientId } });
+      if (existing) return existing;
+    }
+
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) {
       throw { status: 404, code: 'NOT_FOUND', message: 'Customer not found' };
@@ -202,6 +226,7 @@ export class CustomerService {
       const created = await tx.creditPayment.create({
         data: {
           customerId,
+          clientId: data.clientId ?? null,
           saleId: data.saleId,
           amount: data.amount,
           paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),

@@ -52,7 +52,7 @@ export default function ReportsOverviewPage() {
   const topProducts = (sales?.perProduct ?? []).slice(0, 8);
 
   return (
-    <PageWrapper title={t('reportsOverview')} description={t('reports')} breadcrumb={['Owner', t('reports')]}>
+    <PageWrapper title={t('reportsOverview')} description={t('reports')} breadcrumb={[t('businessOwner'), t('reports')]}>
       <PeriodSelector period={period} onChange={setPeriod} from={from} to={to} onFrom={setFrom} onTo={setTo} />
 
       {shopLoading || loading ? (

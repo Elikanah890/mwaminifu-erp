@@ -361,3 +361,67 @@ describe('AuthService password reset', () => {
     await expect(authService.resetPassword('bad-token', 'NewPassword123')).rejects.toMatchObject({ status: 400 });
   });
 });
+
+describe('AuthService.changeAdminPassword', () => {
+  it('rejects an incorrect current password', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'admin1', role: 'SYSTEM_OWNER', passwordHash: await hashPassword('admin123'),
+    });
+    await expect(authService.changeAdminPassword('admin1', 'wrong', 'NewPassword123')).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new password shorter than 8 characters', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'admin1', role: 'SYSTEM_OWNER', passwordHash: await hashPassword('admin123'),
+    });
+    await expect(authService.changeAdminPassword('admin1', 'admin123', 'short')).rejects.toMatchObject({
+      status: 422,
+    });
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects reusing the current password', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'admin1', role: 'SYSTEM_OWNER', passwordHash: await hashPassword('admin123'),
+    });
+    await expect(authService.changeAdminPassword('admin1', 'admin123', 'admin123')).rejects.toMatchObject({
+      status: 422,
+    });
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('updates the password, clears the forced-change flag, and revokes sessions', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'admin1', role: 'SYSTEM_OWNER', passwordHash: await hashPassword('admin123'),
+    });
+    mockPrisma.user.update.mockResolvedValue({});
+    mockPrisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await authService.changeAdminPassword('admin1', 'admin123', 'NewPassword123');
+
+    expect(res.message).toMatch(/success/i);
+    expect(mockPrisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'admin1' },
+        data: expect.objectContaining({
+          mustChangePassword: false,
+          passwordResetTokenHash: null,
+          passwordResetExpires: null,
+        }),
+      })
+    );
+    expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'admin1', isRevoked: false } })
+    );
+  });
+
+  it('rejects an account that has no password hash', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'u1', role: 'BUSINESS_OWNER', passwordHash: null });
+    await expect(authService.changeAdminPassword('u1', 'anything', 'NewPassword123')).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+});

@@ -35,6 +35,25 @@ export async function getSubscriptionInfo(shopId: string): Promise<SubscriptionI
   return { state, endDate: sub.endDate, graceEndsAt, daysUntilExpiry };
 }
 
+/**
+ * Reload the employee's assignment for the shop actually being accessed.
+ * authMiddleware resolves the shop from X-Shop-Id/route/body; entity routes
+ * can additionally resolve it from the entity itself in requireEntityAccess.
+ * requirePermission must always evaluate the permissions of that assignment.
+ */
+async function applyEmployeeShopContext(req: Request, shopId: string): Promise<void> {
+  if (req.user?.role !== 'EMPLOYEE') return;
+  const employee = await prisma.employee.findFirst({
+    where: { userId: req.user.userId, shopId, isActive: true, deletedAt: null },
+    select: { permissions: true },
+  });
+  if (!employee) {
+    throw { status: 403, code: 'FORBIDDEN', message: 'Access denied to this shop' };
+  }
+  req.user.shopId = shopId;
+  req.user.permissions = (employee.permissions as string[]) || [];
+}
+
 function isWriteMethod(method: string): boolean {
   return !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
 }
@@ -169,7 +188,7 @@ export function requirePermission(permission: string) {
           success: false,
           error: {
             code: 'FORBIDDEN',
-            message: `Missing required permission: ${permission}`,
+            message: 'You do not have permission for this action.',
           },
           timestamp: new Date().toISOString(),
         });
@@ -213,7 +232,7 @@ export function requireAnyPermission(permissions: string[]) {
         logger.warn(`Permission denied for employee ${req.user.userId}: needs one of ${permissions.join(', ')}`);
         res.status(403).json({
           success: false,
-          error: { code: 'FORBIDDEN', message: `Missing required permission: one of ${permissions.join(', ')}` },
+          error: { code: 'FORBIDDEN', message: 'You do not have permission for this action.' },
           timestamp: new Date().toISOString(),
         });
         return;
@@ -305,9 +324,8 @@ export function requireBodyShopAccess() {
       res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Platform and agent accounts cannot access shop-level data' }, timestamp: new Date().toISOString() });
       return;
     }
-    // Employees are bound to exactly one shop, so the token's shopId is a safe
-    // fallback when the client does not echo shopId in the body (e.g. the
-    // shift open/close endpoints).
+    // Fall back to the active-shop claim resolved by authMiddleware when the
+    // client does not echo shopId (e.g. shift open/close).
     const shopId =
       (req.body && (req.body.shopId as string)) ||
       (req.query.shopId as string) ||
@@ -319,6 +337,7 @@ export function requireBodyShopAccess() {
     }
     try {
       await shopService.verifyShopAccess(shopId, req.user.userId);
+      await applyEmployeeShopContext(req, shopId);
       req.params.shopId = shopId;
       next();
     } catch (err: unknown) {
@@ -391,6 +410,7 @@ export function requireShopAccess(opts: { enforceSubscription?: boolean } = {}) 
 
     try {
       await shopService.verifyShopAccess(shopId, req.user.userId);
+      await applyEmployeeShopContext(req, shopId);
       if (enforceSubscription && !(await enforceShopSubscription(shopId, req, res))) return;
       next();
     } catch (err: unknown) {
@@ -453,6 +473,7 @@ export function requireEntityAccess(type: EntityType) {
         return;
       }
       await shopService.verifyShopAccess(entity.shopId, req.user.userId);
+      await applyEmployeeShopContext(req, entity.shopId);
       req.resolvedShopId = entity.shopId;
       if (!(await enforceShopSubscription(entity.shopId, req, res))) return;
       next();

@@ -12,7 +12,7 @@ import { Reveal } from '@/components/motion';
 import { Pill } from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
 import { useToast } from '@/components/Toast';
-import { Search, Download, Trash2, Archive } from 'lucide-react';
+import { Search, Download, Trash2, Archive, FileClock } from 'lucide-react';
 
 const ACTIONS = [
   'SALE_CREATED', 'SALE_VOIDED', 'SALE_REFUNDED', 'REFUND_CREATED', 'REFUND_APPROVED', 'REFUND_REJECTED',
@@ -127,7 +127,7 @@ export default function AuditLogPage() {
     <PageWrapper
       title={t('auditLog')}
       description={t('auditLog')}
-      breadcrumb={['Owner', t('auditLog')]}
+      breadcrumb={[t('businessOwner'), t('auditLog')]}
       actions={
         <div className="flex items-center gap-2">
           <button onClick={exportCsv} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>
@@ -153,7 +153,7 @@ export default function AuditLogPage() {
       {shopLoading || loading ? (
         <SkeletonTable rows={8} />
       ) : logs.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message={t('noData')} /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState icon={<FileClock size={22} />} title={t('noAuditLogsYet')} description={t('noAuditLogsDesc')} /></div></Reveal>
       ) : (
         <Reveal><div className="surface-card overflow-x-auto">
           <table className="w-full text-sm">

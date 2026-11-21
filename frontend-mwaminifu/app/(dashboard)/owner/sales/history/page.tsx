@@ -161,7 +161,7 @@ export default function SalesHistoryPage() {
     <PageWrapper
       title={t('salesHistory')}
       description={t('salesHistory')}
-      breadcrumb={['Owner', t('sales'), t('salesHistory')]}
+      breadcrumb={[t('businessOwner'), t('sales'), t('salesHistory')]}
       actions={
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="input-field max-w-[180px]">
           <option value="">{t('all')}</option>

@@ -5,7 +5,10 @@ import { verifyToken, JwtPayload } from '../utils/jwt.util';
 // Public paths that remain reachable during maintenance mode.
 const PUBLIC_PATHS = new Set([
   '/api/v1/config',
-  '/api/v1/auth/admin/login',
+  '/api/v1/auth/login',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/logout',
+  '/api/v1/auth/forgot-password',
   '/health',
 ]);
 

@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
+
+const MotionLink = motion.create(Link);
 import { useAppConfig } from '@/lib/context/AppConfigContext';
 import {
   LayoutDashboard,
@@ -15,6 +18,7 @@ import {
   Map,
   BarChart3,
   Settings,
+  Store,
   UserPlus,
   HandCoins,
   Package,
@@ -26,7 +30,6 @@ import {
   ArrowLeftRight,
   CreditCard,
   Coins,
-  DollarSign,
   TrendingUp,
   Boxes,
   History,
@@ -39,12 +42,13 @@ import {
   ChevronsRight,
   LogOut,
   UserRound,
+  LifeBuoy,
 } from 'lucide-react';
 import { apiClient, PublicUser } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
 import { usePermissions } from '@/lib/context/PermissionsContext';
 
-export type NavItem = { href: string; label: string; icon: React.ReactNode; permission?: string };
+export type NavItem = { href: string; label: string; icon: React.ReactNode; permission?: string; permissions?: string[] };
 export type NavGroup = { section?: string; items: NavItem[] };
 
 export type PortalRole = 'SYSTEM_OWNER' | 'AGENT' | 'BUSINESS_OWNER' | 'EMPLOYEE';
@@ -62,7 +66,11 @@ const SYSTEM_NAV: NavItem[] = [
   { href: '/system/businesses', label: 'businesses', icon: <Building2 size={18} /> },
   { href: '/system/revenue', label: 'revenue', icon: <Wallet size={18} /> },
   { href: '/system/subscriptions', label: 'subscriptions', icon: <CreditCard size={18} /> },
+  { href: '/system/reports', label: 'reports', icon: <BarChart3 size={18} /> },
   { href: '/system/regions', label: 'regions', icon: <Map size={18} /> },
+  { href: '/system/activity-logs', label: 'activityLogs', icon: <FileClock size={18} /> },
+  { href: '/system/support', label: 'support', icon: <LifeBuoy size={18} /> },
+  { href: '/system/profile', label: 'profile', icon: <UserRound size={18} /> },
   { href: '/system/settings', label: 'settings', icon: <Settings size={18} /> },
 ];
 
@@ -95,7 +103,7 @@ const OWNER_NAV: NavGroup[] = [
     ],
   },
   {
-    section: 'customers',
+    section: 'customersCredit',
     items: [
       { href: '/owner/customers', label: 'customers', icon: <Users size={18} /> },
       { href: '/owner/credit', label: 'receivables', icon: <CreditCard size={18} /> },
@@ -132,6 +140,7 @@ const OWNER_NAV: NavGroup[] = [
     section: 'settings',
     items: [
       { href: '/owner/settings', label: 'settings', icon: <Settings size={18} /> },
+      { href: '/owner/settings/shops', label: 'shops', icon: <Store size={18} /> },
       { href: '/owner/audit', label: 'auditLog', icon: <FileClock size={18} /> },
     ],
   },
@@ -146,9 +155,9 @@ const EMPLOYEE_NAV: NavGroup[] = [
       { href: '/employee/activity', label: 'mySales', icon: <History size={18} />, permission: 'sales:view' },
     ],
   },
-  { section: 'inventory', items: [{ href: '/employee/inventory', label: 'stockLookup', icon: <Package size={18} />, permission: 'inventory:view' }] },
-  { section: 'customers', items: [{ href: '/employee/customers', label: 'customers', icon: <Users size={18} />, permission: 'customers:view' }] },
-  { section: 'shifts', items: [{ href: '/employee/shift', label: 'currentShift', icon: <Clock size={18} />, permission: 'shift:view' }] },
+  { section: 'inventory', items: [{ href: '/employee/inventory', label: 'stockLookup', icon: <Package size={18} />, permissions: ['inventory:view', 'products:view', 'products:create'] }] },
+  { section: 'customers', items: [{ href: '/employee/customers', label: 'customers', icon: <Users size={18} />, permissions: ['customers:view', 'customers:create', 'customers:update', 'credit:read', 'credit:create'] }] },
+  { section: 'shifts', items: [{ href: '/employee/shift', label: 'currentShift', icon: <Clock size={18} />, permissions: ['shift:view', 'shift:open', 'shift:close'] }] },
   { section: 'myActivity', items: [{ href: '/employee/reports', label: 'myActivity', icon: <BarChart3 size={18} />, permission: 'reports:sales' }] },
   { section: 'profilePortalLabel', items: [{ href: '/employee/profile', label: 'profile', icon: <UserRound size={18} /> }] },
 ];
@@ -191,11 +200,27 @@ export default function Sidebar({
     });
   };
 
+  // Warm every route in this portal. Sidebar items are often outside the
+  // mobile viewport, so Next's viewport-based prefetch alone leaves the first
+  // tap with an empty content area while the route chunk downloads.
+  useEffect(() => {
+    const hrefs = navFor(role).flatMap((group) => group.items.map((item) => item.href));
+    const timer = setTimeout(() => {
+      for (const href of hrefs) router.prefetch(href);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [role, router]);
+
   const { can } = usePermissions();
   const groups = navFor(role)
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.permission || role !== 'EMPLOYEE' || can(item.permission)),
+      items: group.items.filter((item) => {
+        if (role !== 'EMPLOYEE') return true;
+        if (item.permission) return can(item.permission);
+        if (item.permissions) return item.permissions.some((permission) => can(permission));
+        return true;
+      }),
     }))
     .filter((group) => group.items.length > 0);
   const { appName } = useAppConfig();
@@ -282,7 +307,7 @@ export default function Sidebar({
                   {group.items.map((item, ii) => {
                     const active = isActive(item.href);
                     return (
-                      <motion.a
+                      <MotionLink
                         key={item.href}
                         href={item.href}
                         onClick={onClose}
@@ -317,7 +342,7 @@ export default function Sidebar({
                           )}
                         </AnimatePresence>
                         {active && !collapsed && <span className="relative z-10 ml-auto h-1.5 w-1.5 rounded-full bg-accent" />}
-                      </motion.a>
+                      </MotionLink>
                     );
                   })}
                 </div>

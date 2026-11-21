@@ -14,8 +14,9 @@ export class ShiftController {
         return;
       }
 
+      const shopId = (req.user as { shopId?: string } | undefined)?.shopId;
       const shifts = await prisma.shift.findMany({
-        where: { userId },
+        where: { userId, ...(shopId ? { shopId } : {}) },
         orderBy: { startedAt: 'desc' },
         take: 20,
       });
@@ -53,8 +54,9 @@ export class ShiftController {
         return;
       }
 
+      const shopId = (req.user as { shopId?: string } | undefined)?.shopId;
       const activeShift = await prisma.shift.findFirst({
-        where: { userId, isActive: true },
+        where: { userId, ...(shopId ? { shopId } : {}), isActive: true },
         orderBy: { startedAt: 'desc' },
       });
 
@@ -125,16 +127,17 @@ export class ShiftController {
 
   async closeShift(req: Request, res: Response, next: NextFunction) {
     try {
-      const countedCash = (req.body as { countedCash?: number }).countedCash;
+      const rawCounted = (req.body as { countedCash?: number | string }).countedCash;
+      const countedCash = Number(rawCounted);
       const user = req.user as { userId?: string; shopId?: string } | undefined;
       const userId = user?.userId;
       // requireBodyShopAccess has already validated access and set params.shopId.
       const shopId = req.params.shopId || (req.body && req.body.shopId) || user?.shopId;
 
-      if (!countedCash) {
+      if (!Number.isFinite(countedCash) || countedCash < 0) {
         res.status(400).json({
           success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'Counted cash amount required' },
+          error: { code: 'VALIDATION_ERROR', message: 'A valid counted cash amount is required' },
           timestamp: new Date().toISOString(),
         });
         return;
@@ -159,54 +162,64 @@ export class ShiftController {
         return;
       }
 
-      // Calculate expected cash - get completed sales today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const salesToday = await prisma.sale.findMany({
-        where: {
-          shopId,
-          userId,
-          status: 'COMPLETED',
-          saleDate: { gte: today },
-        },
+      const shop = await prisma.shop.findUnique({
+        where: { id: shopId },
+        select: { id: true, ownerId: true, currency: true },
       });
+      if (!shop) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Shop not found' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
-      const totalSales = salesToday.reduce((sum: number, sale) => sum + (sale.grandTotal ?? 0), 0);
-      const expectedCash = shift.openingCashBalance + totalSales;
+      // Expected cash = opening balance + this cashier's cash movements during
+      // the shift (credit/mobile-money sales must not inflate expected cash).
+      const cashier = await prisma.user.findUnique({
+        where: { id: userId! },
+        select: { name: true },
+      });
+      const cashMovement = await prisma.cashTransaction.aggregate({
+        where: { shopId, userId, createdAt: { gte: shift.startedAt } },
+        _sum: { amount: true },
+      });
+      const expectedCash = shift.openingCashBalance + (cashMovement._sum.amount ?? 0);
       const discrepancy = countedCash - expectedCash;
 
-      // Update shift with closing info
-      await prisma.shift.update({
-        where: { id: shift.id },
-        data: {
-          countedCash,
-          expectedCash,
-          discrepancy,
-          isActive: false,
-          closedAt: new Date(),
-        },
-      });
-
-      // If there's a discrepancy, create notification
-      if (discrepancy !== 0) {
-        const ownerShop = await prisma.shop.findFirst({
-          where: { ownerId: userId },
-        });
-
-        await prisma.notification.create({
+      const result = await prisma.$transaction(async (tx) => {
+        const closed = await tx.shift.update({
+          where: { id: shift.id },
           data: {
-            userId: ownerShop?.ownerId || userId,
-            title: 'Cash Discrepancy',
-            body: `Shift closed with ${discrepancy > 0 ? 'overage' : 'shortage'} of $${Math.abs(discrepancy)}`,
-            type: 'cash_discrepancy',
+            countedCash,
+            expectedCash,
+            discrepancy,
+            isActive: false,
+            closedAt: new Date(),
           },
         });
-      }
+
+        // Cash discrepancy belongs to the shop owner, not the cashier.
+        if (Math.abs(discrepancy) >= 0.01) {
+          const currency = shop.currency || 'TZS';
+          await tx.notification.create({
+            data: {
+              userId: shop.ownerId,
+              shopId: shop.id,
+              title: 'Cash Discrepancy',
+              body: `Shift closed by ${cashier?.name ?? 'cashier'} with ${discrepancy > 0 ? 'overage' : 'shortage'} of ${currency} ${Math.abs(discrepancy).toLocaleString()}`,
+              type: 'cash_discrepancy',
+            },
+          });
+        }
+
+        return closed;
+      });
 
       res.json({
         success: true,
-        data: { shift, discrepancy },
+        data: { shift: result, discrepancy },
         message: 'Shift closed successfully',
         timestamp: new Date().toISOString(),
       });
