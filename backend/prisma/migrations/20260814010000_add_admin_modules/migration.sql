@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "SubscriptionPlan" (
+CREATE TABLE IF NOT EXISTS "SubscriptionPlan" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
@@ -17,7 +17,7 @@ CREATE TABLE "SubscriptionPlan" (
 );
 
 -- CreateTable
-CREATE TABLE "SystemSetting" (
+CREATE TABLE IF NOT EXISTS "SystemSetting" (
     "id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "value" JSONB NOT NULL DEFAULT '{}',
@@ -30,7 +30,7 @@ CREATE TABLE "SystemSetting" (
 );
 
 -- CreateTable
-CREATE TABLE "SupportTicket" (
+CREATE TABLE IF NOT EXISTS "SupportTicket" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "shopId" TEXT,
@@ -48,29 +48,35 @@ CREATE TABLE "SupportTicket" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SubscriptionPlan_name_key" ON "SubscriptionPlan"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "SubscriptionPlan_name_key" ON "SubscriptionPlan"("name");
 
 -- CreateIndex
-CREATE INDEX "SubscriptionPlan_isActive_idx" ON "SubscriptionPlan"("isActive");
+CREATE INDEX IF NOT EXISTS "SubscriptionPlan_isActive_idx" ON "SubscriptionPlan"("isActive");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SystemSetting_key_key" ON "SystemSetting"("key");
+CREATE UNIQUE INDEX IF NOT EXISTS "SystemSetting_key_key" ON "SystemSetting"("key");
 
 -- CreateIndex
-CREATE INDEX "SupportTicket_userId_idx" ON "SupportTicket"("userId");
+CREATE INDEX IF NOT EXISTS "SupportTicket_userId_idx" ON "SupportTicket"("userId");
 
 -- CreateIndex
-CREATE INDEX "SupportTicket_shopId_idx" ON "SupportTicket"("shopId");
+CREATE INDEX IF NOT EXISTS "SupportTicket_shopId_idx" ON "SupportTicket"("shopId");
 
 -- CreateIndex
-CREATE INDEX "SupportTicket_status_idx" ON "SupportTicket"("status");
+CREATE INDEX IF NOT EXISTS "SupportTicket_status_idx" ON "SupportTicket"("status");
 
 -- CreateIndex
-CREATE INDEX "SupportTicket_createdAt_idx" ON "SupportTicket"("createdAt");
+CREATE INDEX IF NOT EXISTS "SupportTicket_createdAt_idx" ON "SupportTicket"("createdAt");
 
 -- AddForeignKey
-ALTER TABLE "SupportTicket" ADD CONSTRAINT "SupportTicket_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "SupportTicket" ADD CONSTRAINT "SupportTicket_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "SupportTicket" ADD CONSTRAINT "SupportTicket_shopId_fkey" FOREIGN KEY ("shopId") REFERENCES "Shop"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "SupportTicket" ADD CONSTRAINT "SupportTicket_shopId_fkey" FOREIGN KEY ("shopId") REFERENCES "Shop"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
