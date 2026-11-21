@@ -64,7 +64,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(ROLE_HOME[role] ?? '/system/dashboard', request.url));
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  const isPrivatePage =
+    Boolean(prefix) || pathname === '/change-password' || pathname === '/reset-password';
+  if (isPrivatePage) {
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+  }
+  return response;
 }
 
 export const config = {

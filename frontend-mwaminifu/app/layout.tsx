@@ -13,6 +13,40 @@ const APP_NAME = 'Mwaminifu ERP';
 const APP_DESCRIPTION = 'Smart Business Management for Tanzania';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://mwaminifu.co.tz';
 
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: 'Mwaminifu',
+      url: SITE_URL,
+      logo: `${SITE_URL}/icons/icon-512x512.png`,
+      areaServed: 'TZ',
+      description: APP_DESCRIPTION,
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: APP_NAME,
+      inLanguage: ['sw-TZ', 'en'],
+      publisher: { '@id': `${SITE_URL}/#organization` },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${SITE_URL}/#app`,
+      name: APP_NAME,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web, Android, iOS',
+      url: SITE_URL,
+      description: APP_DESCRIPTION,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'TZS' },
+      publisher: { '@id': `${SITE_URL}/#organization` },
+    },
+  ],
+};
+
 const SPLASHES = [
   { file: '1290x2796', w: 430, h: 932, r: 3 },
   { file: '1179x2556', w: 393, h: 852, r: 3 },
@@ -38,6 +72,34 @@ export const metadata: Metadata = {
   description: APP_DESCRIPTION,
   applicationName: APP_NAME,
   manifest: '/manifest.json',
+  alternates: { canonical: '/' },
+  keywords: [
+    'Mwaminifu',
+    'ERP Tanzania',
+    'POS Tanzania',
+    'business management software',
+    'duka management',
+    'stock management',
+    'mauzo POS',
+    'madeni ya wateja',
+    'bookkeeping Tanzania',
+    'small business software',
+  ],
+  authors: [{ name: 'Mwaminifu', url: SITE_URL }],
+  creator: 'Mwaminifu',
+  publisher: 'Mwaminifu',
+  category: 'business',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
   formatDetection: { telephone: false, email: false, address: false },
   appleWebApp: {
     capable: true,
@@ -104,6 +166,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             media={`(device-width: ${s.w}px) and (device-height: ${s.h}px) and (-webkit-device-pixel-ratio: ${s.r}) and (orientation: portrait)`}
           />
         ))}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+        />
       </head>
       <body className="min-h-screen antialiased">
         {/* Apply the stored theme before first paint (no flash). */}
