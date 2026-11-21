@@ -42,18 +42,17 @@ tracked.
 | `NEXT_PUBLIC_API_URL` | Public API URL (compatibility only) |
 | `JWT_SECRET` | Must match backend `JWT_SECRET`; used server-side to verify sessions |
 
-### Setting env vars on the platform (do **not** use committed files)
+### Setting env vars (do **not** use committed files)
 
-- **Vercel (frontend):** Project → Settings → Environment Variables → add each
-  variable for Production/Preview/Development. Redeploy after changes.
-- **Render (backend + database):** Dashboard → your service → Environment →
-  add each variable. For the database use the Render Postgres *Internal
-  Database URL* and store it as `DATABASE_URL`.
+- **Contabo / VPS (production):** copy `backend/.env.production.example` to
+  `backend/.env` and `frontend-mwaminifu/.env.production.example` to
+  `frontend-mwaminifu/.env.local`, then fill in real values. See
+  `deploy/README.md` for the full runbook.
 - **Local development:** `cp .env.example .env` and fill in local values.
 
 ### Rotating the database credentials
 
-1. In the PostgreSQL provider (Render / RDS / etc.) rotate/reset the DB user
+1. On the PostgreSQL server (or managed provider) rotate/reset the DB user
    password.
 2. Update `DATABASE_URL` in the backend platform environment and redeploy.
 3. If the old connection string was ever committed, treat it as compromised and
@@ -78,9 +77,9 @@ git commit -m "chore: stop tracking env files"
 # For full history removal use git-filter-repo / BFG, then rotate the secrets.
 ```
 
-> This working copy is **not yet a Git repository**. Before pushing to a remote,
-> run `git init` and confirm `git status` shows no `.env` files (the root
-> `.gitignore` excludes them).
+> This repository is already connected to
+> `github.com/Elikanah890/mwaminifu-erp`. Before committing, confirm
+> `git status` shows no `.env` files (the root `.gitignore` excludes them).
 
 ---
 
@@ -156,23 +155,22 @@ Workflows live in `.github/workflows/`:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ci.yml` | Every PR, and pushes to `develop` / `main` | Backend lint + tests (with coverage thresholds) + build; frontend lint + typecheck + build; Flutter analyze + test. **Blocks merge on failure.** |
-| `deploy-staging.yml` | Push to `develop` (or manual) | Triggers the Render (backend) and Vercel (frontend) **staging** deploy hooks. |
-| `deploy-production.yml` | Manual (`workflow_dispatch`) | Gated production release; requires typing `deploy` and approval of the `production` environment. |
 
-### Required repository secrets
+### Deployment (Contabo VPS)
 
-Set these under **Settings → Secrets and variables → Actions**:
+Hosting is done on a VPS with Nginx + PM2, not on a PaaS. Everything needed
+lives in `deploy/`:
 
-| Secret | Used by |
-|--------|---------|
-| `RENDER_STAGING_DEPLOY_HOOK` | Staging backend |
-| `VERCEL_STAGING_DEPLOY_HOOK` | Staging frontend |
-| `RENDER_PRODUCTION_DEPLOY_HOOK` | Production backend |
-| `VERCEL_PRODUCTION_DEPLOY_HOOK` | Production frontend |
+| File | Purpose |
+|------|---------|
+| `deploy/setup-vps.sh` | Installs Node 20, PostgreSQL, Nginx, Certbot, PM2 and creates the DB |
+| `deploy/nginx/mwaminifu.conf` | Nginx site: `/` → Next.js, `/api/v1` → API, HTTPS |
+| `deploy/ecosystem.config.js` | PM2 processes for API and dashboard |
+| `deploy/deploy.sh` | Pull, install, migrate, build, reload, health check |
+| `deploy/README.md` | Step-by-step Contabo runbook |
 
-Create the Deploy Hooks in Render (Service → Settings → Deploy Hook) and Vercel
-(Project → Settings → Git → Deploy Hooks). Runtime secrets (DB, JWT, SMS) are
-configured on the platform, **not** in GitHub.
+Runtime secrets (DB, JWT, SMS, email) live in `backend/.env` and
+`frontend-mwaminifu/.env.local` on the server, **never** in GitHub.
 
 ### Test coverage
 

@@ -1,11 +1,12 @@
 # ---------------------------------------------------------------------------
 # Environment files — NEVER commit real secrets.
-# Real values are injected by the hosting platform (Vercel / Render / etc.).
+# Real values are injected on the server (VPS env files / process manager).
 # `.env.example` files contain placeholders only and ARE tracked.
 # ---------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # ---------------------------------------------------------------------------
 # Node / JS build artifacts

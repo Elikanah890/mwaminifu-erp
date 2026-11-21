@@ -1,5 +1,9 @@
 # Mwaminifu VPS Production Checklist
 
+Automated helpers live in `deploy/` (`setup-vps.sh`, `deploy.sh`,
+`ecosystem.config.js`, `nginx/mwaminifu.conf`). See `deploy/README.md` for the
+Contabo runbook; this file is the pre-launch checklist.
+
 ## 1. Server baseline
 - Ubuntu 22.04/24.04 LTS, non-root deploy user, SSH keys only, password login disabled.
 - UFW: allow 22, 80, 443 only. Fail2ban enabled for SSH.
@@ -36,16 +40,12 @@ Never commit `.env`.
 
 ## 5. Build & release
 ```bash
-cd backend
-npm ci
-npx prisma generate
-npx prisma migrate deploy
-npm run build
-
-cd ../frontend-mwaminifu
-npm ci
-npm run build
+bash deploy/deploy.sh main
 ```
+
+That script runs, in order: `git pull`, `npm ci`, `prisma generate`,
+`prisma migrate deploy`, backend build, frontend build, `pm2 startOrReload`,
+then health checks on `/health` and `/login`.
 Run `npm run lint` + `npx tsc --noEmit` and backend tests before release.
 
 ## 6. PM2 / systemd
