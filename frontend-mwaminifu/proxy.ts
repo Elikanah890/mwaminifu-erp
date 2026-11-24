@@ -17,8 +17,31 @@ const ROLE_PREFIX: Record<string, string> = {
   '/employee': 'EMPLOYEE',
 };
 
+function canonicalHost(): string {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://mwaminifu.co.tz').host.toLowerCase();
+  } catch {
+    return 'mwaminifu.co.tz';
+  }
+}
+
+/** This app is production-hosted on the VPS only. PaaS deployments redirect. */
+function isPaaSDeploymentHost(host: string): boolean {
+  return host.endsWith('.vercel.app') || host.endsWith('.onrender.com');
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const host = (forwardedHost?.split(',')[0] ?? request.headers.get('host') ?? '')
+    .trim()
+    .toLowerCase();
+  if (isPaaSDeploymentHost(host)) {
+    const target = new URL(pathname + request.nextUrl.search, `https://${canonicalHost()}`);
+    return NextResponse.redirect(target, 308);
+  }
+
   const token = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
   // Role is derived ONLY from the signed httpOnly JWT — never from a
   // client-readable cookie. The backend remains the security boundary.
