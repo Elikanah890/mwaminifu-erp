@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { SaleListItem, Shift } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
+import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -64,10 +65,13 @@ export default function EmployeeActivityPage() {
                 {activity.sales.map((s) => (
                   <li key={s.id} className="py-3 flex items-center justify-between gap-4 rounded-lg px-2 transition-colors hover:bg-muted">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">{s.receiptNumber ?? t('sales')}</p>
+                      <p className="text-sm font-medium text-foreground truncate" title={saleProductNames(s)}>{saleProductNames(s)}</p>
+                      <p className="text-xs text-subtle-foreground truncate">
+                        {s.customer?.name ?? '—'} · {t('quantity')}: {saleItemCount(s)}
+                      </p>
                       <p className="text-xs text-subtle-foreground">{formatDateTime(s.saleDate)}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-sm font-semibold text-secondary">{formatCurrency(s.grandTotal)}</p>
                       <Pill tone="teal">{s.status}</Pill>
                     </div>

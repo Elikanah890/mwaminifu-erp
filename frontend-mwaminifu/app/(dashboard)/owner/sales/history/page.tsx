@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { SaleListItem } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
+import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -54,7 +55,7 @@ export default function SalesHistoryPage() {
       .finally(() => setLoading(false));
   }, [activeShopId, status]);
 
-  const filtered = search ? sales.filter((s) => (s.receiptNumber ?? '').toLowerCase().includes(search.toLowerCase()) || (s.customer?.name ?? '').toLowerCase().includes(search.toLowerCase())) : sales;
+  const filtered = search ? sales.filter((s) => (s.receiptNumber ?? '').toLowerCase().includes(search.toLowerCase()) || (s.customer?.name ?? '').toLowerCase().includes(search.toLowerCase()) || saleProductNames(s).toLowerCase().includes(search.toLowerCase())) : sales;
 
   const openReceipt = async (s: SaleListItem) => {
     if (!s.receiptNumber) return;
@@ -185,9 +186,10 @@ export default function SalesHistoryPage() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
               <tr>
-                <th className="px-4 py-3">{t('receipt')}</th>
+                <th className="px-4 py-3">{t('products')}</th>
                 <th className="px-4 py-3">{t('date')}</th>
                 <th className="px-4 py-3">{t('customer')}</th>
+                <th className="px-4 py-3 text-right">{t('units')}</th>
                 <th className="px-4 py-3">{t('paymentMethod')}</th>
                 <th className="px-4 py-3 text-right">{t('total')}</th>
                 <th className="px-4 py-3">{t('status')}</th>
@@ -197,9 +199,13 @@ export default function SalesHistoryPage() {
             <tbody className="divide-y divide-border">
               {filtered.map((s) => (
                 <tr key={s.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
-                  <td className="px-4 py-3 font-medium text-foreground">{s.receiptNumber ?? '-'}</td>
+                  <td className="px-4 py-3 max-w-[240px]">
+                    <p className="font-medium text-foreground truncate" title={saleProductNames(s)}>{saleProductNames(s)}</p>
+                    <p className="text-xs text-subtle-foreground">{s.receiptNumber ?? '-'}</p>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(s.saleDate)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{s.customer?.name ?? t('walkInCustomer')}</td>
+                  <td className="px-4 py-3 text-right font-medium text-foreground">{saleItemCount(s)}</td>
                   <td className="px-4 py-3 text-muted-foreground capitalize">{s.paymentMethod ?? '-'}</td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(s.grandTotal)}</td>
                   <td className="px-4 py-3"><Pill tone={statusTone[s.status] ?? 'gray'}>{s.status}</Pill></td>

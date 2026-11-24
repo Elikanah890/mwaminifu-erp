@@ -457,7 +457,10 @@ export class EmployeeDashboardController {
           where: { userId, shopId },
           orderBy: { saleDate: 'desc' },
           take: 50,
-          include: { customer: { select: { name: true } } },
+          include: {
+            items: { include: { product: { select: { name: true } } } },
+            customer: { select: { name: true } },
+          },
         }),
         prisma.shift.findMany({
           where: { userId, shopId },
