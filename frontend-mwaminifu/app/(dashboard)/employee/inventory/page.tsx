@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
-import { Product } from '@/lib/types';
+import { Product, Category } from '@/lib/types';
 import { formatCurrency, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
@@ -28,7 +28,17 @@ export default function EmployeeInventoryPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ name: '', costPrice: '', sellingPrice: '', stockQuantity: '', baseUnitName: 'piece' });
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [form, setForm] = useState({
+    name: '',
+    categoryId: '',
+    barcode: '',
+    costPrice: '',
+    sellingPrice: '',
+    stockQuantity: '',
+    reorderLevel: '10',
+    baseUnitName: 'piece',
+  });
 
   const allowed = can('inventory:view') || can('products:view') || can('products:create');
 
@@ -45,6 +55,14 @@ export default function EmployeeInventoryPage() {
     return () => clearTimeout(timer);
   }, [activeShopId, search, allowed, refreshKey]);
 
+  useEffect(() => {
+    if (!activeShopId || !allowed) return;
+    apiClient
+      .get<Category[]>(`/shops/${activeShopId}/categories`)
+      .then((res) => setCategories(res.data ?? []))
+      .catch(() => setCategories([]));
+  }, [activeShopId, allowed]);
+
   if (permsLoading) {
     return <PageWrapper title={t('stockLookup')}><SkeletonTable rows={6} /></PageWrapper>;
   }
@@ -59,14 +77,26 @@ export default function EmployeeInventoryPage() {
     try {
       await apiClient.post(`/shops/${activeShopId}/products`, {
         name: form.name.trim(),
+        categoryId: form.categoryId || undefined,
+        barcode: form.barcode.trim() || undefined,
         costPrice: Number(form.costPrice) || 0,
         sellingPrice: Number(form.sellingPrice) || 0,
         stockQuantity: Number(form.stockQuantity) || 0,
+        reorderLevel: form.reorderLevel === '' ? undefined : Number(form.reorderLevel),
         baseUnitName: form.baseUnitName.trim() || 'piece',
       });
       toast(t('addProduct'), 'success');
       setAddOpen(false);
-      setForm({ name: '', costPrice: '', sellingPrice: '', stockQuantity: '', baseUnitName: 'piece' });
+      setForm({
+        name: '',
+        categoryId: '',
+        barcode: '',
+        costPrice: '',
+        sellingPrice: '',
+        stockQuantity: '',
+        reorderLevel: '10',
+        baseUnitName: 'piece',
+      });
       setRefreshKey((v) => v + 1);
     } catch (err) {
       toast(errorMessage(err), 'error');
@@ -150,6 +180,19 @@ export default function EmployeeInventoryPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
+              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input-field">
+                <option value="">—</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('unit')}</label>
+              <input value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder="piece / kg" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('costPrice')}</label>
               <input required type="number" min={0} value={form.costPrice} onChange={(e) => setForm({ ...form, costPrice: e.target.value })} className="input-field" />
             </div>
@@ -164,9 +207,13 @@ export default function EmployeeInventoryPage() {
               <input type="number" min={0} value={form.stockQuantity} onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })} className="input-field" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">{t('unit')}</label>
-              <input value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" />
+              <label className="block text-sm font-medium text-foreground mb-1">{t('reorderLevel')}</label>
+              <input type="number" min={0} value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} className="input-field" />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('barcode')}</label>
+            <input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="input-field" placeholder="1234567890128" />
           </div>
           <button type="submit" disabled={submitting} className="btn-navy w-full">{submitting ? t('saving') : t('addProduct')}</button>
         </form>
