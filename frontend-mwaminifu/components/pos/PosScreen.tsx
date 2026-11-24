@@ -7,7 +7,7 @@ import { usePermissions } from '@/lib/context/PermissionsContext';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Product, Customer } from '@/lib/types';
-import { formatCurrency, errorMessage, formatStockWithUnits } from '@/lib/format';
+import { formatCurrency, formatDateTime, errorMessage, formatStockWithUnits } from '@/lib/format';
 import Modal from '@/components/Modal';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import { useBarcodeWedge } from '@/lib/hooks/useBarcodeWedge';
@@ -43,6 +43,102 @@ const lineKey = (i: CartItem) => `${i.product.id}:${i.unitConfigId ?? 'base'}`;
 
 type Payment = { method: string; amount: number };
 
+type ReceiptItem = {
+  quantity: number;
+  unitPrice?: number;
+  total: number;
+  unitName?: string | null;
+  unit?: string | null;
+  baseUnitsPerConfig?: number;
+  product?: { name: string } | null;
+};
+
+type ReceiptData = Record<string, unknown> & {
+  receiptNumber?: string;
+  saleDate?: string;
+  totalAmount?: number;
+  discount?: number;
+  grandTotal?: number;
+  customerName?: string;
+  items?: ReceiptItem[];
+  paymentDetails?: Array<{ method: string; amount: number }>;
+};
+
+function ReceiptView({ shopName, receipt }: { shopName: string; receipt: ReceiptData }) {
+  const items = receipt.items ?? [];
+  const payments = receipt.paymentDetails ?? [];
+  const subtotal = Number(receipt.totalAmount ?? receipt.grandTotal ?? 0);
+  const discount = Number(receipt.discount ?? 0);
+  const total = Number(receipt.grandTotal ?? 0);
+
+  return (
+    <div className="text-foreground">
+      <div className="text-center">
+        <p className="text-base font-bold">{shopName || 'Mwaminifu'}</p>
+        <p className="mt-1 text-xs text-subtle-foreground">Risiti: {receipt.receiptNumber ?? '-'}</p>
+        {receipt.saleDate && (
+          <p className="text-xs text-subtle-foreground">{formatDateTime(receipt.saleDate)}</p>
+        )}
+        {receipt.customerName && <p className="mt-1 text-xs">Mteja: {receipt.customerName}</p>}
+      </div>
+
+      <div className="my-3 border-t border-dashed border-border" />
+
+      <table className="w-full text-sm">
+        <tbody>
+          {items.map((i, idx) => (
+            <tr key={idx}>
+              <td className="py-1 pr-2 align-top">
+                <span className="font-medium">{i.product?.name ?? '—'}</span>
+                <span className="block text-xs text-subtle-foreground">
+                  {i.unitName ?? i.unit ?? ''}
+                  {(i.baseUnitsPerConfig ?? 1) > 1 ? ` (${i.baseUnitsPerConfig}×)` : ''} × {i.quantity}
+                </span>
+              </td>
+              <td className="whitespace-nowrap py-1 text-right align-top">{formatCurrency(i.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="my-3 border-t border-dashed border-border" />
+
+      <div className="space-y-1 text-sm">
+        <div className="flex justify-between text-subtle-foreground">
+          <span>Jumla Ndogo</span>
+          <span>{formatCurrency(subtotal)}</span>
+        </div>
+        {discount > 0 && (
+          <div className="flex justify-between text-subtle-foreground">
+            <span>Punguzo</span>
+            <span>-{formatCurrency(discount)}</span>
+          </div>
+        )}
+        <div className="flex justify-between text-base font-bold">
+          <span>Jumla</span>
+          <span>{formatCurrency(total)}</span>
+        </div>
+      </div>
+
+      {payments.length > 0 && (
+        <>
+          <div className="my-3 border-t border-dashed border-border" />
+          <div className="space-y-1 text-xs text-subtle-foreground">
+            {payments.map((p, idx) => (
+              <div key={idx} className="flex justify-between">
+                <span className="capitalize">{p.method}</span>
+                <span>{formatCurrency(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <p className="mt-4 text-center text-xs text-subtle-foreground">Asante kwa biashara yako</p>
+    </div>
+  );
+}
+
 export default function PosScreen({ shopId }: { shopId: string }) {
   const { toast } = useToast();
   const { t } = useI18n();
@@ -59,7 +155,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
   const [customerId, setCustomerId] = useState('');
   const [discount, setDiscount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [receipt, setReceipt] = useState<Record<string, unknown> | null>(null);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [shopName, setShopName] = useState('');
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const searchRef = useRef<number | undefined>(undefined);
@@ -76,6 +173,14 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     apiClient
       .get<Customer[]>(`/shops/${shopId}/customers?limit=100`)
       .then((res) => setCustomers(res.data ?? []))
+      .catch(() => {});
+  }, [shopId]);
+
+  useEffect(() => {
+    if (!shopId) return;
+    apiClient
+      .get<Array<{ id: string; name: string }>>('/shops')
+      .then((res) => setShopName((res.data ?? []).find((s) => s.id === shopId)?.name ?? ''))
       .catch(() => {});
   }, [shopId]);
 
@@ -355,7 +460,12 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               }),
             }
           : receiptData;
-      setReceipt(enrichedReceipt);
+      const soldCustomerName = customers.find((c) => c.id === customerId)?.name;
+      setReceipt(
+        enrichedReceipt
+          ? { ...(enrichedReceipt as ReceiptData), customerName: soldCustomerName }
+          : null
+      );
       setCart([]);
       setPayments([]);
       setDiscount(0);
@@ -698,23 +808,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       <Modal open={!!receipt} title="Receipt" onClose={() => setReceipt(null)}>
         {receipt && (
           <div>
-            <div className="text-center mb-4">
-              <ReceiptText size={32} className="mx-auto text-secondary mb-2" />
-              <p className="font-mono text-lg font-bold text-primary">{receipt.receiptNumber as string}</p>
-            </div>
-            <div className="border-t border-dashed border-border py-3 space-y-1">
-              {(receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>).map((i, idx) => (
-                <div key={idx} className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{i.product?.name ?? 'Item'} — {i.unitName ?? i.unit ?? ''}{(i.baseUnitsPerConfig ?? 1) > 1 ? ` (${i.baseUnitsPerConfig}×)` : ''} × {i.quantity}</span>
-                  <span className="font-medium">{formatCurrency(i.total)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-between text-base font-bold pt-3">
-              <span>Total</span>
-              <span className="text-secondary">{formatCurrency(Number(receipt.grandTotal) || 0)}</span>
-            </div>
-            <div className="flex gap-3 mt-6">
+            <ReceiptView shopName={shopName} receipt={receipt} />
+            <div className="mt-6 flex gap-3">
               <button onClick={shareWhatsApp} className="flex-1 btn-teal">Share via WhatsApp</button>
               <button onClick={shareEmail} className="flex-1 btn-outline">Email</button>
               <button onClick={() => window.print()} className="flex-1 btn-outline">Print</button>
@@ -722,6 +817,11 @@ export default function PosScreen({ shopId }: { shopId: string }) {
           </div>
         )}
       </Modal>
+
+      {/* Print-only receipt (clean output, no page chrome) */}
+      <div className="receipt-print-area">
+        {receipt && <ReceiptView shopName={shopName} receipt={receipt} />}
+      </div>
 
       <BarcodeScanner open={scanOpen} onClose={() => setScanOpen(false)} onScan={handleScan} />
 

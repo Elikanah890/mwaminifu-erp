@@ -345,3 +345,22 @@ button:disabled { cursor: not-allowed; }
     scroll-behavior: auto !important;
   }
 }
+
+
+/* Receipt printing: only .receipt-print-area is printed, never the page chrome. */
+.receipt-print-area { display: none; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  .receipt-print-area {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0;
+  }
+  .receipt-print-area,
+  .receipt-print-area * { visibility: visible !important; }
+  @page { margin: 12mm; }
+}
