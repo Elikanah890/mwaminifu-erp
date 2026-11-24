@@ -338,7 +338,7 @@ export default function OwnerDashboardPage() {
                   <tr className="text-left text-xs uppercase tracking-wider text-subtle-foreground border-b border-border">
                     <th className="py-2 pr-3">{t('products')}</th>
                     <th className="py-2 pr-3">{t('customer')}</th>
-                    <th className="py-2 pr-3 text-right">{t('quantity')}</th>
+                    <th className="py-2 pr-3 text-right">{t('units')}</th>
                     <th className="py-2 pr-3 text-right">{t('amount')}</th>
                     <th className="py-2 pr-3">{t('status')}</th>
                     <th className="py-2 text-right">{t('action')}</th>
