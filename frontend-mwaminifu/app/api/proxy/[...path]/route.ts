@@ -11,6 +11,7 @@ import {
   baseCookieOptions,
 } from '@/lib/server/auth';
 import { clearAuthCookies } from '@/lib/server/session';
+import { isSameOrigin } from '@/lib/server/origin';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,8 +39,7 @@ async function proxy(request: NextRequest, ctx: Ctx) {
   // CSRF protection (double-submit token + same-origin check) for all
   // state-changing requests proxied with the session cookie.
   if (method !== 'GET' && method !== 'HEAD') {
-    const origin = request.headers.get('origin');
-    if (origin && origin !== request.nextUrl.origin) {
+    if (!isSameOrigin(request)) {
       return NextResponse.json(
         { success: false, error: { code: 'CSRF_FAILED', message: 'Cross-site request blocked' }, timestamp: new Date().toISOString() },
         { status: 403 }
