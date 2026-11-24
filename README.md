@@ -156,6 +156,10 @@ Workflows live in `.github/workflows/`:
 |----------|---------|---------|
 | `ci.yml` | Every PR, and pushes to `develop` / `main` | Backend lint + tests (with coverage thresholds) + build; frontend lint + typecheck + build; Flutter analyze + test. **Blocks merge on failure.** |
 
+> **Vercel and Render are not supported.** Production runs on the Contabo VPS
+> only. `vercel.json` disables automatic PaaS deployments, and the middleware
+> redirects any `*.vercel.app` / `*.onrender.com` host to the canonical domain.
+
 ### Deployment (Contabo VPS)
 
 Hosting is done on a VPS with Nginx + PM2, not on a PaaS. Everything needed
