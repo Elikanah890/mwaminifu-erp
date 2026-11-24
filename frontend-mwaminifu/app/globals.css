@@ -347,20 +347,27 @@ button:disabled { cursor: not-allowed; }
 }
 
 
-/* Receipt printing: only .receipt-print-area is printed, never the page chrome. */
-.receipt-print-area { display: none; }
+/* Receipt printing: hide the app and print only the portaled receipt. */
+.receipt-print-root { display: none; }
 
 @media print {
-  body * { visibility: hidden !important; }
-  .receipt-print-area {
+  body > *:not(.receipt-print-root) { display: none !important; }
+  .receipt-print-root {
     display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
+    width: auto !important;
+    max-width: 190mm;
+    margin: 0 auto;
     padding: 0;
+    background: #ffffff !important;
+    color: #000000 !important;
   }
-  .receipt-print-area,
-  .receipt-print-area * { visibility: visible !important; }
+  .receipt-print-root,
+  .receipt-print-root * {
+    color: #000000 !important;
+    background: transparent !important;
+    border-color: #bbbbbb !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
   @page { margin: 12mm; }
 }

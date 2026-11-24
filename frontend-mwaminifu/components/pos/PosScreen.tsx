@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiClient, ApiErrorException } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
 import { usePermissions } from '@/lib/context/PermissionsContext';
@@ -157,6 +158,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [shopName, setShopName] = useState('');
+  const [mounted, setMounted] = useState(false);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const searchRef = useRef<number | undefined>(undefined);
@@ -175,6 +177,10 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       .then((res) => setCustomers(res.data ?? []))
       .catch(() => {});
   }, [shopId]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!shopId) return;
@@ -818,10 +824,14 @@ export default function PosScreen({ shopId }: { shopId: string }) {
         )}
       </Modal>
 
-      {/* Print-only receipt (clean output, no page chrome) */}
-      <div className="receipt-print-area">
-        {receipt && <ReceiptView shopName={shopName} receipt={receipt} />}
-      </div>
+      {/* Print-only receipt: portaled to <body> so print CSS can hide the app */}
+      {mounted && receipt &&
+        createPortal(
+          <div className="receipt-print-root">
+            <ReceiptView shopName={shopName} receipt={receipt} />
+          </div>,
+          document.body
+        )}
 
       <BarcodeScanner open={scanOpen} onClose={() => setScanOpen(false)} onScan={handleScan} />
 
