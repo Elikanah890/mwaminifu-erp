@@ -361,7 +361,11 @@ button:disabled { cursor: not-allowed; }
     background: #ffffff !important;
     color: #000000 !important;
   }
-  .receipt-print-root,
+  body { background: #ffffff !important; }
+  .receipt-print-root {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .receipt-print-root * {
     color: #000000 !important;
     background: transparent !important;

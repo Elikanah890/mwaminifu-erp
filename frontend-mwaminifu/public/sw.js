@@ -14,7 +14,7 @@
  * is kept so the app can show an "update available" prompt, and clientsClaim()
  * plus navigation preload keep navigation fast.
  */
-const VERSION = 'mwaminifu-v8';
+const VERSION = 'mwaminifu-v9';
 
 // The page registers `/sw.js?mode=dev` during development. In dev we must never
 // serve cached Next.js build chunks, otherwise edits (and even method signatures
@@ -114,8 +114,9 @@ self.addEventListener('install', (event) => {
       await Promise.all(
         PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => undefined))
       );
-      // First install activates immediately; updates wait so the app can prompt.
-      if (DEV || !self.registration.active) await self.skipWaiting();
+      // Always activate the new worker so a deploy (new assets, CSS, JS) takes
+      // effect on the next load instead of serving stale cached files.
+      await self.skipWaiting();
     })()
   );
 });
