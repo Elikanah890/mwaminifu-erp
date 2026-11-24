@@ -340,7 +340,22 @@ export default function PosScreen({ shopId }: { shopId: string }) {
         discount: discount || undefined,
         payments: effectivePayments,
       });
-      setReceipt(res.data ?? null);
+      const receiptData = (res.data ?? null) as Record<string, unknown> | null;
+      const receiptItems = Array.isArray(receiptData?.items)
+        ? (receiptData!.items as Array<Record<string, unknown>>)
+        : [];
+      const enrichedReceipt =
+        receiptData && receiptItems.length > 0
+          ? {
+              ...receiptData,
+              items: receiptItems.map((item) => {
+                if (item.product) return item;
+                const match = cart.find((c) => c.product.id === item.productId);
+                return match ? { ...item, product: { name: match.product.name } } : item;
+              }),
+            }
+          : receiptData;
+      setReceipt(enrichedReceipt);
       setCart([]);
       setPayments([]);
       setDiscount(0);
@@ -360,7 +375,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     const total = Number(receipt.grandTotal) || 0;
     const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>) || [];
     const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
-    const text = `*Receipt ${number}*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(total)}*\n\nThank you!`;
+    const shopName = (receipt.shop as { name?: string } | undefined)?.name ?? 'Mwaminifu';
+    const text = `*${shopName}*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(total)}*\n\nRisiti: ${number}\nThank you!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -370,7 +386,8 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     const total = Number(receipt.grandTotal) || 0;
     const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>) || [];
     const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
-    window.location.href = `mailto:?subject=${encodeURIComponent(`Receipt ${number}`)}&body=${encodeURIComponent(`Receipt ${number}\n${lines.join('\n')}\n\nTotal: ${formatCurrency(total)}`)}`;
+    const subject = lines.length > 0 ? `${lines[0].split(' (')[0]} — ${formatCurrency(total)}` : `Receipt ${number}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${lines.join('\n')}\n\nTotal: ${formatCurrency(total)}\nRisiti: ${number}\nThank you!`)}`;
   };
 
   return (

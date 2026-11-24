@@ -36,7 +36,7 @@ export class SaleService {
     if (data.clientId) {
       const existing = await prisma.sale.findFirst({
         where: { clientId: data.clientId, shopId },
-        include: { items: true },
+        include: { items: { include: { product: { select: { name: true } } } } },
       });
       if (existing) return existing;
     }
@@ -293,7 +293,7 @@ export class SaleService {
             create: saleItems,
           },
         },
-        include: { items: true },
+        include: { items: { include: { product: { select: { name: true } } } } },
       });
 
       // Update customer credit balance and ledger
@@ -361,7 +361,7 @@ export class SaleService {
     } catch (err) {
       // Concurrent replay of the same offline sale: return the original.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && data.clientId) {
-        const existing = await prisma.sale.findFirst({ where: { clientId: data.clientId, shopId }, include: { items: true } });
+        const existing = await prisma.sale.findFirst({ where: { clientId: data.clientId, shopId }, include: { items: { include: { product: { select: { name: true } } } } } });
         if (existing) return existing;
       }
       throw err;
