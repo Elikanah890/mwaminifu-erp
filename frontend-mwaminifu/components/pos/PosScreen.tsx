@@ -308,13 +308,19 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       toast('Add at least one item', 'error');
       return;
     }
-    const useCredit = payments.some((p) => p.method === 'credit');
+    const typedAmount = Number(payAmount);
+    const effectivePayments =
+      payments.length > 0
+        ? payments
+        : [{ method: payMethod, amount: typedAmount > 0 ? typedAmount : totals.total }];
+
+    const useCredit = effectivePayments.some((p) => p.method === 'credit');
     if (useCredit && !customerId) {
       toast('Select a customer for credit sales', 'error');
       return;
     }
-    if (payments.length === 0) {
-      toast('Add at least one payment', 'error');
+    if (effectivePayments.some((p) => !p.amount || p.amount <= 0)) {
+      toast('Enter a valid payment amount', 'error');
       return;
     }
 
@@ -332,7 +338,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
           baseUnitsPerConfig: i.baseUnits,
         })),
         discount: discount || undefined,
-        payments,
+        payments: effectivePayments,
       });
       setReceipt(res.data ?? null);
       setCart([]);
@@ -515,7 +521,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                             });
                           }
                         }}
-                        className="px-2 py-1 border border-border-strong rounded-md text-xs"
+                        className="rounded-md border border-border-strong bg-card px-2 py-1 text-xs text-foreground"
                       >
                         {!(item.product.unitConfigs ?? []).some((c) => c.baseUnits === 1) && (
                           <option value="base">{item.product.baseUnitName ?? item.product.unit} (1×)</option>
@@ -567,7 +573,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               <select
                 value={customerId}
                 onChange={(e) => { setCustomerId(e.target.value); openQuickView(e.target.value); }}
-                className="max-w-[160px] px-2 py-1.5 border border-border-strong rounded-md text-sm"
+                className="max-w-[160px] rounded-md border border-border-strong bg-card px-2 py-1.5 text-sm text-foreground"
               >
                 <option value="">{t('walkInCustomer')}</option>
                 {customers.map((c) => (
@@ -636,7 +642,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
             <select
               value={payMethod}
               onChange={(e) => setPayMethod(e.target.value)}
-              className="flex-1 px-2 py-2 border border-border-strong rounded-md text-sm"
+              className="flex-1 rounded-md border border-border-strong bg-card px-2 py-2 text-sm text-foreground"
             >
               {PAYMENT_METHODS.filter((m) => m.id !== 'credit' || can('credit:create')).map((m) => (
                 <option key={m.id} value={m.id}>{m.label}</option>
@@ -647,7 +653,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               min={0}
               value={payAmount}
               onChange={(e) => setPayAmount(e.target.value)}
-              className="w-32 px-2 py-2 border border-border-strong rounded-md text-sm text-right"
+              className="w-32 rounded-md border border-border-strong bg-card px-2 py-2 text-right text-sm text-foreground"
             />
             <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }} onClick={addPayment} className="btn-teal px-3">Add</motion.button>
           </div>
