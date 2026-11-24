@@ -507,7 +507,10 @@ export class ShopService {
       prisma.sale.findMany({
         where: { shopId, userId, status: 'COMPLETED', saleDate: { gte: today, lt: tomorrow } },
         orderBy: { saleDate: 'desc' },
-        include: { items: true, customer: { select: { name: true } } },
+        include: {
+          items: { include: { product: { select: { name: true } } } },
+          customer: { select: { name: true } },
+        },
       }),
       prisma.saleItem.aggregate({
         where: { sale: { shopId, userId, status: 'COMPLETED', saleDate: { gte: today, lt: tomorrow } } },

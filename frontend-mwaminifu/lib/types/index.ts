@@ -847,7 +847,15 @@ export interface EmployeeDashboard {
     grandTotal: number;
     receiptNumber?: string | null;
     paymentMethod?: string | null;
+    status?: string;
     customer?: { name: string } | null;
+    items?: Array<{
+      id?: string;
+      quantity: number;
+      unitPrice?: number;
+      total?: number;
+      product?: { name: string } | null;
+    }>;
   }>;
 }
 

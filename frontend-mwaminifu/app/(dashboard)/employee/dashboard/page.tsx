@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { usePermissions } from '@/lib/context/PermissionsContext';
 import { EmployeeDashboard } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage } from '@/lib/format';
+import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
@@ -154,12 +155,15 @@ export default function EmployeeDashboardPage() {
                 {(data?.recentSales ?? []).map((s) => (
                   <li key={s.id} className="py-3 flex items-center justify-between gap-4 rounded-lg px-2 transition-colors hover:bg-muted">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">{s.receiptNumber ?? t('sales')}</p>
+                      <p className="text-sm font-medium text-foreground truncate" title={saleProductNames(s)}>{saleProductNames(s)}</p>
+                      <p className="text-xs text-subtle-foreground truncate">
+                        {s.customer?.name ?? '—'} · {t('quantity')}: {saleItemCount(s)}
+                      </p>
                       <p className="text-xs text-subtle-foreground">{formatDateTime(s.saleDate)}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-sm font-semibold text-secondary">{formatCurrency(s.grandTotal)}</p>
-                      <p className="text-xs text-subtle-foreground capitalize">{s.paymentMethod ?? '-'}</p>
+                      <p className="text-xs text-subtle-foreground capitalize">{s.status ?? s.paymentMethod ?? '-'}</p>
                     </div>
                   </li>
                 ))}

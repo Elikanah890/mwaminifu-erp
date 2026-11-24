@@ -7,6 +7,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { ShopDashboard, Product, SaleListItem, InventoryReport, CreditReport } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage, formatStockWithUnits } from '@/lib/format';
+import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -335,8 +336,9 @@ export default function OwnerDashboardPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wider text-subtle-foreground border-b border-border">
-                    <th className="py-2 pr-3">{t('receipt')}</th>
+                    <th className="py-2 pr-3">{t('products')}</th>
                     <th className="py-2 pr-3">{t('customer')}</th>
+                    <th className="py-2 pr-3 text-right">{t('quantity')}</th>
                     <th className="py-2 pr-3 text-right">{t('amount')}</th>
                     <th className="py-2 pr-3">{t('status')}</th>
                     <th className="py-2 text-right">{t('action')}</th>
@@ -345,11 +347,12 @@ export default function OwnerDashboardPage() {
                 <tbody className="divide-y divide-border">
                   {recent.map((s) => (
                     <tr key={s.id}>
-                      <td className="py-3 pr-3">
-                        <p className="font-medium text-foreground">{s.receiptNumber ?? t('sales')}</p>
+                      <td className="py-3 pr-3 max-w-[220px]">
+                        <p className="font-medium text-foreground truncate" title={saleProductNames(s)}>{saleProductNames(s)}</p>
                         <p className="text-xs text-subtle-foreground">{formatDateTime(s.saleDate)}</p>
                       </td>
                       <td className="py-3 pr-3 text-muted-foreground">{s.customer?.name ?? '—'}</td>
+                      <td className="py-3 pr-3 text-right font-medium text-foreground">{saleItemCount(s)}</td>
                       <td className="py-3 pr-3 text-right font-semibold text-secondary">{formatCurrency(s.grandTotal)}</td>
                       <td className="py-3 pr-3"><Pill tone={STATUS_TONE[s.status] ?? 'gray'}>{s.status}</Pill></td>
                       <td className="py-3">
