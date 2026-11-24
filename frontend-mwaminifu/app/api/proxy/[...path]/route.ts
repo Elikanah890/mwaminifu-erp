@@ -61,7 +61,12 @@ async function proxy(request: NextRequest, ctx: Ctx) {
     if (contentType.includes('application/json')) {
       body = await request.text();
     } else {
-      body = request.body ?? undefined;
+      // Buffer non-JSON bodies (multipart uploads, empty DELETE bodies).
+      // Passing a ReadableStream to fetch() in Node requires `duplex: 'half'`,
+      // which Next's fetch typings reject, and an empty stream would still be
+      // sent as a body. Buffering is bounded by the 25 MB Nginx limit.
+      const buffer = await request.arrayBuffer();
+      body = buffer.byteLength > 0 ? buffer : undefined;
     }
   }
 
