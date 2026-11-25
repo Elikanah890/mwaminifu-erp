@@ -52,6 +52,13 @@ describe('saleService.createSale', () => {
     expect(mockPrisma.stockAdjustment.create).not.toHaveBeenCalled();
   });
 
+  it('rejects a sale with no items', async () => {
+    await expect(
+      saleService.createSale(SHOP, USER, { items: [], payments: [] })
+    ).rejects.toMatchObject({ status: 422, code: 'VALIDATION_ERROR' });
+    expect(mockPrisma.sale.create).not.toHaveBeenCalled();
+  });
+
   it('rejects a sale that exceeds available stock', async () => {
     mockPrisma.sale.findFirst.mockResolvedValue(null);
     mockPrisma.product.findFirst.mockResolvedValue({ ...product, stockQuantity: 1 });

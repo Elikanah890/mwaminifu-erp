@@ -46,7 +46,7 @@ export const createSaleSchema = z.object({
     unitName: z.string().optional(),
     baseUnitsPerConfig: z.number().int().positive().optional(),
     discount: z.number().min(0).optional(),
-  })),
+  })).min(1, 'A sale needs at least one item'),
   discount: z.number().min(0).optional(),
   tax: z.number().min(0).optional(),
   payments: z.array(z.object({

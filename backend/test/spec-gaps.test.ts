@@ -89,7 +89,11 @@ describe('shift gating (Spec 8.8.1)', () => {
     mockPrisma.shop.findFirst.mockResolvedValue({ id: SHOP, ownerId: USER, isArchived: false });
     mockPrisma.shift.findFirst.mockResolvedValue(null);
     await expect(
-      saleService.createSale(SHOP, USER, { items: [], payments: [] }, { requireOpenShift: true })
+      saleService.createSale(
+        SHOP, USER,
+        { items: [{ productId: 'p1', quantity: 1 }], payments: [{ method: 'cash', amount: 1000 }] },
+        { requireOpenShift: true }
+      )
     ).rejects.toMatchObject({ status: 422, code: 'SHIFT_REQUIRED' });
   });
 

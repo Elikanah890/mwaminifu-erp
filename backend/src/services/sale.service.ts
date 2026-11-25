@@ -41,6 +41,12 @@ export class SaleService {
       if (existing) return existing;
     }
 
+    // Defense in depth: the route schema also enforces this, but an empty sale
+    // must never reach the database (it creates a meaningless 0-total receipt).
+    if (data.items.length === 0) {
+      throw { status: 422, code: 'VALIDATION_ERROR', message: 'A sale needs at least one item' };
+    }
+
     if (data.suspended) {
       return this.suspendSale(shopId, userId, data);
     }
