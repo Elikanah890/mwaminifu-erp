@@ -41,9 +41,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mwaminifu'), findsOneWidget);
+    expect(find.text('Usimamizi wa Biashara'), findsOneWidget);
     expect(find.text('Ingia'), findsOneWidget); // login button
-    expect(find.text('Mmiliki wa Biashara'), findsOneWidget);
-    expect(find.text('Mfanyakazi'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
     expect(find.text('Lugha'), findsOneWidget);
   });
 
@@ -55,7 +56,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Login'), findsOneWidget);
-    expect(find.text('Business Owner'), findsOneWidget);
-    expect(find.text('Employee'), findsOneWidget);
+    expect(find.text('Business Management'), findsOneWidget);
+    expect(find.text('Language'), findsOneWidget);
   });
 }

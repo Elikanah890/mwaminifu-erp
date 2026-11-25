@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { BACKEND_API_URL, ACCESS_TOKEN_COOKIE } from '@/lib/server/auth';
+import { setCsrfCookie } from '@/lib/server/session';
+import { deriveCsrfToken } from '@/lib/server/csrf';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +20,10 @@ export async function GET() {
       { status: 401 }
     );
   }
+
+  // Self-heal sessions created before the CSRF cookie existed, or where the
+  // cookie was cleared/duplicated: every app load re-issues the session token.
+  await setCsrfCookie(deriveCsrfToken(token));
 
   let backendResponse: Response;
   try {

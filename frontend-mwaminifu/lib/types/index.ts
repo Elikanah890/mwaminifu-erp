@@ -1020,6 +1020,13 @@ export interface CustomerProfile {
     paymentMethod?: string | null;
     saleDate: string;
     status: string;
+    items?: Array<{
+      quantity?: number | null;
+      total?: number | null;
+      unit?: string | null;
+      unitName?: string | null;
+      product?: { name?: string | null } | null;
+    }>;
   }>;
   recentPayments: Array<{ id: string; amount: number; paymentDate: string; method: string; notes?: string | null }>;
   ledger: Array<{ id: string; type: string; amount: number; balanceAfter: number; description?: string | null; createdAt: string }>;

@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { Customer } from '@/lib/types';
 import { formatCurrency, formatDate, errorMessage } from '@/lib/format';
+import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -33,7 +34,7 @@ export default function OwnerCustomersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', notes: '', creditLimit: '' });
   const [payAmount, setPayAmount] = useState('');
-  const [statement, setStatement] = useState<{ payments: CreditPayment[]; sales: Array<{ receiptNumber?: string | null; grandTotal: number; saleDate: string }> } | null>(null);
+  const [statement, setStatement] = useState<{ payments: CreditPayment[]; sales: Array<{ id: string; receiptNumber?: string | null; grandTotal: number; saleDate: string; items?: Array<{ quantity?: number | null; product?: { name?: string | null } | null }> }> } | null>(null);
 
   const load = () => {
     if (!activeShopId) return;
@@ -122,7 +123,7 @@ export default function OwnerCustomersPage() {
     try {
       const [hist, purchases] = await Promise.all([
         apiClient.get<{ payments: CreditPayment[] }>(`/customers/${c.id}/credit-history`),
-        apiClient.get<{ sales: Array<{ receiptNumber?: string | null; grandTotal: number; saleDate: string }> }>(`/customers/${c.id}/purchase-history`),
+        apiClient.get<{ sales: Array<{ id: string; receiptNumber?: string | null; grandTotal: number; saleDate: string; items?: Array<{ quantity?: number | null; product?: { name?: string | null } | null }> }> }>(`/customers/${c.id}/purchase-history`),
       ]);
       setStatement({ payments: hist.data?.payments ?? [], sales: purchases.data?.sales ?? [] });
     } catch {
@@ -259,21 +260,41 @@ export default function OwnerCustomersPage() {
               <div className="bg-muted rounded-lg p-4"><p className="text-xs text-muted-foreground">{t('outstandingCredit')}</p><p className="text-lg font-bold text-primary">{formatCurrency(statementTarget.outstandingBalance)}</p></div>
               <div className="bg-muted rounded-lg p-4"><p className="text-xs text-muted-foreground">{t('totalCreditGiven')}</p><p className="text-lg font-bold text-secondary">{formatCurrency(statementTarget.totalCreditGiven)}</p></div>
             </div>
-            <h3 className="text-sm font-semibold text-foreground mb-2">{t('recordPayment')}</h3>
             {!statement ? (
               <SkeletonCard rows={3} />
-            ) : (statement.payments.length === 0 ? (
-              <EmptyState message={t('noData')} />
             ) : (
-              <ul className="divide-y divide-border mb-4 max-h-56 overflow-y-auto">
-                {statement.payments.map((p) => (
-                  <li key={p.id} className="py-2 flex justify-between text-sm">
-                    <span className="text-muted-foreground">{formatDate(p.paymentDate)}</span>
-                    <span className="font-medium text-secondary">{formatCurrency(p.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            ))}
+              <>
+                <h3 className="text-sm font-semibold text-foreground mb-2">{t('recentPurchases')}</h3>
+                {statement.sales.length === 0 ? (
+                  <EmptyState message={t('noData')} />
+                ) : (
+                  <ul className="divide-y divide-border mb-4 max-h-56 overflow-y-auto">
+                    {statement.sales.map((s) => (
+                      <li key={s.id} className="py-2 flex justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground truncate" title={saleProductNames(s)}>{saleProductNames(s)}</p>
+                          <p className="text-xs text-subtle-foreground">{formatDate(s.saleDate)} · {t('quantity')}: {saleItemCount(s)}</p>
+                        </div>
+                        <span className="font-semibold text-foreground whitespace-nowrap">{formatCurrency(s.grandTotal)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <h3 className="text-sm font-semibold text-foreground mb-2">{t('creditHistory')}</h3>
+                {statement.payments.length === 0 ? (
+                  <EmptyState message={t('noData')} />
+                ) : (
+                  <ul className="divide-y divide-border mb-4 max-h-56 overflow-y-auto">
+                    {statement.payments.map((p) => (
+                      <li key={p.id} className="py-2 flex justify-between text-sm">
+                        <span className="text-muted-foreground">{formatDate(p.paymentDate)}</span>
+                        <span className="font-medium text-secondary">{formatCurrency(p.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
             <button onClick={shareStatement} className="btn-teal w-full mt-4">{t('shareWhatsApp')}</button>
           </div>
         )}

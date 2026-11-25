@@ -11,6 +11,7 @@ import {
   baseCookieOptions,
 } from '@/lib/server/auth';
 import { clearAuthCookies } from '@/lib/server/session';
+import { deriveCsrfToken } from '@/lib/server/csrf';
 import { isSameOrigin } from '@/lib/server/origin';
 
 export const dynamic = 'force-dynamic';
@@ -47,7 +48,12 @@ async function proxy(request: NextRequest, ctx: Ctx) {
     }
     const csrfCookie = cookieStore.get(CSRF_COOKIE)?.value;
     const csrfHeader = request.headers.get(CSRF_HEADER);
-    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    // Accept either the double-submit cookie value or the token derived from
+    // the current session. The derived form survives missing, stale or
+    // duplicated csrfToken cookies (previously blocked cashiers from selling).
+    const sessionCsrf = accessToken ? deriveCsrfToken(accessToken) : null;
+    const csrfValid = Boolean(csrfHeader) && (csrfHeader === csrfCookie || csrfHeader === sessionCsrf);
+    if (!csrfValid) {
       return NextResponse.json(
         { success: false, error: { code: 'CSRF_FAILED', message: 'Missing or invalid CSRF token' }, timestamp: new Date().toISOString() },
         { status: 403 }
@@ -95,6 +101,8 @@ async function proxy(request: NextRequest, ctx: Ctx) {
       if (refreshed.refreshToken) {
         cookieStore.set(REFRESH_TOKEN_COOKIE, refreshed.refreshToken, baseCookieOptions(REFRESH_TOKEN_MAX_AGE, true));
       }
+      // Keep the CSRF cookie in lockstep with the rotated session.
+      cookieStore.set(CSRF_COOKIE, deriveCsrfToken(refreshed.accessToken), baseCookieOptions(REFRESH_TOKEN_MAX_AGE, false));
       response = await doFetch(accessToken);
     } else {
       await clearAuthCookies();

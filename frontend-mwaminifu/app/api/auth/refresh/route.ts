@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { BACKEND_API_URL, REFRESH_TOKEN_COOKIE, generateCsrfToken } from '@/lib/server/auth';
+import { BACKEND_API_URL, REFRESH_TOKEN_COOKIE } from '@/lib/server/auth';
 import { clearAuthCookies, setAccessTokenCookie, setRefreshTokenCookie, setCsrfCookie } from '@/lib/server/session';
+import { deriveCsrfToken } from '@/lib/server/csrf';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +56,7 @@ export async function POST() {
   if (data.refreshToken) {
     await setRefreshTokenCookie(data.refreshToken);
   }
-  await setCsrfCookie(generateCsrfToken());
+  await setCsrfCookie(deriveCsrfToken(data.accessToken));
 
   return NextResponse.json({ success: true, message: 'Session refreshed', timestamp: new Date().toISOString() });
 }

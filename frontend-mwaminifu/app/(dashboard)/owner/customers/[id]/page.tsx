@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
 import { CustomerProfile } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
+import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
@@ -15,12 +16,12 @@ import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { ArrowLeft, HandCoins, Share2 } from 'lucide-react';
 
-const ledgerTypeLabel: Record<string, string> = {
-  CHARGE: 'Charge',
-  REPAYMENT: 'Repayment',
-  WRITE_OFF: 'Write-off',
-  ADJUSTMENT: 'Adjustment',
-};
+const ledgerTypeKey = {
+  CHARGE: 'ledgerCharge',
+  REPAYMENT: 'ledgerRepayment',
+  WRITE_OFF: 'ledgerWriteOff',
+  ADJUSTMENT: 'ledgerAdjustment',
+} as const;
 
 export default function CustomerProfilePage() {
   const params = useParams();
@@ -134,7 +135,7 @@ export default function CustomerProfilePage() {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                     <tr>
-                      <th className="px-4 py-3">{t('receipt')}</th>
+                      <th className="px-4 py-3">{t('products')}</th>
                       <th className="px-4 py-3">{t('date')}</th>
                       <th className="px-4 py-3 text-right">{t('total')}</th>
                     </tr>
@@ -142,7 +143,10 @@ export default function CustomerProfilePage() {
                   <tbody className="divide-y divide-border">
                     {profile.recentSales.map((s) => (
                       <tr key={s.id} className="hover:bg-muted transition-colors">
-                        <td className="px-4 py-3 font-medium text-foreground">{s.receiptNumber ?? '-'}</td>
+                        <td className="px-4 py-3 max-w-[220px]">
+                          <p className="font-medium text-foreground truncate" title={saleProductNames(s)}>{saleProductNames(s)}</p>
+                          <p className="text-xs text-subtle-foreground">{t('quantity')}: {saleItemCount(s)}</p>
+                        </td>
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(s.saleDate)}</td>
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(s.grandTotal)}</td>
                       </tr>
@@ -170,7 +174,7 @@ export default function CustomerProfilePage() {
                     {profile.ledger.map((l) => (
                       <tr key={l.id} className="hover:bg-muted transition-colors">
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(l.createdAt)}</td>
-                        <td className="px-4 py-3"><Pill tone={l.type === 'CHARGE' ? 'amber' : 'green'}>{ledgerTypeLabel[l.type] ?? l.type}</Pill></td>
+                        <td className="px-4 py-3"><Pill tone={l.type === 'CHARGE' ? 'amber' : 'green'}>{ledgerTypeKey[l.type as keyof typeof ledgerTypeKey] ? t(ledgerTypeKey[l.type as keyof typeof ledgerTypeKey]) : l.type}</Pill></td>
                         <td className="px-4 py-3 text-right font-semibold">{formatCurrency(l.amount)}</td>
                         <td className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(l.balanceAfter)}</td>
                       </tr>

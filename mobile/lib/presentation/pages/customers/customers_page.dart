@@ -316,12 +316,26 @@ class _CustomersPageState extends State<CustomersPage> {
               else
                 ...history.take(20).map((s) {
                   final dt = DateTime.tryParse(s['saleDate'] ?? '') ?? DateTime.now();
+                  final items = (s['items'] as List?) ?? const [];
+                  final names = items
+                      .map((i) {
+                        final product = (i is Map) ? i['product'] : null;
+                        return (product is Map) ? product['name'] : null;
+                      })
+                      .whereType<String>()
+                      .where((n) => n.isNotEmpty)
+                      .join(', ');
+                  final qty = items.fold<num>(0, (sum, i) {
+                    final q = (i is Map) ? i['quantity'] : null;
+                    return sum + (q is num ? q : (num.tryParse('${q ?? 0}') ?? 0));
+                  });
                   return ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.receipt, color: AppTheme.teal, size: 20),
-                    title: Text(s['receiptNumber'] ?? 'Sale', style: const TextStyle(fontSize: 13)),
-                    subtitle: Text('${dt.day}/${dt.month}/${dt.year}  ·  ${s['paymentMethod'] ?? ''}',
+                    title: Text(names.isEmpty ? (s['receiptNumber'] ?? 'Sale') : names,
+                      style: const TextStyle(fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${dt.day}/${dt.month}/${dt.year}  ·  ${l10n.posQuantity}: $qty',
                       style: const TextStyle(fontSize: 11)),
                     trailing: Text(_fmt(s['grandTotal']), style: const TextStyle(fontWeight: FontWeight.bold)),
                   );

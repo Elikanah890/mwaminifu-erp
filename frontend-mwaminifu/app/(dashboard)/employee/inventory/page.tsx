@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
@@ -26,6 +26,8 @@ export default function EmployeeInventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const requestSeq = useRef(0);
+  const loadedShopRef = useRef<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -44,13 +46,26 @@ export default function EmployeeInventoryPage() {
 
   useEffect(() => {
     if (!activeShopId || !allowed) return;
+    const seq = ++requestSeq.current;
+    // Only show the skeleton on the first load for a shop. Searching or
+    // refreshing after a product is added keeps the current list on screen.
+    if (loadedShopRef.current !== activeShopId) setLoading(true);
     const timer = setTimeout(() => {
-      setLoading(true);
       const q = search ? `&search=${encodeURIComponent(search)}` : '';
-      apiClient.get<Product[]>(`/shops/${activeShopId}/products?limit=200${q}`)
-        .then((res) => setProducts(res.data ?? []))
-        .catch((err) => setError(errorMessage(err)))
-        .finally(() => setLoading(false));
+      apiClient.get<Product[]>(`/shops/${activeShopId}/products?limit=200&compact=1${q}`)
+        .then((res) => {
+          if (seq !== requestSeq.current) return;
+          setProducts(res.data ?? []);
+          setError('');
+        })
+        .catch((err) => {
+          if (seq === requestSeq.current) setError(errorMessage(err));
+        })
+        .finally(() => {
+          if (seq !== requestSeq.current) return;
+          loadedShopRef.current = activeShopId;
+          setLoading(false);
+        });
     }, 250);
     return () => clearTimeout(timer);
   }, [activeShopId, search, allowed, refreshKey]);
@@ -75,7 +90,7 @@ export default function EmployeeInventoryPage() {
     if (!activeShopId) return;
     setSubmitting(true);
     try {
-      await apiClient.post(`/shops/${activeShopId}/products`, {
+      const res = await apiClient.post<Product>(`/shops/${activeShopId}/products`, {
         name: form.name.trim(),
         categoryId: form.categoryId || undefined,
         barcode: form.barcode.trim() || undefined,
@@ -85,6 +100,16 @@ export default function EmployeeInventoryPage() {
         reorderLevel: form.reorderLevel === '' ? undefined : Number(form.reorderLevel),
         baseUnitName: form.baseUnitName.trim() || 'piece',
       });
+      const created = res.data;
+      // Show the new product immediately instead of waiting for the full list
+      // to reload; a background refresh then reconciles it with the server.
+      if (created && !search) {
+        const category = categories.find((c) => c.id === form.categoryId);
+        setProducts((prev) => [
+          { ...created, category: created.category ?? (category ? { id: category.id, name: category.name } : null) },
+          ...prev.filter((p) => p.id !== created.id),
+        ]);
+      }
       toast(t('addProduct'), 'success');
       setAddOpen(false);
       setForm({

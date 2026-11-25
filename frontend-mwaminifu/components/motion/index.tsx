@@ -44,7 +44,9 @@ export function Stagger({
       className={className}
       initial="hidden"
       whileInView="show"
-      viewport={{ once, amount: 0.15 }}
+      // "some" (any intersection) instead of a fraction: tall lists would never
+      // meet a 15-20% threshold on a phone and stay invisible at opacity 0.
+      viewport={{ once, amount: 'some' }}
       variants={{
         hidden: {},
         show: { transition: { staggerChildren: stagger, delayChildren: delay } },
@@ -86,7 +88,9 @@ export function Reveal({
       className={className}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once, amount: 0.2 }}
+      // Reveal-safe threshold: a tall table (inventory, sales, customers) must
+      // become visible as soon as any part enters the viewport.
+      viewport={{ once, amount: 'some' }}
       transition={{ duration: 0.55, ease: EASE_OUT, delay }}
     >
       {children}
@@ -99,7 +103,7 @@ export function MotionCard({ children, className, hover = true, ...props }: HTML
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.15 }}
+      viewport={{ once: true, amount: 'some' }}
       transition={{ duration: 0.4, ease: EASE_OUT }}
       whileHover={hover ? { y: -4, transition: { duration: 0.18, ease: 'easeOut' } } : undefined}
       whileTap={hover ? { scale: 0.995 } : undefined}

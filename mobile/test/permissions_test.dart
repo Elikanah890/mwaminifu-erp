@@ -12,13 +12,18 @@ void main() {
     });
 
     test('employee is checked against their permission set', () {
+      // Legacy aliases expand to the canonical permissions.
       expect(
-        Permission.granted(role: 'EMPLOYEE', permissions: {'pos:write'}, permission: 'pos:write'),
+        Permission.granted(role: 'EMPLOYEE', permissions: {'pos:write'}, permission: Permission.salesCreate),
         isTrue,
       );
       expect(
-        Permission.granted(role: 'EMPLOYEE', permissions: {'pos:write'}, permission: 'inventory:write'),
+        Permission.granted(role: 'EMPLOYEE', permissions: {'pos:write'}, permission: Permission.inventoryAdjust),
         isFalse,
+      );
+      expect(
+        Permission.granted(role: 'EMPLOYEE', permissions: {Permission.inventoryView}, permission: Permission.inventoryView),
+        isTrue,
       );
     });
 
@@ -32,18 +37,26 @@ void main() {
 
   group('Permission.fullOperational', () {
     test('contains the standard operational + grantable report permissions', () {
-      expect(Permission.fullOperational, hasLength(10));
+      expect(Permission.fullOperational, hasLength(31));
       expect(Permission.fullOperational, containsAll([
-        Permission.posWrite,
-        Permission.posRefund,
-        Permission.posVoid,
-        Permission.inventoryRead,
-        Permission.inventoryWrite,
-        Permission.expensesWrite,
-        Permission.creditWrite,
+        Permission.salesCreate,
+        Permission.salesView,
+        Permission.salesCancel,
+        Permission.salesRefund,
+        Permission.productsCreate,
+        Permission.productsUpdate,
+        Permission.inventoryView,
+        Permission.inventoryAdjust,
+        Permission.customersView,
+        Permission.creditCreate,
+        Permission.expensesCreate,
+        Permission.purchasesCreate,
+        Permission.shiftOpen,
+        Permission.shiftClose,
         Permission.reportsSales,
         Permission.reportsInventory,
         Permission.reportsCredit,
+        Permission.reportsValuation,
       ]));
       expect(Permission.fullOperational, isNot(contains(Permission.reportsGeneral)));
       expect(Permission.fullOperational, isNot(contains(Permission.reportsFinanceOverview)));

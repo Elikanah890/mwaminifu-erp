@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { BACKEND_API_URL, REFRESH_TOKEN_COOKIE, PublicUser, generateCsrfToken } from '@/lib/server/auth';
+import { BACKEND_API_URL, REFRESH_TOKEN_COOKIE, PublicUser } from '@/lib/server/auth';
 import { setAccessTokenCookie, setRefreshTokenCookie, setCsrfCookie } from '@/lib/server/session';
+import { deriveCsrfToken } from '@/lib/server/csrf';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,8 @@ export async function POST(request: Request) {
     // token from a previous user on the same browser.
     (await cookies()).delete(REFRESH_TOKEN_COOKIE);
   }
-  await setCsrfCookie(generateCsrfToken());
+  // Deterministic per session so duplicate/stale cookies cannot disagree.
+  await setCsrfCookie(deriveCsrfToken(data.accessToken));
 
   return NextResponse.json({
     success: true,

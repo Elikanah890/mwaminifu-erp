@@ -178,10 +178,32 @@ function isOnline(): boolean {
 // cookie). Role is never read from a client-readable cookie.
 let currentUser: PublicUser | null = null;
 
-function getCsrfToken(): string | null {
+// Cached session-bound CSRF token. Populated from the cookie, from
+// `/api/auth/csrf` after a rejection, and cleared when the session changes.
+let csrfTokenMemo: string | null = null;
+
+function readCsrfCookie(): string | null {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.split('; ').find((c) => c.startsWith('csrfToken='));
   return match ? match.slice('csrfToken='.length) : null;
+}
+
+function getCsrfToken(): string | null {
+  return csrfTokenMemo ?? readCsrfCookie();
+}
+
+/** Fetch a token bound to the current session and refresh the cookie. */
+async function refreshCsrfToken(): Promise<string | null> {
+  try {
+    const response = await fetch('/api/auth/csrf', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const payload = (await response.json().catch(() => null)) as { data?: { token?: string } } | null;
+    const token = payload?.data?.token ?? null;
+    if (token) csrfTokenMemo = token;
+    return token;
+  } catch {
+    return null;
+  }
 }
 
 function toApiError(status: number, data: unknown): ApiErrorException {
@@ -266,7 +288,10 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
       const rule = offlineCacheRuleFor(endpoint);
       if (rule) {
         const toCache = rule.sanitize ? rule.sanitize(data as ApiPayload) : data;
-        await cacheSet(endpoint, toCache, rule.ttlMs);
+        // Persist for offline use without blocking the UI. Large catalogue
+        // payloads can take seconds to write to IndexedDB on mobile, which
+        // previously delayed every product/list render.
+        void cacheSet(endpoint, toCache, rule.ttlMs);
       }
       return data as ApiResponse<T>;
     } catch (e) {
@@ -295,18 +320,35 @@ async function request<T>(endpoint: string, options: { method?: string; body?: u
     return optimistic<T>(offlineBody, clientId);
   }
 
-  const csrfToken = getCsrfToken();
-  try {
-    const response = await fetch(`${PROXY_BASE}${endpoint}`, {
+  let csrfToken = getCsrfToken();
+  if (!csrfToken) csrfToken = await refreshCsrfToken();
+
+  const sendWrite = (token: string | null) =>
+    fetch(`${PROXY_BASE}${endpoint}`, {
       method,
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        ...(token ? { 'x-csrf-token': token } : {}),
         ...shopHeaders(endpoint),
       },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
-    const data = await response.json().catch(() => null);
+
+  try {
+    let response = await sendWrite(csrfToken);
+    let data = await response.json().catch(() => null);
+
+    // Self-heal CSRF: a missing/stale/duplicated token must never block a sale.
+    // Re-issue a session-bound token and retry once (CSRF is checked before the
+    // backend is reached, so the first attempt cannot have side effects).
+    if (response.status === 403 && (data as ApiError | null)?.error?.code === 'CSRF_FAILED') {
+      const fresh = await refreshCsrfToken();
+      if (fresh) {
+        response = await sendWrite(fresh);
+        data = await response.json().catch(() => null);
+      }
+    }
+
     if (!response.ok) {
       await authExpiredIfNeeded(response.status);
       subscriptionBlockedIfNeeded(response.status, data);
@@ -345,6 +387,7 @@ class ApiClient {
       const user = (data as ApiResponse<{ user: PublicUser }>)?.data?.user;
       if (user) {
         setApiActiveShopId(null);
+        csrfTokenMemo = null; // login issued a token for the new session
         await cacheCredential(normalized, password, user);
         this.setUser(user);
       }
@@ -408,6 +451,7 @@ class ApiClient {
       if (isOnline()) await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
       currentUser = null;
+      csrfTokenMemo = null;
       setApiActiveShopId(null);
       if (typeof document !== 'undefined') {
         document.cookie = 'user=; Max-Age=0; path=/;';
@@ -421,6 +465,7 @@ class ApiClient {
   async refresh(): Promise<boolean> {
     if (!isOnline()) return false;
     const response = await fetch('/api/auth/refresh', { method: 'POST' });
+    if (response.ok) csrfTokenMemo = null; // rotated with the new session
     return response.ok;
   }
 
@@ -448,6 +493,9 @@ class ApiClient {
       }
       const payload = (await response.json()) as { data?: { user?: PublicUser } };
       currentUser = payload?.data?.user ?? null;
+      // `/api/auth/me` re-issues the session CSRF cookie, so drop any memo and
+      // pick up the fresh value on the next write.
+      csrfTokenMemo = null;
       return currentUser;
     } catch {
       return currentUser;

@@ -112,10 +112,13 @@ export class InventoryService {
     search?: string;
     categoryId?: string;
     lowStock?: boolean;
+    /** Skip unit configs and shop prices for lightweight list screens. */
+    compact?: boolean | string;
   }) {
     const page = Math.max(1, Number(filters.page) || 1);
     const limit = Math.min(200, Math.max(1, Number(filters.limit) || 50));
     const skip = (page - 1) * limit;
+    const compact = filters.compact === true || filters.compact === '1' || filters.compact === 'true';
 
     const where: Prisma.ProductWhereInput = { shopId, isActive: true };
     if (filters.search) {
@@ -136,7 +139,9 @@ export class InventoryService {
     const [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: { category: { select: { name: true } }, unitConfigs: true, shopPrices: { where: { shopId } } },
+        include: compact
+          ? { category: { select: { name: true } } }
+          : { category: { select: { name: true } }, unitConfigs: true, shopPrices: { where: { shopId } } },
         orderBy: { updatedAt: 'desc' },
         skip,
         take: limit,
@@ -213,17 +218,6 @@ export class InventoryService {
     barcode?: string;
     priceOverride?: boolean;
   }, opts: { isOwner?: boolean } = {}) {
-    if (data.clientId) {
-      const existing = await prisma.product.findFirst({
-        where: { shopId, clientId: data.clientId },
-        include: { unitConfigs: true },
-      });
-      if (existing) {
-        await syncShopPrices(shopId, existing.id);
-        return existing;
-      }
-    }
-
     // Spec 8.4.1 — reject a selling/min price at or below cost unless the Owner
     // has explicitly confirmed an override.
     const costPrice = data.costPrice || 0;
@@ -246,66 +240,102 @@ export class InventoryService {
       }
     }
 
-    // Barcodes are unique per shop — reject a clash with a clear message.
-    if (data.barcode) {
-      const duplicate = await prisma.product.findFirst({
-        where: { shopId, barcode: data.barcode },
-        select: { id: true },
-      });
-      if (duplicate) {
-        throw { status: 409, code: 'DUPLICATE_BARCODE', message: `Barcode "${data.barcode}" is already used by another product in this shop` };
-      }
-    }
-
     const baseStock = data.baseUnitStock ?? data.stockQuantity ?? 0;
     const baseUnitName = data.baseUnitName || data.unit || 'piece';
 
-    const created = await prisma.product.create({
-      data: {
-        shopId,
-        clientId: data.clientId ?? null,
-        needsPriceReview: Boolean((priceError && overrideApproved) || configOverrideUsed),
-        name: data.name,
-        sku: data.sku,
-        categoryId: data.categoryId,
-        supplier: data.supplier,
-        supplierId: data.supplierId,
-        brand: data.brand,
-        description: data.description,
-        taxRate: data.taxRate || 0,
-        status: data.status || 'ACTIVE',
-        costPrice,
-        sellingPrice: data.sellingPrice || 0,
-        minPrice: data.minPrice,
-        maxPrice: data.maxPrice,
-        reorderLevel: data.reorderLevel || 10,
-        stockQuantity: baseStock,
-        unit: data.unit || baseUnitName,
-        unitConversion: data.unitConversion,
-        baseUnitName,
-        baseUnitStock: baseStock,
-        images: data.images || [],
-        barcode: data.barcode,
-        ...(configs.length
-          ? {
-              unitConfigs: {
-                create: configs.map((c) => ({
-                  unitName: c.unitName,
-                  baseUnits: c.baseUnits,
-                  sellingPrice: c.sellingPrice,
-                  minPrice: c.minPrice,
-                  maxPrice: c.maxPrice,
-                  pricingMode: c.pricingMode || 'FIXED',
-                  isDefault: c.isDefault ?? false,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: { unitConfigs: true },
-    });
-    await syncShopPrices(shopId, created.id);
-    return created;
+    try {
+      // Create the product and its shop-scoped prices in one transaction. This
+      // replaces the previous create + re-read + separate upsert round trips,
+      // which made "add product" feel slow on mobile connections.
+      return await prisma.$transaction(async (tx) => {
+        const created = await tx.product.create({
+          data: {
+            shopId,
+            clientId: data.clientId ?? null,
+            needsPriceReview: Boolean((priceError && overrideApproved) || configOverrideUsed),
+            name: data.name,
+            sku: data.sku,
+            categoryId: data.categoryId,
+            supplier: data.supplier,
+            supplierId: data.supplierId,
+            brand: data.brand,
+            description: data.description,
+            taxRate: data.taxRate || 0,
+            status: data.status || 'ACTIVE',
+            costPrice,
+            sellingPrice: data.sellingPrice || 0,
+            minPrice: data.minPrice,
+            maxPrice: data.maxPrice,
+            reorderLevel: data.reorderLevel || 10,
+            stockQuantity: baseStock,
+            unit: data.unit || baseUnitName,
+            unitConversion: data.unitConversion,
+            baseUnitName,
+            baseUnitStock: baseStock,
+            images: data.images || [],
+            barcode: data.barcode,
+            ...(configs.length
+              ? {
+                  unitConfigs: {
+                    create: configs.map((c) => ({
+                      unitName: c.unitName,
+                      baseUnits: c.baseUnits,
+                      sellingPrice: c.sellingPrice,
+                      minPrice: c.minPrice,
+                      maxPrice: c.maxPrice,
+                      pricingMode: c.pricingMode || 'FIXED',
+                      isDefault: c.isDefault ?? false,
+                    })),
+                  },
+                }
+              : {}),
+          },
+          include: { unitConfigs: true },
+        });
+
+        const priceRows = [
+          { unitKey: BASE_PRICE_KEY, sellingPrice: created.sellingPrice, minPrice: created.minPrice, maxPrice: created.maxPrice },
+          ...(created.unitConfigs ?? []).map((c) => ({
+            unitKey: c.id,
+            sellingPrice: c.sellingPrice,
+            minPrice: c.minPrice,
+            maxPrice: c.maxPrice,
+          })),
+        ];
+        await tx.shopProductPrice.createMany({
+          data: priceRows.map((row) => ({ shopId, productId: created.id, ...row })),
+        });
+
+        return created;
+      });
+    } catch (err) {
+      // Unique per shop: clientId (offline replay), barcode, or SKU. Map the
+      // constraint violation to the same behaviour/errors as before so callers
+      // keep their friendly messages without an extra pre-flight query.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') throw err;
+      const target = String((err.meta as { target?: unknown } | undefined)?.target ?? '');
+
+      // Check a replayed clientId before the other unique fields: a retried
+      // offline create can violate more than one constraint at once and
+      // PostgreSQL does not guarantee which one it reports.
+      if (data.clientId) {
+        const existing = await prisma.product.findFirst({
+          where: { shopId, clientId: data.clientId },
+          include: { unitConfigs: true },
+        });
+        if (existing) {
+          await syncShopPrices(shopId, existing.id);
+          return existing;
+        }
+      }
+      if (target.includes('barcode')) {
+        throw { status: 409, code: 'DUPLICATE_BARCODE', message: `Barcode "${data.barcode}" is already used by another product in this shop` };
+      }
+      if (target.includes('sku')) {
+        throw { status: 409, code: 'DUPLICATE_SKU', message: `SKU "${data.sku}" is already used by another product in this shop` };
+      }
+      throw err;
+    }
   }
 
   async updateProduct(productId: string, data: {
