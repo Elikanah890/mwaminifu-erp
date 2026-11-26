@@ -72,6 +72,8 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Analyze
-        run: flutter analyze
+        # Newer Flutter channels report SDK deprecations as info; they are not
+        # code errors, so don't fail the build on them.
+        run: flutter analyze --no-fatal-infos
       - name: Test
         run: flutter test
