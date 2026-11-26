@@ -126,6 +126,12 @@ const AUDIT_KEYS: Record<string, string> = {
   CUSTOMER_CREATED: 'auditCustomerCreated',
   STOCK_ADJUSTED: 'auditStockAdjusted',
   PRODUCT_UPDATED: 'auditProductUpdated',
+  EXPENSE_DELETED: 'auditExpenseDeleted',
+  LOAN_DELETED: 'auditLoanDeleted',
+  SALE_SUSPENDED: 'auditSaleSuspended',
+  SMS_SENT: 'auditSmsSent',
+  EXPENSE_CATEGORY_CREATED: 'auditExpenseCategoryCreated',
+  REFUND_REQUESTED: 'auditRefundRequested',
 };
 
 export function auditActionLabel(t: Translator, value?: string | null): string {
