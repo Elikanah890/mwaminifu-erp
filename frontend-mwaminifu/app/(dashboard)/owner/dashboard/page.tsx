@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { ShopDashboard, Product, SaleListItem, InventoryReport, CreditReport } from '@/lib/types';
+import { localizeChartLabel } from '@/lib/i18n/chart';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage, formatStockWithUnits } from '@/lib/format';
 import { statusLabel } from '@/lib/i18n/labels';
 import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
@@ -224,9 +225,9 @@ export default function OwnerDashboardPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} interval="preserveStartEnd" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} interval="preserveStartEnd" tickFormatter={localizeChartLabel} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} tickFormatter={(v) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
-                <Tooltip formatter={(value) => [formatCurrency(Number(value)), t('netBusinessValue')]} />
+                <Tooltip formatter={(value) => [formatCurrency(Number(value)), t('netBusinessValue')]} labelFormatter={localizeChartLabel} />
                 <Area type="monotone" dataKey="total" stroke="var(--secondary)" strokeWidth={2} fill="url(#valGrad)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -282,9 +283,9 @@ export default function OwnerDashboardPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} interval="preserveStartEnd" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} interval="preserveStartEnd" tickFormatter={localizeChartLabel} />
                 <YAxis tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
-                <Tooltip formatter={(value) => [formatCurrency(Number(value)), t('sales')]} />
+                <Tooltip formatter={(value) => [formatCurrency(Number(value)), t('sales')]} labelFormatter={localizeChartLabel} />
                 <Area type="monotone" dataKey="total" stroke="var(--secondary)" strokeWidth={2} fill="url(#ownerGrad)" />
               </AreaChart>
             </ResponsiveContainer>

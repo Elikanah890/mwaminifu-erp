@@ -13,6 +13,10 @@ export function setFormatLocale(locale: 'en' | 'sw'): void {
   formatLocale = locale;
 }
 
+export function getFormatLocale(): 'en' | 'sw' {
+  return formatLocale;
+}
+
 function dateLocale(): string {
   return formatLocale === 'sw' ? 'sw-TZ' : 'en-US';
 }

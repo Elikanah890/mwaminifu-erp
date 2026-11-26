@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { ProfitAnalytics, ReportPeriod } from '@/lib/types';
+import { localizeChartLabel } from '@/lib/i18n/chart';
 import { formatCurrency, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -99,9 +100,9 @@ export default function ProfitReportPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data?.trend ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} />
+                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} tickFormatter={localizeChartLabel} />
                     <YAxis tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
-                    <Tooltip formatter={(v) => [formatCurrency(Number(v)), t('revenue')]} />
+                    <Tooltip formatter={(v) => [formatCurrency(Number(v)), t('revenue')]} labelFormatter={localizeChartLabel} />
                     <Line type="monotone" dataKey="revenue" stroke="var(--secondary)" strokeWidth={2} dot={{ r: 2 }} />
                   </LineChart>
                 </ResponsiveContainer>
