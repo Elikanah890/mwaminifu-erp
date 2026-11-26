@@ -2,7 +2,118 @@ import prisma from '../config/database';
 import { Prisma } from '@prisma/client';
 import { auditService } from './audit.service';
 
+/**
+ * Built-in categories. `nameEn` is the stable value stored on expenses so
+ * existing reports and exports stay readable; the UI shows nameSw in Swahili.
+ */
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  { nameEn: 'Rent', nameSw: 'Kodi' },
+  { nameEn: 'Wages', nameSw: 'Mishahara' },
+  { nameEn: 'Transport', nameSw: 'Usafirishaji' },
+  { nameEn: 'Utilities', nameSw: 'Huduma (maji, umeme)' },
+  { nameEn: 'Restocking', nameSw: 'Ununuzi wa bidhaa' },
+  { nameEn: 'Food', nameSw: 'Chakula' },
+  { nameEn: 'Other', nameSw: 'Nyingine' },
+] as const;
+
+export type ExpenseCategoryView = {
+  id: string;
+  value: string;
+  nameEn: string;
+  nameSw: string;
+  isDefault: boolean;
+};
+
+function normalizeCategoryName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
 export class ExpenseService {
+  /**
+   * Default (built-in) categories plus this shop's custom categories. Custom
+   * entries are tenant-scoped by `shopId`, never global.
+   */
+  async listExpenseCategories(shopId: string): Promise<ExpenseCategoryView[]> {
+    const custom = await prisma.expenseCategory.findMany({
+      where: { shopId, isArchived: false },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const defaults: ExpenseCategoryView[] = DEFAULT_EXPENSE_CATEGORIES.map((category) => ({
+      id: `default:${category.nameEn}`,
+      value: category.nameEn,
+      nameEn: category.nameEn,
+      nameSw: category.nameSw,
+      isDefault: true,
+    }));
+
+    return [
+      ...defaults,
+      ...custom.map((category) => ({
+        id: category.id,
+        value: category.nameEn,
+        nameEn: category.nameEn,
+        nameSw: category.nameSw,
+        isDefault: false,
+      })),
+    ];
+  }
+
+  async createExpenseCategory(
+    shopId: string,
+    userId: string,
+    data: { nameEn: string; nameSw: string }
+  ): Promise<ExpenseCategoryView> {
+    const nameEn = normalizeCategoryName(data.nameEn);
+    const nameSw = normalizeCategoryName(data.nameSw);
+
+    if (!nameEn || !nameSw) {
+      throw { status: 422, code: 'VALIDATION_ERROR', message: 'English and Swahili names are required' };
+    }
+
+    const lowered = nameEn.toLowerCase();
+    if (DEFAULT_EXPENSE_CATEGORIES.some((category) => category.nameEn.toLowerCase() === lowered)) {
+      throw { status: 409, code: 'DUPLICATE_EXPENSE_CATEGORY', message: `"${nameEn}" already exists as a built-in category` };
+    }
+
+    const existing = await prisma.expenseCategory.findFirst({
+      where: { shopId, isArchived: false, nameEn: { equals: nameEn, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) {
+      throw { status: 409, code: 'DUPLICATE_EXPENSE_CATEGORY', message: `"${nameEn}" already exists for this shop` };
+    }
+
+    let created;
+    try {
+      created = await prisma.expenseCategory.create({
+        data: { shopId, nameEn, nameSw },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw { status: 409, code: 'DUPLICATE_EXPENSE_CATEGORY', message: `"${nameEn}" already exists for this shop` };
+      }
+      throw err;
+    }
+
+    await auditService.logDetailed({
+      shopId,
+      userId,
+      action: 'EXPENSE_CATEGORY_CREATED',
+      entity: 'ExpenseCategory',
+      entityId: created.id,
+      newValue: { nameEn, nameSw },
+    });
+
+    return {
+      id: created.id,
+      value: created.nameEn,
+      nameEn: created.nameEn,
+      nameSw: created.nameSw,
+      isDefault: false,
+    };
+  }
+
   async listExpenses(shopId: string, filters: {
     page?: number;
     limit?: number;

@@ -525,6 +525,14 @@ export interface SaleListItem {
   items?: Array<{ id?: string; productId?: string; quantity: number; unitPrice: number; total: number; product?: { name: string } }>;
 }
 
+export interface ExpenseCategory {
+  id: string;
+  value: string;
+  nameEn: string;
+  nameSw: string;
+  isDefault: boolean;
+}
+
 export interface Expense {
   id: string;
   shopId: string;

@@ -22,7 +22,7 @@ import { settingsService } from '../services/settings.service';
 import prisma from '../config/database';
 import {
   createShopSchema, updateShopSchema, createSaleSchema, createProductSchema,
-  adjustStockSchema, createExpenseSchema, createCustomerSchema, creditPaymentSchema,
+  adjustStockSchema, createExpenseSchema, createExpenseCategorySchema, createCustomerSchema, creditPaymentSchema,
   createLoanSchema, loanRepaymentSchema, addEmployeeSchema, updatePermissionsSchema,
   onboardBusinessSchema, createBusinessOwnerSchema, createAgentSchema, sendSmsSchema, syncPushSchema, updateShopSettingsSchema,
   updateAgentSchema, statusUpdateSchema, createNotificationSchema, createSupportTicketSchema,
@@ -218,6 +218,8 @@ router.put('/expenses/:id', authMiddleware, requireEntityAccess('expense'), requ
 router.delete('/expenses/:id', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:create'), expenseController.delete.bind(expenseController));
 router.put('/expenses/:id/approve', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:approve'), expenseController.approve.bind(expenseController));
 router.put('/expenses/:id/reject', authMiddleware, requireEntityAccess('expense'), requirePermission('expenses:approve'), expenseController.reject.bind(expenseController));
+router.get('/shops/:shopId/expense-categories', authMiddleware, requireShopAccess(), requireAnyPermission(['expenses:create', 'expenses:read', 'expenses:approve']), expenseController.listCategories.bind(expenseController));
+router.post('/shops/:shopId/expense-categories', authMiddleware, requireShopAccess(), requirePermission('expenses:create'), validate(createExpenseCategorySchema), expenseController.createCategory.bind(expenseController));
 
 // Loan routes
 router.get('/shops/:shopId/loans', authMiddleware, requireShopAccess(), requirePermission('loans:read'), loanController.list.bind(loanController));

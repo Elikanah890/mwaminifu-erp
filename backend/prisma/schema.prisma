@@ -172,6 +172,7 @@ model Shop {
   sales         Sale[]
   customers     Customer[]   @relation("ShopCustomers")
   expenses      Expense[]    @relation("ShopExpenses")
+  expenseCategories ExpenseCategory[]
   loans         Loan[]       @relation("ShopLoans")
   notifications Notification[] @relation("ShopNotifications")
   activityLogs  ActivityLog[]  @relation("ShopActivityLogs")
@@ -477,6 +478,20 @@ model Expense {
   @@index([category])
   @@index([shopId, createdAt])
   @@unique([shopId, clientId])
+}
+
+model ExpenseCategory {
+  id         String   @id @default(cuid())
+  shopId     String
+  shop       Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  nameEn     String
+  nameSw     String
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([shopId, nameEn])
+  @@index([shopId])
 }
 
 model Loan {

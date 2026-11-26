@@ -109,6 +109,12 @@ export const createExpenseSchema = z.object({
   description: z.string().optional(),
   receiptUrl: z.string().optional(),
   expenseDate: z.string().optional(),
+  paymentMethod: z.string().max(30).optional(),
+});
+
+export const createExpenseCategorySchema = z.object({
+  nameEn: z.string().trim().min(1).max(80),
+  nameSw: z.string().trim().min(1).max(80),
 });
 
 export const createCustomerSchema = z.object({

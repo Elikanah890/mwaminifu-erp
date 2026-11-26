@@ -18,62 +18,66 @@ import { Plus, KeyRound, ShieldCheck, Activity } from 'lucide-react';
 // General Reports and Finance Overview are OWNER-ONLY and intentionally absent
 // here (they can never be granted to an employee).
 // Canonical grantable permissions (matches backend config/permissions.ts).
-// General Reports and Finance Overview are owner-only and intentionally absent.
-const PERMISSION_GROUPS: Array<{ title: string; items: Array<{ id: string; label: string }> }> = [
+// Labels and descriptions are localization keys: the selected app language
+// controls the text while the permission identifiers stay unchanged.
+const PERMISSION_GROUPS: Array<{
+  title: string;
+  items: Array<{ id: string; labelKey: string; descKey: string }>;
+}> = [
   { title: 'sales', items: [
-    { id: 'sales:create', label: 'Record sale' },
-    { id: 'sales:view', label: 'View sales' },
-    { id: 'sales:refund', label: 'Process refund' },
-    { id: 'sales:cancel', label: 'Void/cancel sale' },
+    { id: 'sales:create', labelKey: 'permSalesCreate', descKey: 'permSalesCreateDesc' },
+    { id: 'sales:view', labelKey: 'permSalesView', descKey: 'permSalesViewDesc' },
+    { id: 'sales:refund', labelKey: 'permSalesRefund', descKey: 'permSalesRefundDesc' },
+    { id: 'sales:cancel', labelKey: 'permSalesCancel', descKey: 'permSalesCancelDesc' },
   ] },
   { title: 'productsInventory', items: [
-    { id: 'products:view', label: 'View products' },
-    { id: 'products:create', label: 'Add product' },
-    { id: 'products:update', label: 'Edit product' },
-    { id: 'products:delete', label: 'Delete product' },
-    { id: 'inventory:view', label: 'View stock' },
-    { id: 'inventory:adjust', label: 'Adjust stock' },
+    { id: 'products:view', labelKey: 'permProductsView', descKey: 'permProductsViewDesc' },
+    { id: 'products:create', labelKey: 'permProductsCreate', descKey: 'permProductsCreateDesc' },
+    { id: 'products:update', labelKey: 'permProductsUpdate', descKey: 'permProductsUpdateDesc' },
+    { id: 'products:delete', labelKey: 'permProductsDelete', descKey: 'permProductsDeleteDesc' },
+    { id: 'inventory:view', labelKey: 'permInventoryView', descKey: 'permInventoryViewDesc' },
+    { id: 'inventory:adjust', labelKey: 'permInventoryAdjust', descKey: 'permInventoryAdjustDesc' },
   ] },
   { title: 'customersCredit', items: [
-    { id: 'customers:view', label: 'View customers' },
-    { id: 'customers:create', label: 'Add customer' },
-    { id: 'customers:update', label: 'Edit customer' },
-    { id: 'credit:create', label: 'Issue credit (deni)' },
-    { id: 'credit:collect', label: 'Collect repayments' },
-    { id: 'credit:read', label: 'View credit balances' },
-    { id: 'credit:writeoff', label: 'Write off bad debt' },
+    { id: 'customers:view', labelKey: 'permCustomersView', descKey: 'permCustomersViewDesc' },
+    { id: 'customers:create', labelKey: 'permCustomersCreate', descKey: 'permCustomersCreateDesc' },
+    { id: 'customers:update', labelKey: 'permCustomersUpdate', descKey: 'permCustomersUpdateDesc' },
+    { id: 'credit:create', labelKey: 'permCreditCreate', descKey: 'permCreditCreateDesc' },
+    { id: 'credit:collect', labelKey: 'permCreditCollect', descKey: 'permCreditCollectDesc' },
+    { id: 'credit:read', labelKey: 'permCreditRead', descKey: 'permCreditReadDesc' },
+    { id: 'credit:writeoff', labelKey: 'permCreditWriteoff', descKey: 'permCreditWriteoffDesc' },
   ] },
   { title: 'expensesPurchases', items: [
-    { id: 'expenses:create', label: 'Record expenses' },
-    { id: 'expenses:read', label: 'View expenses' },
-    { id: 'expenses:approve', label: 'Approve expenses' },
-    { id: 'purchases:view', label: 'View purchases' },
-    { id: 'purchases:create', label: 'Create purchases' },
-    { id: 'purchases:approve', label: 'Approve purchases' },
+    { id: 'expenses:create', labelKey: 'permExpensesCreate', descKey: 'permExpensesCreateDesc' },
+    { id: 'expenses:read', labelKey: 'permExpensesRead', descKey: 'permExpensesReadDesc' },
+    { id: 'expenses:approve', labelKey: 'permExpensesApprove', descKey: 'permExpensesApproveDesc' },
+    { id: 'purchases:view', labelKey: 'permPurchasesView', descKey: 'permPurchasesViewDesc' },
+    { id: 'purchases:create', labelKey: 'permPurchasesCreate', descKey: 'permPurchasesCreateDesc' },
+    { id: 'purchases:approve', labelKey: 'permPurchasesApprove', descKey: 'permPurchasesApproveDesc' },
   ] },
   { title: 'shifts', items: [
-    { id: 'shift:open', label: 'Open shift' },
-    { id: 'shift:close', label: 'Close shift' },
-    { id: 'shift:view', label: 'View shifts' },
+    { id: 'shift:open', labelKey: 'permShiftOpen', descKey: 'permShiftOpenDesc' },
+    { id: 'shift:close', labelKey: 'permShiftClose', descKey: 'permShiftCloseDesc' },
+    { id: 'shift:view', labelKey: 'permShiftView', descKey: 'permShiftViewDesc' },
   ] },
   { title: 'reports', items: [
-    { id: 'reports:sales', label: 'Sales report' },
-    { id: 'reports:inventory', label: 'Inventory report' },
-    { id: 'reports:credit', label: 'Credit (deni) report' },
-    { id: 'reports:activity_log', label: 'Staff activity log' },
-    { id: 'reports:loans', label: 'Business loans report' },
-    { id: 'reports:valuation', label: 'Stock value / valuation' },
-    { id: 'reports:communications', label: 'Send SMS / WhatsApp (Premium)' },
+    { id: 'reports:sales', labelKey: 'permReportsSales', descKey: 'permReportsSalesDesc' },
+    { id: 'reports:inventory', labelKey: 'permReportsInventory', descKey: 'permReportsInventoryDesc' },
+    { id: 'reports:credit', labelKey: 'permReportsCredit', descKey: 'permReportsCreditDesc' },
+    { id: 'reports:activity_log', labelKey: 'permReportsActivityLog', descKey: 'permReportsActivityLogDesc' },
+    { id: 'reports:loans', labelKey: 'permReportsLoans', descKey: 'permReportsLoansDesc' },
+    { id: 'reports:valuation', labelKey: 'permReportsValuation', descKey: 'permReportsValuationDesc' },
+    { id: 'reports:communications', labelKey: 'permReportsCommunications', descKey: 'permReportsCommunicationsDesc' },
   ] },
   { title: 'financialControls', items: [
-    { id: 'loans:read', label: 'View loans' },
-    { id: 'loans:write', label: 'Manage loans' },
-    { id: 'cash:read', label: 'View cash' },
-    { id: 'cash:write', label: 'Manage cash' },
-    { id: 'finance:read', label: 'View payables / capital' },
+    { id: 'loans:read', labelKey: 'permLoansRead', descKey: 'permLoansReadDesc' },
+    { id: 'loans:write', labelKey: 'permLoansWrite', descKey: 'permLoansWriteDesc' },
+    { id: 'cash:read', labelKey: 'permCashRead', descKey: 'permCashReadDesc' },
+    { id: 'cash:write', labelKey: 'permCashWrite', descKey: 'permCashWriteDesc' },
+    { id: 'finance:read', labelKey: 'permFinanceRead', descKey: 'permFinanceReadDesc' },
   ] },
   { title: 'staff', items: [
-    { id: 'employees:view', label: 'View employees' },
+    { id: 'employees:view', labelKey: 'permEmployeesView', descKey: 'permEmployeesViewDesc' },
   ] },
 ];
 
@@ -307,9 +311,12 @@ export default function OwnerEmployeesPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{t(group.title)}</p>
                   <div className="space-y-2">
                     {group.items.map((p) => (
-                      <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <label key={p.id} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <input type="checkbox" checked={selectedPerms.includes(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
-                        {p.label}
+                        <span className="min-w-0">
+                          <span className="block">{t(p.labelKey)}</span>
+                          <span className="block text-xs text-subtle-foreground">{t(p.descKey)}</span>
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -330,9 +337,12 @@ export default function OwnerEmployeesPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{t(group.title)}</p>
               <div className="space-y-2">
               {group.items.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                <label key={p.id} className="flex items-start gap-2 text-sm text-muted-foreground">
                   <input type="checkbox" checked={selectedPerms.includes(p.id)} onChange={() => togglePerm(p.id)} className="rounded" />
-                  {p.label}
+                  <span className="min-w-0">
+                    <span className="block">{t(p.labelKey)}</span>
+                    <span className="block text-xs text-subtle-foreground">{t(p.descKey)}</span>
+                  </span>
                 </label>
               ))}
               </div>

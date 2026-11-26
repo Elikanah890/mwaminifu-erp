@@ -492,6 +492,20 @@ export class ExpenseController {
       res.json({ success: true, data: expense, message: 'Expense rejected', timestamp: new Date().toISOString() });
     } catch (error) { next(error); }
   }
+
+  async listCategories(req: Request, res: Response, next: NextFunction) {
+    try {
+      const categories = await expenseService.listExpenseCategories(req.params.shopId);
+      res.json({ success: true, data: categories, timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
+
+  async createCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const category = await expenseService.createExpenseCategory(req.params.shopId, req.user!.userId, req.body);
+      res.status(201).json({ success: true, data: category, message: 'Expense category created', timestamp: new Date().toISOString() });
+    } catch (error) { next(error); }
+  }
 }
 
 export class LoanController {

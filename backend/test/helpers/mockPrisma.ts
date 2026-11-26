@@ -40,7 +40,7 @@ const MODEL_NAMES = [
   'subscriptionPlan', 'systemSetting', 'supportTicket', 'supportMessage',
   'shift', 'ownerCapitalTransaction', 'recurringExpense', 'deviceSession',
   'productUnitConfig', 'productImage', 'shopProductPrice', 'supplier', 'purchase', 'stockMovement',
-  'cashTransaction', 'creditLedgerEntry', 'auditLog', 'smsLog', 'commission', 'payout',
+  'cashTransaction', 'creditLedgerEntry', 'auditLog', 'smsLog', 'commission', 'payout', 'expenseCategory',
 ];
 
 function createModel(): MockModel {

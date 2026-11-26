@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
-import { Expense, RecurringExpense, OwnerCapitalTransaction, CapitalSummary } from '@/lib/types';
+import { Expense, ExpenseCategory, RecurringExpense, OwnerCapitalTransaction, CapitalSummary } from '@/lib/types';
 import { formatCurrency, formatDate, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -15,19 +15,19 @@ import StatsCard from '@/components/StatsCard';
 import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { usePermissions } from '@/lib/context/PermissionsContext';
+import ExpenseCategorySelect, { categoryLabel } from '@/components/expenses/ExpenseCategorySelect';
 import { Plus, Receipt, Trash2, RefreshCw, TrendingUp, TrendingDown, Check, X } from 'lucide-react';
-
-const CATEGORIES = ['Rent', 'Wages', 'Transport', 'Utilities', 'Restocking', 'Food', 'Other'];
 
 type Tab = 'expenses' | 'recurring' | 'capital';
 
 export default function OwnerExpensesPage() {
   const { activeShopId } = useShop();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { toast } = useToast();
   const { can } = usePermissions();
 
   const [tab, setTab] = useState<Tab>('expenses');
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +63,28 @@ export default function OwnerExpensesPage() {
   };
 
   useEffect(() => { load();   }, [activeShopId, from, to]);
+
+  useEffect(() => {
+    if (!activeShopId) return;
+    apiClient.get<ExpenseCategory[]>(`/shops/${activeShopId}/expense-categories`)
+      .then((res) => setCategories(res.data ?? []))
+      .catch(() => {});
+  }, [activeShopId]);
+
+  // Keep both forms on a valid category when switching shops/categories.
+  useEffect(() => {
+    if (!categories.length) return;
+    setForm((prev) => categories.some((c) => c.value === prev.category) ? prev : { ...prev, category: categories[0].value });
+    setRecurringForm((prev) => categories.some((c) => c.value === prev.category) ? prev : { ...prev, category: categories[0].value });
+  }, [categories]);
+
+  const labelForCategory = useMemo(() => {
+    const byValue = new Map(categories.map((c) => [c.value, c]));
+    return (value: string) => {
+      const category = byValue.get(value);
+      return category ? categoryLabel(category, locale) : value;
+    };
+  }, [categories, locale]);
 
   const loadRecurring = () => {
     if (!activeShopId) return;
@@ -127,7 +149,9 @@ export default function OwnerExpensesPage() {
 
   const setApproval = async (e: Expense, status: 'APPROVED' | 'REJECTED') => {
     try {
-      await apiClient.put(`/expenses/${e.id}/${status.toLowerCase()}`);
+      // Routes are singular: /approve and /reject (not /approved|/rejected).
+      const action = status === 'APPROVED' ? 'approve' : 'reject';
+      await apiClient.put(`/expenses/${e.id}/${action}`);
       toast(status === 'APPROVED' ? t('approve') : t('reject'), 'success');
       load();
     } catch (err) {
@@ -244,7 +268,7 @@ export default function OwnerExpensesPage() {
             <StaggerItem><StatsCard title={t('expenses')} value={formatCurrency(total)} tone="red" icon={<Receipt size={20} />} /></StaggerItem>
             <StaggerItem><StatsCard title={t('transactionsCount')} value={String(expenses.length)} tone="navy" /></StaggerItem>
             <StaggerItem><StatsCard title={t('pending')} value={String(pendingCount)} tone="gold" /></StaggerItem>
-            {byCategory.slice(0, 1).map((c) => <StaggerItem key={c.category}><StatsCard title={c.category} value={formatCurrency(c.total)} tone="teal" /></StaggerItem>)}
+            {byCategory.slice(0, 1).map((c) => <StaggerItem key={c.category}><StatsCard title={labelForCategory(c.category)} value={formatCurrency(c.total)} tone="teal" /></StaggerItem>)}
           </Stagger>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -271,7 +295,7 @@ export default function OwnerExpensesPage() {
                       {filteredExpenses.map((e) => (
                         <tr key={e.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
                           <td className="px-4 py-2 text-muted-foreground">{formatDate(e.expenseDate)}</td>
-                          <td className="px-4 py-2"><span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">{e.category}</span></td>
+                          <td className="px-4 py-2"><span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">{labelForCategory(e.category)}</span></td>
                           <td className="px-4 py-2 text-muted-foreground">{e.description ?? '-'}</td>
                           <td className="px-4 py-2 text-muted-foreground capitalize">{e.paymentMethod ?? 'cash'}</td>
                           <td className="px-4 py-2">
@@ -304,7 +328,7 @@ export default function OwnerExpensesPage() {
                 <ul className="divide-y divide-border">
                   {byCategory.map((c) => (
                     <li key={c.category} className="py-2 flex justify-between text-sm">
-                      <span className="text-muted-foreground">{c.category}</span>
+                      <span className="text-muted-foreground">{labelForCategory(c.category)}</span>
                       <span className="font-semibold text-foreground">{formatCurrency(c.total)}</span>
                     </li>
                   ))}
@@ -391,7 +415,13 @@ export default function OwnerExpensesPage() {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
-            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input-field">{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <ExpenseCategorySelect
+              shopId={activeShopId ?? ''}
+              value={form.category}
+              onChange={(value) => setForm({ ...form, category: value })}
+              categories={categories}
+              onCreated={(category) => setCategories((prev) => [...prev, category])}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">{t('amount')}</label>
@@ -422,7 +452,13 @@ export default function OwnerExpensesPage() {
         <form onSubmit={submitRecurring} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
-            <select value={recurringForm.category} onChange={(e) => setRecurringForm({ ...recurringForm, category: e.target.value })} className="input-field">{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <ExpenseCategorySelect
+              shopId={activeShopId ?? ''}
+              value={recurringForm.category}
+              onChange={(value) => setRecurringForm({ ...recurringForm, category: value })}
+              categories={categories}
+              onCreated={(category) => setCategories((prev) => [...prev, category])}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">{t('amount')}</label>
