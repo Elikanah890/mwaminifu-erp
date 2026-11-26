@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { Locale, translate } from '../i18n/translations';
+import { setFormatLocale, setErrorTranslator } from '../format';
 
 const STORAGE_KEY = 'mwaminifu_lang';
 const DEFAULT_LOCALE: Locale = 'sw';
@@ -19,14 +20,22 @@ export function I18nProvider({ children, initialLocale = DEFAULT_LOCALE }: { chi
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
+    setFormatLocale(locale);
+  }, [locale]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    if ((saved === 'en' || saved === 'sw') && saved !== locale) setLocaleState(saved);
+    if ((saved === 'en' || saved === 'sw') && saved !== locale) {
+      setLocaleState(saved);
+      setFormatLocale(saved);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
+    setFormatLocale(l);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, l);
       document.cookie = `${STORAGE_KEY}=${l}; path=/; max-age=31536000; samesite=lax`;
@@ -34,6 +43,11 @@ export function I18nProvider({ children, initialLocale = DEFAULT_LOCALE }: { chi
   }, []);
 
   const t = useCallback((key: string) => translate(locale, key), [locale]);
+
+  useEffect(() => {
+    setErrorTranslator(t);
+    return () => setErrorTranslator(null);
+  }, [t]);
 
   const formatDate = useCallback(
     (iso?: string | null) => {

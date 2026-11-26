@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { Purchase, Supplier, Product } from '@/lib/types';
 import { formatCurrency, formatDate, errorMessage } from '@/lib/format';
+import { statusLabel } from '@/lib/i18n/labels';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -199,8 +200,8 @@ export default function PurchasesPage() {
                   <td className="px-4 py-3 text-muted-foreground">{formatDate(p.date)}</td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(p.total)}</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(p.amountPaid)}</td>
-                  <td className="px-4 py-3"><Pill tone={statusTone[p.status] ?? 'gray'}>{p.status}</Pill></td>
-                  <td className="px-4 py-3"><Pill tone={statusTone[p.paymentStatus] ?? 'gray'}>{p.paymentStatus}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={statusTone[p.status] ?? 'gray'}>{statusLabel(t, p.status)}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={statusTone[p.paymentStatus] ?? 'gray'}>{statusLabel(t, p.paymentStatus)}</Pill></td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {(p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED') && (
                       <button onClick={() => { setReceiveTarget(p); setReceiveAll(true); }} className="text-xs font-medium text-secondary hover:underline inline-flex items-center gap-1 mr-3"><PackageCheck size={13} /> {t('receiveStock')}</button>

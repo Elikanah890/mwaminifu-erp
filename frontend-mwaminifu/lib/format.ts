@@ -1,3 +1,22 @@
+import { errorTranslationKey } from './i18n/labels';
+
+let formatLocale: 'en' | 'sw' = 'sw';
+let errorTranslator: ((key: string) => string) | null = null;
+
+/** Let shared error formatting follow the active UI language. */
+export function setErrorTranslator(fn: ((key: string) => string) | null): void {
+  errorTranslator = fn;
+}
+
+/** Keep shared formatters in sync with the active UI language. */
+export function setFormatLocale(locale: 'en' | 'sw'): void {
+  formatLocale = locale;
+}
+
+function dateLocale(): string {
+  return formatLocale === 'sw' ? 'sw-TZ' : 'en-US';
+}
+
 export function formatCurrency(amount: number, currency = 'TZS'): string {
   const value = Number(amount) || 0;
   return `${currency} ${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
@@ -10,7 +29,7 @@ export function formatNumber(value: number): string {
 export function formatDate(iso?: string | null): string {
   if (!iso) return '-';
   try {
-    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(iso).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'short', day: 'numeric' });
   } catch {
     return '-';
   }
@@ -19,7 +38,7 @@ export function formatDate(iso?: string | null): string {
 export function formatDateTime(iso?: string | null): string {
   if (!iso) return '-';
   try {
-    return new Date(iso).toLocaleString('en-US', {
+    return new Date(iso).toLocaleString(dateLocale(), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -42,8 +61,10 @@ export function formatStockWithUnits(product: {
   unitConfigs?: Array<{ unitName: string; baseUnits: number }>;
 }): string {
   const stock = Number(product.stockQuantity) || 0;
-  const base = product.baseUnitName || product.unit || 'unit';
-  const plural = (name: string, n: number) => (n === 1 ? name : `${name}s`);
+  const base = product.baseUnitName || product.unit || (formatLocale === 'sw' ? 'kipimo' : 'unit');
+  // Swahili unit names are not pluralized with an English "s".
+  const plural = (name: string, n: number) =>
+    formatLocale === 'sw' || n === 1 ? name : `${name}s`;
   const big = (product.unitConfigs ?? [])
     .filter((c) => c.baseUnits > 1)
     .sort((a, b) => b.baseUnits - a.baseUnits)[0];
@@ -57,8 +78,12 @@ export function formatStockWithUnits(product: {
 }
 
 export function errorMessage(err: unknown): string {
+  const e = err as { code?: string; error?: { code?: string; message?: string }; message?: string };
+  const code = e?.code ?? e?.error?.code;
+  if (errorTranslator) {
+    return errorTranslator(errorTranslationKey(code) ?? 'errorGeneric');
+  }
   if (!err) return 'Something went wrong';
-  const e = err as { error?: { message?: string }; message?: string };
   if (e?.error?.message) return e.error.message;
   if (typeof e?.message === 'string' && e.message) return e.message;
   return 'Something went wrong';

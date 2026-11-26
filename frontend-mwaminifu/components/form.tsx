@@ -2,6 +2,7 @@
 
 import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
+import { useI18n } from '@/lib/context/I18nContext';
 
 type FieldBase = {
   label?: string;
@@ -96,9 +97,10 @@ export function SubmitButton({
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; className?: string }) {
+  const { t } = useI18n();
   return (
     <button className={`btn-navy ${className ?? ''}`} disabled={loading || props.disabled} {...props}>
-      {loading ? 'Saving...' : children}
+      {loading ? t('saving') : children}
     </button>
   );
 }

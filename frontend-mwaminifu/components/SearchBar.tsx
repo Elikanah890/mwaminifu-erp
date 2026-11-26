@@ -2,11 +2,12 @@
 
 import { ReactNode } from 'react';
 import { Search } from 'lucide-react';
+import { useI18n } from '@/lib/context/I18nContext';
 
 export default function SearchBar({
   value,
   onChange,
-  placeholder = 'Search...',
+  placeholder,
   className,
 }: {
   value: string;
@@ -14,12 +15,13 @@ export default function SearchBar({
   placeholder?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className={`relative ${className ?? 'max-w-xs'}`}>
       <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-subtle-foreground" />
       <input
         className="input-field pl-9"
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('searchPlaceholder')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />

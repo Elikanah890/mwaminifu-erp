@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { SalesAnalytics, ProfitAnalytics, ReportPeriod } from '@/lib/types';
 import { formatCurrency, formatNumber, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
+import { paymentMethodLabel } from '@/lib/i18n/labels';
 import ChartWrapper from '@/components/ChartWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
@@ -102,7 +103,7 @@ export default function ReportsOverviewPage() {
                     return (
                       <div key={p.method}>
                         <div className="flex justify-between text-sm mb-1">
-                          <span className="font-medium text-foreground capitalize">{p.method}</span>
+                          <span className="font-medium text-foreground capitalize">{paymentMethodLabel(t, p.method)}</span>
                           <span className="text-muted-foreground">{pct.toFixed(0)}% · {formatCurrency(p.amount)}</span>
                         </div>
                         <div className="h-3 bg-muted-2 rounded-full overflow-hidden">

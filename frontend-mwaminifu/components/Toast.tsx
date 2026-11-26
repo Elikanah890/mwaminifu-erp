@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useState, ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, Info, TriangleAlert, XCircle, X } from 'lucide-react';
+import { useI18n } from '@/lib/context/I18nContext';
 
 type ToastTone = 'success' | 'error' | 'info' | 'warning';
 
@@ -46,6 +47,7 @@ const TONE_BAR: Record<ToastTone, string> = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const { t: translate } = useI18n();
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const toast = useCallback((message: string, tone: ToastTone = 'success') => {
@@ -74,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 shrink-0">{TONE_ICON[t.tone]}</span>
                 <span className="flex-1 text-sm">{t.message}</span>
-                <button onClick={() => dismiss(t.id)} className="text-subtle-foreground hover:text-foreground" aria-label="Dismiss">
+                <button onClick={() => dismiss(t.id)} className="text-subtle-foreground hover:text-foreground" aria-label={translate('dismiss')}>
                   <X size={16} />
                 </button>
               </div>

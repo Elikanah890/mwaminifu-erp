@@ -107,8 +107,8 @@ export default function BarcodeScanner({
             await scanner.start(cfg, { fps: 10, qrbox: { width: 260, height: 180 } }, onSuccess, () => {});
             started = true;
             break;
-          } catch (e) {
-            lastErr = e instanceof Error ? e.message : 'Camera unavailable';
+          } catch {
+            lastErr = t('cameraUnavailable');
             await stop(scannerRef.current);
             scannerRef.current = null;
           }
@@ -121,10 +121,10 @@ export default function BarcodeScanner({
             setError(lastErr);
           }
         }
-      } catch (e) {
+      } catch {
         if (!cancelled) {
           setCameraState('failed');
-          setError(e instanceof Error ? e.message : 'Camera unavailable');
+          setError(t('cameraUnavailable'));
         }
       }
     })();
@@ -136,7 +136,7 @@ export default function BarcodeScanner({
         scannerRef.current = null;
       }
     };
-  }, [open]);
+  }, [open, t]);
 
   const submitManual = (e: React.FormEvent) => {
     e.preventDefault();

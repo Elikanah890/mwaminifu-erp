@@ -282,7 +282,7 @@ export default function Sidebar({
           <button
             onClick={toggleCollapsed}
             className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/50 hover:bg-white/10 hover:text-white lg:flex"
-            aria-label="Collapse sidebar"
+            aria-label={t('collapseSidebar')}
           >
             {collapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
           </button>

@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { EmployeeRow, SaleListItem } from '@/lib/types';
 import { formatDate, formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
+import { roleLabel, statusLabel } from '@/lib/i18n/labels';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -131,7 +132,7 @@ export default function OwnerEmployeesPage() {
     setSubmitting(true);
     const targetShopId = form.shopId || activeShopId;
     if (!targetShopId) {
-      toast('Select a shop first', 'error');
+      toast(t('selectShopFirst'), 'error');
       setSubmitting(false);
       return;
     }
@@ -145,8 +146,8 @@ export default function OwnerEmployeesPage() {
       });
       toast(
         res.data?.tempPassword
-          ? 'Employee added. Welcome email sent.'
-          : 'Employee assigned to this shop. Their existing password was not changed.',
+          ? t('employeeAddedWelcome')
+          : t('employeeAssignedExisting'),
         'success'
       );
       if (res.data?.tempPassword) {
@@ -173,7 +174,7 @@ export default function OwnerEmployeesPage() {
     setSubmitting(true);
     try {
       await apiClient.put(`/employees/${permTarget.id}/permissions`, { permissions: selectedPerms });
-      toast('Permissions updated', 'success');
+      toast(t('permissionsUpdated'), 'success');
       setPermTarget(null);
       load();
     } catch (err) {
@@ -187,7 +188,7 @@ export default function OwnerEmployeesPage() {
     setSubmitting(true);
     try {
       const res = await apiClient.post<{ tempPassword?: string }>(`/employees/${emp.id}/reset-password`);
-      toast('Password reset. Email sent.', 'success');
+      toast(t('passwordResetEmailSent'), 'success');
       if (res.data?.tempPassword && emp.user) {
         setCredentials({ name: emp.user.name, email: emp.user.email ?? '', tempPassword: res.data.tempPassword });
       }
@@ -248,8 +249,8 @@ export default function OwnerEmployeesPage() {
                 <tr key={e.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
                   <td className="px-4 py-3 font-medium text-foreground">{e.user?.name ?? '-'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{e.user?.email ?? e.user?.phone ?? '-'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{e.role}</td>
-                  <td className="px-4 py-3"><StatusBadge active={e.isActive} /></td>
+                  <td className="px-4 py-3 text-muted-foreground">{roleLabel(t, e.role)}</td>
+                  <td className="px-4 py-3"><StatusBadge active={e.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} /></td>
                   <td className="px-4 py-3 text-muted-foreground">{formatDate(e.createdAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-3">
@@ -260,7 +261,7 @@ export default function OwnerEmployeesPage() {
                         <ShieldCheck size={14} /> {t('permissions')}
                       </button>
                       <button onClick={() => resetPassword(e)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline">
-                        <KeyRound size={14} /> Reset password
+                        <KeyRound size={14} /> {t('resetPassword')}
                       </button>
                       <button onClick={() => openActivity(e)} className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:underline">
                         <Activity size={14} /> {t('activity')}
@@ -274,33 +275,33 @@ export default function OwnerEmployeesPage() {
         </div></Reveal>
       )}
 
-      <Modal open={addOpen} title="Add Employee" onClose={() => setAddOpen(false)}>
+      <Modal open={addOpen} title={t('addEmployee')} onClose={() => setAddOpen(false)}>
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Assign to shop <span className="text-danger">*</span></label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('assignToShop')} <span className="text-danger">*</span></label>
             <select required value={form.shopId} onChange={(e) => setForm({ ...form, shopId: e.target.value })} className="input-field">
-              <option value="">Select shop</option>
+              <option value="">{t('selectShop')}</option>
               {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Name</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('name')}</label>
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Email <span className="text-danger">*</span></label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('email')} <span className="text-danger">*</span></label>
             <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field" placeholder="employee@example.com" />
-            <p className="mt-1 text-xs text-subtle-foreground">Login credentials will be emailed here.</p>
+            <p className="mt-1 text-xs text-subtle-foreground">{t('loginCredentialsEmailed')}</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Phone (optional)</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('phoneOptional')}</label>
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input-field" placeholder="e.g. 0754111111" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Role</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('role')}</label>
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="input-field">
-              <option value="Cashier">Cashier</option>
-              <option value="Manager">Manager</option>
+              <option value="Cashier">{t('cashier')}</option>
+              <option value="Manager">{t('manager')}</option>
             </select>
           </div>
           <div>
@@ -325,7 +326,7 @@ export default function OwnerEmployeesPage() {
             </div>
           </div>
           <button type="submit" disabled={submitting} className="btn-navy w-full">
-            {submitting ? 'Adding...' : 'Add Employee'}
+            {submitting ? t('saving') : t('addEmployee')}
           </button>
         </form>
       </Modal>
@@ -354,39 +355,39 @@ export default function OwnerEmployeesPage() {
         </button>
       </Modal>
 
-      <Modal open={!!credentials} title="Employee Login Credentials" onClose={() => setCredentials(null)}>
+      <Modal open={!!credentials} title={t('employeeLoginCredentials')} onClose={() => setCredentials(null)}>
         {credentials && (
           <div className="space-y-4 text-sm">
-            <p className="text-muted-foreground">Share these with <strong>{credentials.name}</strong> if the email does not arrive.</p>
+            <p className="text-muted-foreground">{t('shareTheseWith')} <strong>{credentials.name}</strong> {t('ifEmailDoesNotArrive')}</p>
             <div className="rounded-lg bg-muted p-4 space-y-2">
-              <div className="flex justify-between gap-4"><span className="text-muted-foreground">Email</span><span className="font-medium text-foreground">{credentials.email}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-muted-foreground">Temporary password</span><code className="font-mono font-semibold text-foreground">{credentials.tempPassword}</code></div>
+              <div className="flex justify-between gap-4"><span className="text-muted-foreground">{t('email')}</span><span className="font-medium text-foreground">{credentials.email}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-muted-foreground">{t('tempPassword')}</span><code className="font-mono font-semibold text-foreground">{credentials.tempPassword}</code></div>
             </div>
             <button
               onClick={() => navigator.clipboard?.writeText(`Email: ${credentials.email}\nPassword: ${credentials.tempPassword}`)}
               className="btn-navy w-full"
             >
-              Copy credentials
+              {t('copyCredentials')}
             </button>
-            <button onClick={() => setCredentials(null)} className="btn-outline w-full">Done</button>
+            <button onClick={() => setCredentials(null)} className="btn-outline w-full">{t('done')}</button>
           </div>
         )}
       </Modal>
 
-      <Modal open={!!activityTarget} title={`Activity — ${activityTarget?.user?.name ?? ''}`} onClose={() => setActivityTarget(null)} wide>
+      <Modal open={!!activityTarget} title={`${t('activity')} — ${activityTarget?.user?.name ?? ''}`} onClose={() => setActivityTarget(null)} wide>
         {activityLoading ? (
           <SkeletonCard rows={4} />
         ) : activitySales.length === 0 ? (
-          <EmptyState message="No sales recorded by this employee" />
+          <EmptyState message={t('noSalesByEmployee')} />
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
               <tr>
-                <th className="px-4 py-2">Receipt</th>
-                <th className="px-4 py-2">Date</th>
-                <th className="px-4 py-2">Customer</th>
-                <th className="px-4 py-2 text-right">Total</th>
-                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">{t('receipt')}</th>
+                <th className="px-4 py-2">{t('date')}</th>
+                <th className="px-4 py-2">{t('customer')}</th>
+                <th className="px-4 py-2 text-right">{t('total')}</th>
+                <th className="px-4 py-2">{t('status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -394,9 +395,9 @@ export default function OwnerEmployeesPage() {
                 <tr key={s.id} className="hover:bg-muted transition-colors">
                   <td className="px-4 py-2 font-medium text-foreground">{s.receiptNumber ?? '-'}</td>
                   <td className="px-4 py-2 text-muted-foreground">{formatDateTime(s.saleDate)}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{s.customer?.name ?? 'Walk-in'}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{s.customer?.name ?? t('walkInCustomer')}</td>
                   <td className="px-4 py-2 text-right font-semibold text-secondary">{formatCurrency(s.grandTotal)}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{s.status}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{statusLabel(t, s.status)}</td>
                 </tr>
               ))}
             </tbody>

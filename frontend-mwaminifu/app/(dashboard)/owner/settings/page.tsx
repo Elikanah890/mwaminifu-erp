@@ -89,9 +89,9 @@ export default function OwnerSettingsPage() {
     setClearing(true);
     try {
       await clearOfflineData();
-      toast('Offline data cleared', 'success');
+      toast(t('offlineDataCleared'), 'success');
     } catch {
-      toast('Could not clear offline data', 'error');
+      toast(t('offlineDataClearFailed'), 'error');
     } finally {
       setClearing(false);
     }
@@ -171,7 +171,7 @@ export default function OwnerSettingsPage() {
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Currency</span>
+              <span className="text-sm text-muted-foreground">{t('currency')}</span>
               <span className="text-sm font-semibold text-foreground">{shop?.currency ?? 'TZS'}</span>
             </div>
             <button onClick={saveProfile} disabled={saving} className="btn-navy inline-flex items-center gap-2"><Save size={16} /> {t('save')}</button>
@@ -203,14 +203,13 @@ export default function OwnerSettingsPage() {
           </div>
         </ChartWrapper>
 
-        <ChartWrapper title="Offline data" subtitle="On-device storage">
+        <ChartWrapper title={t('offlineData')} subtitle={t('onDeviceStorage')}>
           <div className="space-y-3">
             <p className="text-xs text-subtle-foreground">
-              Cached products, categories and any pending offline changes are stored on this device.
-              Clear them if you are using a shared device.
+              {t('offlineDataDesc')}
             </p>
             <button onClick={handleClearOffline} disabled={clearing} className="btn-outline inline-flex items-center gap-2">
-              <Trash2 size={16} /> {clearing ? 'Clearing…' : 'Clear offline data'}
+              <Trash2 size={16} /> {clearing ? t('clearing') : t('clearOfflineData')}
             </button>
           </div>
         </ChartWrapper>

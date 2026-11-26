@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { PayablesReport } from '@/lib/types';
 import { formatCurrency, formatDate, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
+import { statusLabel } from '@/lib/i18n/labels';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
 import StatsCard from '@/components/StatsCard';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
@@ -66,7 +67,7 @@ export default function PayablesPage() {
                   <td className="px-4 py-3 text-right">{formatCurrency(p.total)}</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">{formatCurrency(p.amountPaid)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-danger">{formatCurrency(p.balance)}</td>
-                  <td className="px-4 py-3"><Pill tone={p.status === 'PAID' ? 'green' : p.status === 'PARTIAL' ? 'amber' : 'red'}>{p.status}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={p.status === 'PAID' ? 'green' : p.status === 'PARTIAL' ? 'amber' : 'red'}>{statusLabel(t, p.status)}</Pill></td>
                 </tr>
               ))}
             </tbody>

@@ -28,6 +28,7 @@ import {
   Video,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
+import { errorMessage } from '@/lib/format';
 import { useI18n } from '@/lib/context/I18nContext';
 import { useAppConfig } from '@/lib/context/AppConfigContext';
 import ThemeToggle from '@/components/theme-toggle';
@@ -125,6 +126,10 @@ function LoginForm() {
     e.preventDefault();
     setError('');
     setInfo('');
+    if (!email.trim() || !password) {
+      setError(sw ? 'Barua pepe na nenosiri vinahitajika.' : 'Email and password are required.');
+      return;
+    }
     setLoading(true);
     try {
       const response = await apiClient.login(email, password);
@@ -137,7 +142,12 @@ function LoginForm() {
       }
       completeLogin(data.user.role);
     } catch (err) {
-      setError(err instanceof Error ? err.message : sw ? 'Imeshindikana kuingia' : 'Login failed');
+      const code = (err as { code?: string })?.code;
+      if (code === 'UNAUTHORIZED' || code === 'INVALID_CREDENTIALS') {
+        setError(sw ? 'Barua pepe au nenosiri si sahihi.' : 'Invalid email or password.');
+      } else {
+        setError(errorMessage(err));
+      }
       setLoading(false);
     }
   };

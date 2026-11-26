@@ -1,6 +1,11 @@
+'use client';
+
+import { useI18n } from '@/lib/context/I18nContext';
+
 export default function RouteSkeleton() {
+  const { t } = useI18n();
   return (
-    <div className="brand-container min-h-[calc(100vh-4rem)] px-4 py-6 sm:px-6 lg:px-8 lg:py-8" aria-busy="true" aria-label="Loading page">
+    <div className="brand-container min-h-[calc(100vh-4rem)] px-4 py-6 sm:px-6 lg:px-8 lg:py-8" aria-busy="true" aria-label={t('loadingPage')}>
       <div className="mb-3 h-3 w-24 animate-pulse rounded bg-muted" />
       <div className="mb-2 h-8 w-48 animate-pulse rounded bg-muted" />
       <div className="mb-7 h-4 w-72 max-w-full animate-pulse rounded bg-muted" />

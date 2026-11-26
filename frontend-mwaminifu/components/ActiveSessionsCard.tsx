@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { formatDateTime } from '@/lib/format';
+import { useI18n } from '@/lib/context/I18nContext';
 
 interface SessionInfo {
   id: string;
@@ -16,6 +17,7 @@ interface SessionInfo {
  * Spec 4.3 — shows the AGAC Owner's active sessions (maximum 2 concurrent).
  */
 export default function ActiveSessionsCard() {
+  const { t } = useI18n();
   const [count, setCount] = useState<number | null>(null);
   const [max, setMax] = useState(2);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -39,22 +41,21 @@ export default function ActiveSessionsCard() {
   return (
     <div className="surface-card">
       <div className="px-6 py-4 border-b border-border">
-        <h2 className="text-base font-semibold text-primary">Active Sessions</h2>
+        <h2 className="text-base font-semibold text-primary">{t('activeSessions')}</h2>
         <p className="text-xs text-subtle-foreground">
-          The AGAC Owner account allows a maximum of {max} concurrent sessions. Sign out on another
-          device to free a slot.
+          {t('activeSessionsDesc').replace('{max}', String(max))}
         </p>
       </div>
       <div className="px-6 py-4">
         <p className="text-sm text-muted-foreground">
-          Currently active: <span className="font-semibold text-foreground">{count ?? '—'}</span> of {max}
+          {t('currentlyActive')}: <span className="font-semibold text-foreground">{count ?? '—'}</span> {t('of')} {max}
         </p>
         {sessions.length > 0 && (
           <ul className="mt-3 space-y-2">
             {sessions.map((s) => (
               <li key={s.id} className="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{s.deviceId || 'Unknown device'}</span>
-                {s.ipAddress ? ` · ${s.ipAddress}` : ''} · started {formatDateTime(s.createdAt)}
+                <span className="font-medium text-foreground">{s.deviceId || t('unknownDevice')}</span>
+                {s.ipAddress ? ` · ${s.ipAddress}` : ''} · {t('startedAt')} {formatDateTime(s.createdAt)}
               </li>
             ))}
           </ul>

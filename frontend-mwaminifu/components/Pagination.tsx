@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useI18n } from '@/lib/context/I18nContext';
 
 export default function Pagination({
   page,
@@ -14,6 +15,7 @@ export default function Pagination({
   limit: number;
   onPageChange: (page: number) => void;
 }) {
+  const { t } = useI18n();
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const start = total === 0 ? 0 : (page - 1) * limit + 1;
   const end = Math.min(page * limit, total);
@@ -21,7 +23,7 @@ export default function Pagination({
   return (
     <div className="mt-4 flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
       <span>
-        Showing {start}–{end} of {total}
+        {t('showing')} {start}–{end} {t('of')} {total}
       </span>
       <div className="flex items-center gap-2">
         <motion.button
@@ -30,10 +32,10 @@ export default function Pagination({
           disabled={page <= 1}
           className="flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 transition-brand hover:bg-muted disabled:opacity-40"
         >
-          <ChevronLeft size={14} /> Prev
+          <ChevronLeft size={14} /> {t('prev')}
         </motion.button>
         <span className="px-1">
-          Page {page} of {totalPages}
+          {t('page')} {page} {t('of')} {totalPages}
         </span>
         <motion.button
           whileTap={{ scale: 0.94 }}
@@ -41,7 +43,7 @@ export default function Pagination({
           disabled={page >= totalPages}
           className="flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 transition-brand hover:bg-muted disabled:opacity-40"
         >
-          Next <ChevronRight size={14} />
+          {t('next')} <ChevronRight size={14} />
         </motion.button>
       </div>
     </div>

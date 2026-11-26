@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import PageWrapper from '@/components/PageWrapper';
 import { useI18n } from '@/lib/context/I18nContext';
+import { roleLabel } from '@/lib/i18n/labels';
 import { apiClient, PublicUser } from '@/lib/api/client';
 import { Stagger, StaggerItem, motion } from '@/components/motion';
 import { Mail, ShieldCheck } from 'lucide-react';
@@ -31,7 +32,7 @@ export default function EmployeeProfilePage() {
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted-2 text-muted-foreground"><Mail size={18} /></span>
                 <div>
                   <p className="text-xs text-subtle-foreground">{t('role')}</p>
-                  <p className="font-semibold">{user?.role ?? '-'}</p>
+                  <p className="font-semibold">{user ? roleLabel(t, user.role) : '-'}</p>
                 </div>
               </div>
               <div>

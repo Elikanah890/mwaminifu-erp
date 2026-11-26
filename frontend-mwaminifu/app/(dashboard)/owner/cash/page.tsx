@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { CashTransaction, CashSummary } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
+import { cashTypeLabel } from '@/lib/i18n/labels';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
@@ -100,7 +101,7 @@ export default function CashPage() {
                   {transactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(tx.createdAt)}</td>
-                      <td className="px-4 py-3"><Pill tone={tx.amount >= 0 ? 'green' : 'red'}>{tx.type}</Pill></td>
+                      <td className="px-4 py-3"><Pill tone={tx.amount >= 0 ? 'green' : 'red'}>{cashTypeLabel(t, tx.type)}</Pill></td>
                       <td className="px-4 py-3 text-muted-foreground">{tx.note ?? '-'}</td>
                       <td className={`px-4 py-3 text-right font-semibold ${tx.amount >= 0 ? 'text-secondary' : 'text-danger'}`}>{tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount)}</td>
                     </tr>
@@ -117,7 +118,7 @@ export default function CashPage() {
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">{t('type')}</label>
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="input-field">
-              {TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
+              {TYPES.map((x) => <option key={x} value={x}>{cashTypeLabel(t, x)}</option>)}
             </select>
           </div>
           <div>

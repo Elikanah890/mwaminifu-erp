@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
 
 const WARN_AFTER_MS = 28 * 60 * 1000; // warn at 28 minutes
 const LOGOUT_AFTER_MS = 30 * 60 * 1000; // hard logout at 30 minutes
@@ -12,6 +13,7 @@ const LOGOUT_AFTER_MS = 30 * 60 * 1000; // hard logout at 30 minutes
  * session expiry (`auth:expired` events emitted by the API client on 401).
  */
 export default function IdleMonitor() {
+  const { t } = useI18n();
   const router = useRouter();
   const [warning, setWarning] = useState(false);
   const lastActivity = useRef<number>(0);
@@ -63,16 +65,16 @@ export default function IdleMonitor() {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
       <div className="bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-        <h2 className="text-lg font-bold text-primary mb-2">Session expiring</h2>
+        <h2 className="text-lg font-bold text-primary mb-2">{t('sessionExpiring')}</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          You have been inactive for a while. Your session will end soon for security reasons.
+          {t('idleWarningDesc')}
         </p>
         <div className="flex gap-3">
           <button onClick={() => reset()} className="flex-1 btn-navy">
-            Stay signed in
+            {t('staySignedIn')}
           </button>
           <button onClick={() => signOut()} className="flex-1 btn-outline">
-            Sign out
+            {t('signOut')}
           </button>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { Bell, LogOut, Menu, Store, Repeat, Globe, Search, ChevronDown, UserRoun
 import { apiClient, PublicUser } from '@/lib/api/client';
 import { useOptionalShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
+import { roleLabel } from '@/lib/i18n/labels';
 import { PortalRole, ROLE_LABEL_KEYS } from '@/components/Sidebar';
 import { DeviceUser } from '@/lib/types';
 import ThemeToggle from '@/components/theme-toggle';
@@ -113,7 +114,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <button onClick={onMenu} className="rounded-lg p-2 text-foreground hover:bg-muted lg:hidden" aria-label="Toggle menu">
+          <button onClick={onMenu} className="rounded-lg p-2 text-foreground hover:bg-muted lg:hidden" aria-label={t('toggleMenu')}>
             <Menu size={20} />
           </button>
           <h2 className="hidden truncate text-sm font-semibold text-foreground sm:block">{t(ROLE_LABEL_KEYS[role])}</h2>
@@ -166,7 +167,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
           <button
             onClick={() => setLocale(locale === 'sw' ? 'en' : 'sw')}
             className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-foreground hover:bg-muted transition-brand"
-            aria-label="Toggle language"
+            aria-label={t('toggleLanguage')}
           >
             <Globe size={16} />
             <span className="hidden sm:inline">{locale === 'sw' ? 'EN' : 'SW'}</span>
@@ -177,16 +178,16 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
             <>
               <span
                 className="hidden items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-2 text-xs font-semibold text-success sm:flex"
-                title={locale === 'sw' ? 'Mifumo yote inafanya kazi' : 'All systems operational'}
+                title={t('allSystemsOperational')}
               >
                 <ShieldCheck size={15} />
-                {locale === 'sw' ? 'Mfumo Salama' : 'System Healthy'}
+                {t('systemHealthy')}
               </span>
               <Link
                 href="/system/settings"
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Settings"
-                title={locale === 'sw' ? 'Mipangilio' : 'Settings'}
+                aria-label={t('settings')}
+                title={t('settings')}
               >
                 <Settings size={19} />
               </Link>
@@ -206,7 +207,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
                   value={shopCtx.activeShopId ?? ''}
                   onChange={(e) => shopCtx.setActiveShopId(e.target.value)}
                   className="max-w-[118px] truncate rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-secondary/40 sm:max-w-[180px]"
-                  aria-label="Select shop"
+                  aria-label={t('selectShop')}
                 >
                   {shopCtx.shops.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -224,7 +225,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
             <Link
               href={notificationsHref}
               className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-brand"
-              aria-label="Notifications"
+              aria-label={t('notifications')}
             >
               <Bell size={19} />
               <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
@@ -235,7 +236,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
           ) : (
             <button
               className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-brand"
-              aria-label="Notifications"
+              aria-label={t('notifications')}
             >
               <Bell size={19} />
             </button>
@@ -246,7 +247,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
               whileTap={{ scale: 0.97 }}
               onClick={() => setShowUserMenu((v) => !v)}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted transition-brand"
-              aria-label="User menu"
+              aria-label={t('userMenu')}
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <UserRound size={17} />
@@ -315,7 +316,7 @@ export default function Header({ role, onMenu }: { role: PortalRole; onMenu: () 
                       <li key={d.id}>
                         <button onClick={handleLogout} className="w-full px-4 py-2.5 text-left hover:bg-muted">
                           <p className="text-sm font-medium text-foreground">{d.name}</p>
-                          <p className="text-xs text-subtle-foreground">{d.role.replace(/_/g, ' ')}</p>
+                          <p className="text-xs text-subtle-foreground">{roleLabel(t, d.role)}</p>
                         </button>
                       </li>
                     ))}

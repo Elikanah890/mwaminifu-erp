@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { StockMovement } from '@/lib/types';
 import { formatDateTime, errorMessage } from '@/lib/format';
+import { movementTypeLabel } from '@/lib/i18n/labels';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -44,7 +45,7 @@ export default function StockMovementsPage() {
       actions={
         <select value={type} onChange={(e) => setType(e.target.value)} className="input-field max-w-[180px]">
           <option value="">{t('all')}</option>
-          {['PURCHASE', 'SALE', 'ADJUSTMENT', 'RETURN', 'DAMAGED', 'OPENING'].map((x) => <option key={x} value={x}>{x}</option>)}
+          {['PURCHASE', 'SALE', 'ADJUSTMENT', 'RETURN', 'DAMAGED', 'OPENING'].map((x) => <option key={x} value={x}>{movementTypeLabel(t, x)}</option>)}
         </select>
       }
     >
@@ -71,7 +72,7 @@ export default function StockMovementsPage() {
                 <tr key={m.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(m.createdAt)}</td>
                   <td className="px-4 py-3 font-medium text-foreground">{m.product?.name ?? '-'}</td>
-                  <td className="px-4 py-3"><Pill tone={typeTone[m.type] ?? 'gray'}>{m.type}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={typeTone[m.type] ?? 'gray'}>{movementTypeLabel(t, m.type)}</Pill></td>
                   <td className={`px-4 py-3 text-right font-semibold ${m.quantity < 0 ? 'text-danger' : 'text-secondary'}`}>{m.quantity > 0 ? '+' : ''}{m.quantity}</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">{m.balanceAfter}</td>
                   <td className="px-4 py-3 text-muted-foreground">{m.reference ?? '-'}</td>

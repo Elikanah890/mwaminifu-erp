@@ -8,6 +8,7 @@ import { SaleListItem, Shift } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
 import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
+import { statusLabel } from '@/lib/i18n/labels';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import ChartWrapper from '@/components/ChartWrapper';
 import { Pill } from '@/components/StatusBadge';
@@ -73,7 +74,7 @@ export default function EmployeeActivityPage() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-semibold text-secondary">{formatCurrency(s.grandTotal)}</p>
-                      <Pill tone="teal">{s.status}</Pill>
+                      <Pill tone="teal">{statusLabel(t, s.status)}</Pill>
                     </div>
                   </li>
                 ))}

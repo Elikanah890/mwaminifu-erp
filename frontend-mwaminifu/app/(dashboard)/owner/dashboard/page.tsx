@@ -7,6 +7,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { ShopDashboard, Product, SaleListItem, InventoryReport, CreditReport } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage, formatStockWithUnits } from '@/lib/format';
+import { statusLabel } from '@/lib/i18n/labels';
 import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
@@ -354,7 +355,7 @@ export default function OwnerDashboardPage() {
                       <td className="py-3 pr-3 text-muted-foreground">{s.customer?.name ?? '—'}</td>
                       <td className="py-3 pr-3 text-right font-medium text-foreground">{saleItemCount(s)}</td>
                       <td className="py-3 pr-3 text-right font-semibold text-secondary">{formatCurrency(s.grandTotal)}</td>
-                      <td className="py-3 pr-3"><Pill tone={STATUS_TONE[s.status] ?? 'gray'}>{s.status}</Pill></td>
+                      <td className="py-3 pr-3"><Pill tone={STATUS_TONE[s.status] ?? 'gray'}>{statusLabel(t, s.status)}</Pill></td>
                       <td className="py-3">
                         <div className="flex items-center justify-end gap-1">
                           <Link href="/owner/sales/history" className="p-1.5 rounded-md text-muted-foreground hover:bg-muted" title={t('view')}><Eye size={15} /></Link>

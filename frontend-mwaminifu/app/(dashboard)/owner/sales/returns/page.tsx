@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { Refund, SaleListItem } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
+import { statusLabel } from '@/lib/i18n/labels';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
 import Modal from '@/components/Modal';
@@ -167,7 +168,7 @@ export default function ReturnsPage() {
                   <td className="px-4 py-3 text-muted-foreground">{r.items.length}</td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(r.amount)}</td>
                   <td className="px-4 py-3 text-muted-foreground max-w-[180px] truncate">{r.reason ?? '-'}</td>
-                  <td className="px-4 py-3"><Pill tone={statusTone[r.status] ?? 'gray'}>{r.status}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={statusTone[r.status] ?? 'gray'}>{statusLabel(t, r.status)}</Pill></td>
                   <td className="px-4 py-3 text-muted-foreground">{r.user?.name ?? '-'}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {r.status === 'PENDING' && (

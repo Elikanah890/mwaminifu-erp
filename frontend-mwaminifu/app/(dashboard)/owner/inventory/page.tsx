@@ -257,7 +257,7 @@ export default function OwnerInventoryPage() {
         await save(false);
       } catch (err) {
         if (err instanceof ApiErrorException && err.code === 'PRICE_BELOW_COST') {
-          const proceed = window.confirm(`${err.message}\n\nSave anyway? This is an owner override.`);
+          const proceed = window.confirm(`${errorMessage(err)}\n\n${t('saveAnywayOwnerOverride')}`);
           if (!proceed) return;
           await save(true);
         } else {
@@ -469,7 +469,7 @@ export default function OwnerInventoryPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">{L.smallestUnit}</label>
-                <input list="unit-names" value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder="piece / kg" />
+                <input list="unit-names" value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder={t('unitPlaceholder')} />
                 <p className="mt-1 text-[11px] text-subtle-foreground">{L.smallestUnitHelp}</p>
               </div>
               <div>
@@ -549,7 +549,7 @@ export default function OwnerInventoryPage() {
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <div className="col-span-2 sm:col-span-1">
                           <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.unitName}</label>
-                          <input list="unit-names" value={c.unitName} onChange={(e) => updateConfig(i, { unitName: e.target.value })} className="input-field text-sm" placeholder="Carton" />
+                          <input list="unit-names" value={c.unitName} onChange={(e) => updateConfig(i, { unitName: e.target.value })} className="input-field text-sm" placeholder={t('carton')} />
                         </div>
                         <div className="col-span-2 sm:col-span-1">
                           <label className="block text-[11px] text-subtle-foreground mb-0.5">{L.contains} (× {form.baseUnitName || 'piece'})</label>
@@ -645,11 +645,11 @@ export default function OwnerInventoryPage() {
             <label className="block text-sm font-medium text-foreground mb-1">{t('reason')}</label>
             <select required value={adjustForm.reason} onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })} className="input-field">
               <option value="">—</option>
-              <option value="Damaged">Damaged</option>
-              <option value="Expired">Expired</option>
-              <option value="Stock count correction">Stock count correction</option>
-              <option value="Theft / loss">Theft / loss</option>
-              <option value="Other">Other</option>
+              <option value="Damaged">{t('damaged')}</option>
+              <option value="Expired">{t('expired')}</option>
+              <option value="Stock count correction">{t('stockCountCorrection')}</option>
+              <option value="Theft / loss">{t('theftLoss')}</option>
+              <option value="Other">{t('other')}</option>
             </select>
           </div>
           <button type="submit" disabled={submitting} className="btn-navy w-full">{submitting ? t('loading') : t('save')}</button>

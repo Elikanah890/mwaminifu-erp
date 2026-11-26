@@ -6,6 +6,7 @@ import { useShop } from '@/lib/context/ShopContext';
 import { useI18n } from '@/lib/context/I18nContext';
 import { AuditLogEntry } from '@/lib/types';
 import { formatDateTime, errorMessage } from '@/lib/format';
+import { auditActionLabel } from '@/lib/i18n/labels';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -144,7 +145,7 @@ export default function AuditLogPage() {
         </div>
         <select value={action} onChange={(e) => setAction(e.target.value)} className="input-field">
           <option value="">{t('all')}</option>
-          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {ACTIONS.map((a) => <option key={a} value={a}>{auditActionLabel(t, a)}</option>)}
         </select>
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input-field" />
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input-field" />
@@ -174,7 +175,7 @@ export default function AuditLogPage() {
                 <tr key={l.id} className="hover:bg-muted transition-colors">
                   <td className="px-4 py-3"><input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} /></td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(l.createdAt)}</td>
-                  <td className="px-4 py-3"><Pill tone={actionTone(l.action)}>{l.action}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={actionTone(l.action)}>{auditActionLabel(t, l.action)}</Pill></td>
                   <td className="px-4 py-3 text-muted-foreground">{l.entity ?? '-'}</td>
                   <td className="px-4 py-3 text-muted-foreground max-w-[320px] truncate">{JSON.stringify(l.newValue ?? l.oldValue ?? {})}</td>
                   <td className="px-4 py-3 text-muted-foreground">{l.user?.name ?? '-'}</td>

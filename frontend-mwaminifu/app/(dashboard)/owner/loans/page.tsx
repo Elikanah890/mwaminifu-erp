@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { Loan } from '@/lib/types';
 import { formatCurrency, formatDate, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
+import { statusLabel } from '@/lib/i18n/labels';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 import Modal from '@/components/Modal';
@@ -167,7 +168,7 @@ export default function OwnerLoansPage() {
                   <td className="px-4 py-3 text-right font-semibold text-foreground">{formatCurrency(l.remainingBalance)}</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">{l.interestRate}%</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatDate(l.dueDate)}</td>
-                  <td className="px-4 py-3"><Pill tone={l.status === 'ACTIVE' ? 'amber' : l.status === 'PAID' ? 'green' : 'red'}>{l.status}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={l.status === 'ACTIVE' ? 'amber' : l.status === 'PAID' ? 'green' : 'red'}>{statusLabel(t, l.status)}</Pill></td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <button onClick={() => openHistory(l)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><History size={14} /></button>

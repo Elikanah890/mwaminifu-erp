@@ -10,6 +10,7 @@ import { EmployeeDashboard } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage } from '@/lib/format';
 import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
 import PageWrapper from '@/components/PageWrapper';
+import { statusLabel, paymentMethodLabel } from '@/lib/i18n/labels';
 import ChartWrapper from '@/components/ChartWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import StatsCard from '@/components/StatsCard';
@@ -163,7 +164,7 @@ export default function EmployeeDashboardPage() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-semibold text-secondary">{formatCurrency(s.grandTotal)}</p>
-                      <p className="text-xs text-subtle-foreground capitalize">{s.status ?? s.paymentMethod ?? '-'}</p>
+                      <p className="text-xs text-subtle-foreground capitalize">{s.status ? statusLabel(t, s.status) : s.paymentMethod ? paymentMethodLabel(t, s.paymentMethod) : '-'}</p>
                     </div>
                   </li>
                 ))}

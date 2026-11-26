@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 
 export default function PwaPrompts() {
   const { canInstall, isIos, installed, dismissed, promptInstall, dismissInstall, updateReady, updateNow, updateLater } = usePwa();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [helpHint, setHelpHint] = useState(false);
   const sw = locale === 'sw';
 
@@ -81,7 +81,7 @@ export default function PwaPrompts() {
               >
                 {sw ? 'Sakinisha' : 'Install'}
               </button>
-              <button onClick={dismissInstall} aria-label="Dismiss" className="rounded-lg p-1.5 text-subtle-foreground hover:bg-muted">
+              <button onClick={dismissInstall} aria-label={t('dismiss')} className="rounded-lg p-1.5 text-subtle-foreground hover:bg-muted">
                 <X size={16} />
               </button>
             </div>

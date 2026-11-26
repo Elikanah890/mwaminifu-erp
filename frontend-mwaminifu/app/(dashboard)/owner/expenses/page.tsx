@@ -16,6 +16,7 @@ import { Pill } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { usePermissions } from '@/lib/context/PermissionsContext';
 import ExpenseCategorySelect, { categoryLabel } from '@/components/expenses/ExpenseCategorySelect';
+import { paymentMethodLabel } from '@/lib/i18n/labels';
 import { Plus, Receipt, Trash2, RefreshCw, TrendingUp, TrendingDown, Check, X } from 'lucide-react';
 
 type Tab = 'expenses' | 'recurring' | 'capital';
@@ -297,7 +298,7 @@ export default function OwnerExpensesPage() {
                           <td className="px-4 py-2 text-muted-foreground">{formatDate(e.expenseDate)}</td>
                           <td className="px-4 py-2"><span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">{labelForCategory(e.category)}</span></td>
                           <td className="px-4 py-2 text-muted-foreground">{e.description ?? '-'}</td>
-                          <td className="px-4 py-2 text-muted-foreground capitalize">{e.paymentMethod ?? 'cash'}</td>
+                          <td className="px-4 py-2 text-muted-foreground capitalize">{paymentMethodLabel(t, e.paymentMethod ?? 'cash')}</td>
                           <td className="px-4 py-2">
                             {(e.approvalStatus ?? 'APPROVED') === 'PENDING' ? <Pill tone="amber">{t('pending')}</Pill> : (e.approvalStatus ?? 'APPROVED') === 'APPROVED' ? <Pill tone="green">{t('approved')}</Pill> : <Pill tone="red">{t('rejected')}</Pill>}
                           </td>
@@ -360,7 +361,7 @@ export default function OwnerExpensesPage() {
                     <tr key={r.id} className="hover:bg-muted transition-colors hover:shadow-[inset_3px_0_0_var(--secondary)]">
                       <td className="px-4 py-3 font-medium text-foreground">{r.category}</td>
                       <td className="px-4 py-3 text-right font-semibold text-danger">{formatCurrency(r.amount)}</td>
-                      <td className="px-4 py-3 text-muted-foreground capitalize">{r.frequency.toLowerCase()}</td>
+                      <td className="px-4 py-3 text-muted-foreground capitalize">{t(r.frequency.toLowerCase())}</td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(r.nextDate)}</td>
                       <td className="px-4 py-3"><Pill tone={r.isActive ? 'green' : 'gray'}>{r.isActive ? t('active') : t('inactive')}</Pill></td>
                       <td className="px-4 py-3">

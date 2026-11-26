@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { Shift, SaleListItem } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDateTime, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
+import { statusLabel } from '@/lib/i18n/labels';
 import ChartWrapper from '@/components/ChartWrapper';
 import { SkeletonCard, SkeletonTable, EmptyState } from '@/components/Spinner';
 import StatsCard from '@/components/StatsCard';
@@ -165,7 +166,7 @@ export default function EmployeeReportsPage() {
                       <td className="px-4 py-2 text-muted-foreground">{formatDateTime(s.saleDate)}</td>
                       <td className="px-4 py-2 text-muted-foreground">{s.customer?.name ?? t('walkInCustomer')}</td>
                       <td className="px-4 py-2 text-right font-semibold text-secondary">{formatCurrency(s.grandTotal)}</td>
-                      <td className="px-4 py-2"><Pill tone="teal">{s.status}</Pill></td>
+                      <td className="px-4 py-2"><Pill tone="teal">{statusLabel(t, s.status)}</Pill></td>
                     </tr>
                   ))}
                 </tbody>

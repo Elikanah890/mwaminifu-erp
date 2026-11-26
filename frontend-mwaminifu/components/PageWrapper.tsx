@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { useI18n } from '@/lib/context/I18nContext';
 
 export default function PageWrapper({
   title,
@@ -17,11 +18,12 @@ export default function PageWrapper({
   breadcrumb?: string[];
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <div className="min-h-screen bg-background">
       <div className="brand-container px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {breadcrumb && breadcrumb.length > 0 && (
-          <nav className="mb-3 flex flex-wrap items-center gap-1 text-xs text-subtle-foreground" aria-label="Breadcrumb">
+          <nav className="mb-3 flex flex-wrap items-center gap-1 text-xs text-subtle-foreground" aria-label={t('breadcrumb')}>
             {breadcrumb.map((crumb, i) => (
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight size={12} className="text-border-strong" />}

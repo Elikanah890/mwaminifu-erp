@@ -213,7 +213,7 @@ export default function EmployeeInventoryPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('unit')}</label>
-              <input value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder="piece / kg" />
+              <input value={form.baseUnitName} onChange={(e) => setForm({ ...form, baseUnitName: e.target.value })} className="input-field" placeholder={t('unitPlaceholder')} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiClient, ApiErrorException } from '@/lib/api/client';
 import { useI18n } from '@/lib/context/I18nContext';
+import { paymentMethodLabel } from '@/lib/i18n/labels';
 import { usePermissions } from '@/lib/context/PermissionsContext';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -17,16 +18,16 @@ import { motion } from '@/components/motion';
 import { Skeleton } from '@/components/Spinner';
 import { Trash2, Minus, Plus, ReceiptText, ScanBarcode, UserPlus, Eye, X, PackagePlus } from 'lucide-react';
 
-const PAYMENT_METHODS = [
-  { id: 'cash', label: 'Cash' },
+const PAYMENT_METHODS: Array<{ id: string; label?: string; labelKey?: string }> = [
+  { id: 'cash', labelKey: 'cash' },
   { id: 'mpesa', label: 'M-Pesa' },
   { id: 'tigo', label: 'Tigo Pesa' },
   { id: 'airtel', label: 'Airtel Money' },
   { id: 'halopesa', label: 'Halopesa' },
   { id: 'mixx', label: 'Mixx by Yas' },
-  { id: 'card', label: 'Card' },
-  { id: 'bank', label: 'Bank' },
-  { id: 'credit', label: 'Credit' },
+  { id: 'card', labelKey: 'card' },
+  { id: 'bank', labelKey: 'bank' },
+  { id: 'credit', labelKey: 'credit' },
 ];
 
 type CartItem = {
@@ -66,6 +67,7 @@ type ReceiptData = Record<string, unknown> & {
 };
 
 function ReceiptView({ shopName, receipt }: { shopName: string; receipt: ReceiptData }) {
+  const { t } = useI18n();
   const items = receipt.items ?? [];
   const payments = receipt.paymentDetails ?? [];
   const subtotal = Number(receipt.totalAmount ?? receipt.grandTotal ?? 0);
@@ -76,11 +78,11 @@ function ReceiptView({ shopName, receipt }: { shopName: string; receipt: Receipt
     <div className="text-foreground">
       <div className="text-center">
         <p className="text-base font-bold">{shopName || 'Mwaminifu'}</p>
-        <p className="mt-1 text-xs text-subtle-foreground">Risiti: {receipt.receiptNumber ?? '-'}</p>
+        <p className="mt-1 text-xs text-subtle-foreground">{t('receiptNo')} {receipt.receiptNumber ?? '-'}</p>
         {receipt.saleDate && (
           <p className="text-xs text-subtle-foreground">{formatDateTime(receipt.saleDate)}</p>
         )}
-        {receipt.customerName && <p className="mt-1 text-xs">Mteja: {receipt.customerName}</p>}
+        {receipt.customerName && <p className="mt-1 text-xs">{t('customerLabel')} {receipt.customerName}</p>}
       </div>
 
       <div className="my-3 border-t border-dashed border-border" />
@@ -106,17 +108,17 @@ function ReceiptView({ shopName, receipt }: { shopName: string; receipt: Receipt
 
       <div className="space-y-1 text-sm">
         <div className="flex justify-between text-subtle-foreground">
-          <span>Jumla Ndogo</span>
+          <span>{t('subTotal')}</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
         {discount > 0 && (
           <div className="flex justify-between text-subtle-foreground">
-            <span>Punguzo</span>
+            <span>{t('discount')}</span>
             <span>-{formatCurrency(discount)}</span>
           </div>
         )}
         <div className="flex justify-between text-base font-bold">
-          <span>Jumla</span>
+          <span>{t('total')}</span>
           <span>{formatCurrency(total)}</span>
         </div>
       </div>
@@ -127,7 +129,7 @@ function ReceiptView({ shopName, receipt }: { shopName: string; receipt: Receipt
           <div className="space-y-1 text-xs text-subtle-foreground">
             {payments.map((p, idx) => (
               <div key={idx} className="flex justify-between">
-                <span className="capitalize">{p.method}</span>
+                <span>{paymentMethodLabel(t, p.method)}</span>
                 <span>{formatCurrency(p.amount)}</span>
               </div>
             ))}
@@ -135,7 +137,7 @@ function ReceiptView({ shopName, receipt }: { shopName: string; receipt: Receipt
         </>
       )}
 
-      <p className="mt-4 text-center text-xs text-subtle-foreground">Asante kwa biashara yako</p>
+      <p className="mt-4 text-center text-xs text-subtle-foreground">{t('thankYouBusiness')}</p>
     </div>
   );
 }
@@ -371,7 +373,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       }
       setAddCustomerOpen(false);
       setNewCustomer({ name: '', phone: '', email: '', address: '', creditLimit: '' });
-      toast('Customer added', 'success');
+      toast(t('customerAdded'), 'success');
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -416,7 +418,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
 
   const completeSale = async () => {
     if (cart.length === 0) {
-      toast('Add at least one item', 'error');
+      toast(t('addAtLeastOneItem'), 'error');
       return;
     }
     const typedAmount = Number(payAmount);
@@ -427,11 +429,11 @@ export default function PosScreen({ shopId }: { shopId: string }) {
 
     const useCredit = effectivePayments.some((p) => p.method === 'credit');
     if (useCredit && !customerId) {
-      toast('Select a customer for credit sales', 'error');
+      toast(t('selectCustomerForCredit'), 'error');
       return;
     }
     if (effectivePayments.some((p) => !p.amount || p.amount <= 0)) {
-      toast('Enter a valid payment amount', 'error');
+      toast(t('enterValidPayment'), 'error');
       return;
     }
 
@@ -477,7 +479,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       setDiscount(0);
       setCustomerId('');
       setQuickView(null);
-      toast('Sale completed', 'success');
+      toast(t('saleCompleted'), 'success');
     } catch (err) {
       toast(errorMessage(err), 'error');
     } finally {
@@ -490,9 +492,9 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     const number = (receipt.receiptNumber as string) || '-';
     const total = Number(receipt.grandTotal) || 0;
     const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>) || [];
-    const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
+    const lines = items.map((i) => `${i.product?.name ?? t('item')} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
     const shopName = (receipt.shop as { name?: string } | undefined)?.name ?? 'Mwaminifu';
-    const text = `*${shopName}*\n${lines.join('\n')}\n\n*Total: ${formatCurrency(total)}*\n\nRisiti: ${number}\nThank you!`;
+    const text = `*${shopName}*\n${lines.join('\n')}\n\n*${t('total')}: ${formatCurrency(total)}*\n\n${t('receiptNo')} ${number}\n${t('thankYou')}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -501,9 +503,9 @@ export default function PosScreen({ shopId }: { shopId: string }) {
     const number = (receipt.receiptNumber as string) || '-';
     const total = Number(receipt.grandTotal) || 0;
     const items = (receipt.items as Array<{ quantity: number; unitPrice: number; total: number; unitName?: string | null; unit?: string | null; baseUnitsPerConfig?: number; product?: { name: string } }>) || [];
-    const lines = items.map((i) => `${i.product?.name ?? 'Item'} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
-    const subject = lines.length > 0 ? `${lines[0].split(' (')[0]} — ${formatCurrency(total)}` : `Receipt ${number}`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${lines.join('\n')}\n\nTotal: ${formatCurrency(total)}\nRisiti: ${number}\nThank you!`)}`;
+    const lines = items.map((i) => `${i.product?.name ?? t('item')} (${i.unitName ?? i.unit ?? ''}${(i.baseUnitsPerConfig ?? 1) > 1 ? ` ${i.baseUnitsPerConfig}×` : ''}) x ${i.quantity} = ${formatCurrency(i.total)}`);
+    const subject = lines.length > 0 ? `${lines[0].split(' (')[0]} — ${formatCurrency(total)}` : `${t('receipt')} ${number}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`${lines.join('\n')}\n\n${t('total')}: ${formatCurrency(total)}\n${t('receiptNo')} ${number}\n${t('thankYou')}`)}`;
   };
 
   return (
@@ -685,11 +687,11 @@ export default function PosScreen({ shopId }: { shopId: string }) {
                           onChange={(e) => setItemPrice(key, Number(e.target.value) || 0)}
                           className="w-24 px-2 py-1 border border-border-strong rounded-md text-sm text-right"
                         />
-                        <button onClick={() => setEditingPriceId(null)} className="btn-outline text-xs px-2 py-1">Done</button>
+                        <button onClick={() => setEditingPriceId(null)} className="btn-outline text-xs px-2 py-1">{t('done')}</button>
                       </div>
                     ) : (
                       <button onClick={() => setEditingPriceId(key)} className="text-xs font-medium text-secondary hover:underline">
-                        {priceRange(item).negotiable ? 'Adjust price' : 'Edit price'}
+                        {priceRange(item).negotiable ? t('adjustPrice') : t('editPrice')}
                       </button>
                     )}
                   </div>
@@ -778,7 +780,7 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               className="flex-1 rounded-md border border-border-strong bg-card px-2 py-2 text-sm text-foreground"
             >
               {PAYMENT_METHODS.filter((m) => m.id !== 'credit' || can('credit:create')).map((m) => (
-                <option key={m.id} value={m.id}>{m.label}</option>
+                <option key={m.id} value={m.id}>{m.labelKey ? t(m.labelKey) : m.label}</option>
               ))}
             </select>
             <input
@@ -788,14 +790,14 @@ export default function PosScreen({ shopId }: { shopId: string }) {
               onChange={(e) => setPayAmount(e.target.value)}
               className="w-32 rounded-md border border-border-strong bg-card px-2 py-2 text-right text-sm text-foreground"
             />
-            <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }} onClick={addPayment} className="btn-teal px-3">Add</motion.button>
+            <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2 }} onClick={addPayment} className="btn-teal px-3">{t('add')}</motion.button>
           </div>
           {payments.map((p, idx) => (
             <div key={idx} className="flex items-center justify-between text-sm py-1">
-              <span className="capitalize text-muted-foreground">{PAYMENT_METHODS.find((m) => m.id === p.method)?.label ?? p.method}</span>
+              <span className="text-muted-foreground">{paymentMethodLabel(t, p.method)}</span>
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">{formatCurrency(p.amount)}</span>
-                <button onClick={() => removePayment(idx)} className="text-danger text-xs">remove</button>
+                <button onClick={() => removePayment(idx)} className="text-danger text-xs">{t('remove')}</button>
               </div>
             </div>
           ))}
@@ -811,14 +813,14 @@ export default function PosScreen({ shopId }: { shopId: string }) {
       </div>
 
       {/* Receipt modal */}
-      <Modal open={!!receipt} title="Receipt" onClose={() => setReceipt(null)}>
+      <Modal open={!!receipt} title={t('receipt')} onClose={() => setReceipt(null)}>
         {receipt && (
           <div>
             <ReceiptView shopName={shopName} receipt={receipt} />
             <div className="mt-6 flex gap-3">
-              <button onClick={shareWhatsApp} className="flex-1 btn-teal">Share via WhatsApp</button>
-              <button onClick={shareEmail} className="flex-1 btn-outline">Email</button>
-              <button onClick={() => window.print()} className="flex-1 btn-outline">Print</button>
+              <button onClick={shareWhatsApp} className="flex-1 btn-teal">{t('shareWhatsApp')}</button>
+              <button onClick={shareEmail} className="flex-1 btn-outline">{t('email')}</button>
+              <button onClick={() => window.print()} className="flex-1 btn-outline">{t('print')}</button>
             </div>
           </div>
         )}

@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useI18n } from '@/lib/context/I18nContext';
 
 export default function Modal({
   open,
@@ -17,6 +18,7 @@ export default function Modal({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <AnimatePresence>
       {open && (
@@ -46,7 +48,7 @@ export default function Modal({
               <button
                 onClick={onClose}
                 className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-danger transition-brand"
-                aria-label="Close"
+                aria-label={t('close')}
               >
                 <X size={20} />
               </button>

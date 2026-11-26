@@ -54,13 +54,13 @@ export default function EmployeeShiftPage() {
   const openShift = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeShopId) {
-      toast('Shop context not loaded yet', 'error');
+      toast(t('shopContextNotLoaded'), 'error');
       return;
     }
     setSubmitting(true);
     try {
       await apiClient.post('/shifts', { shopId: activeShopId, openingCashBalance: Number(opening) || 0 });
-      toast('Shift opened', 'success');
+      toast(t('shiftOpened'), 'success');
       setOpening('');
       load();
     } catch (err) {
@@ -74,7 +74,7 @@ export default function EmployeeShiftPage() {
     e.preventDefault();
     if (!activeShift) return;
     if (!activeShopId) {
-      toast('Shop context not loaded yet', 'error');
+      toast(t('shopContextNotLoaded'), 'error');
       return;
     }
     setSubmitting(true);

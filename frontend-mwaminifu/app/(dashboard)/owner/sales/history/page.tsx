@@ -7,6 +7,7 @@ import { useI18n } from '@/lib/context/I18nContext';
 import { SaleListItem } from '@/lib/types';
 import { formatCurrency, formatDateTime, errorMessage } from '@/lib/format';
 import { saleProductNames, saleItemCount } from '@/lib/sale-summary';
+import { statusLabel, paymentMethodLabel } from '@/lib/i18n/labels';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonTable, SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -79,17 +80,17 @@ export default function SalesHistoryPage() {
       r.shop?.name ?? '',
       r.shop?.address ?? '',
       '--------------------------------',
-      `Receipt: ${r.receiptNumber ?? ''}`,
-      `Date: ${formatDateTime(r.saleDate)}`,
-      `Cashier: ${r.user?.name ?? ''}`,
+      `${t('receiptNo')} ${r.receiptNumber ?? ''}`,
+      `${t('date')}: ${formatDateTime(r.saleDate)}`,
+      `${t('cashier')}: ${r.user?.name ?? ''}`,
       '--------------------------------',
       ...r.items.map((i) => `${i.product.name} x${i.quantity} @${formatCurrency(i.unitPrice)} = ${formatCurrency(i.total)}`),
       '--------------------------------',
-      `Total: ${formatCurrency(r.totalAmount)}`,
-      `Discount: ${formatCurrency(r.discount)}`,
-      `Tax: ${formatCurrency(r.taxAmount)}`,
-      `Grand Total: ${formatCurrency(r.grandTotal)}`,
-      ...(r.paymentDetails ?? []).map((p) => `${p.method}: ${formatCurrency(p.amount)}`),
+      `${t('total')}: ${formatCurrency(r.totalAmount)}`,
+      `${t('discount')}: ${formatCurrency(r.discount)}`,
+      `${t('tax')}: ${formatCurrency(r.taxAmount)}`,
+      `${t('grandTotal')}: ${formatCurrency(r.grandTotal)}`,
+      ...(r.paymentDetails ?? []).map((p) => `${paymentMethodLabel(t, p.method)}: ${formatCurrency(p.amount)}`),
       '--------------------------------',
       r.shop?.receiptFooter ?? '',
       'Mwaminifu',
@@ -97,7 +98,7 @@ export default function SalesHistoryPage() {
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(`<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">${lines.join('\n')}</pre>`);
-    w.document.title = 'Receipt';
+    w.document.title = t('receipt');
     w.print();
   };
 
@@ -206,9 +207,9 @@ export default function SalesHistoryPage() {
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDateTime(s.saleDate)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{s.customer?.name ?? t('walkInCustomer')}</td>
                   <td className="px-4 py-3 text-right font-medium text-foreground">{saleItemCount(s)}</td>
-                  <td className="px-4 py-3 text-muted-foreground capitalize">{s.paymentMethod ?? '-'}</td>
+                  <td className="px-4 py-3 text-muted-foreground capitalize">{s.paymentMethod ? paymentMethodLabel(t, s.paymentMethod) : '-'}</td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(s.grandTotal)}</td>
-                  <td className="px-4 py-3"><Pill tone={statusTone[s.status] ?? 'gray'}>{s.status}</Pill></td>
+                  <td className="px-4 py-3"><Pill tone={statusTone[s.status] ?? 'gray'}>{statusLabel(t, s.status)}</Pill></td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-3">
                       <button onClick={() => openReceipt(s)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><FileText size={14} /> {t('receipt')}</button>

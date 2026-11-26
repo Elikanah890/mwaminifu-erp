@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { useTheme } from '@/components/theme-provider';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Moon, Sun } from 'lucide-react';
+import { useI18n } from '@/lib/context/I18nContext';
 
 export default function ThemeToggle({ compact = false, onDark = false }: { compact?: boolean; onDark?: boolean }) {
+  const { t } = useI18n();
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -19,8 +21,8 @@ export default function ThemeToggle({ compact = false, onDark = false }: { compa
     <button
       type="button"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      aria-label="Toggle theme"
-      title={isDark ? 'Light' : 'Dark'}
+      aria-label={t('toggleTheme')}
+      title={isDark ? t('themeLight') : t('themeDark')}
       className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold transition-brand ${
         onDark ? 'text-white hover:bg-white/10' : 'text-foreground hover:bg-muted'
       }`}
@@ -37,7 +39,7 @@ export default function ThemeToggle({ compact = false, onDark = false }: { compa
           {isDark ? <Moon size={16} /> : <Sun size={16} />}
         </motion.span>
       </AnimatePresence>
-      {compact ? null : <span className="hidden sm:inline">{isDark ? 'Light' : 'Dark'}</span>}
+      {compact ? null : <span className="hidden sm:inline">{isDark ? t('themeLight') : t('themeDark')}</span>}
     </button>
   );
 }

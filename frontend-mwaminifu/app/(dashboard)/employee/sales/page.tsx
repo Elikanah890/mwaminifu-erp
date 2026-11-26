@@ -59,12 +59,12 @@ export default function EmployeeSalesPage() {
       ) : !shiftOpen ? (
         <Reveal>
           <div className="surface-card mx-auto max-w-lg p-8 text-center">
-            <h2 className="text-lg font-semibold text-foreground">Open your shift first</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t('openShiftFirst')}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Enter your Opening Cash Drawer Balance before recording any sale.
+              {t('openingCashDesc')}
             </p>
             <Link href="/employee/shift" className="btn-navy mt-5 inline-block">
-              Open shift
+              {t('openShift')}
             </Link>
           </div>
         </Reveal>
