@@ -15,7 +15,7 @@ import ChartWrapper from '@/components/ChartWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import StatsCard from '@/components/StatsCard';
 import { Stagger, StaggerItem, Reveal, MotionCard, motion } from '@/components/motion';
-import { ShoppingCart, Clock, Package, TrendingUp, Wallet } from 'lucide-react';
+import { ShoppingCart, Clock, TrendingUp, Wallet } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
   const { activeShopId, loading: shopLoading } = useShop();
@@ -124,11 +124,10 @@ export default function EmployeeDashboardPage() {
         </MotionCard>
       </Reveal>
 
-      <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <Stagger className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StaggerItem><StatsCard title={t('shiftStatus')} value={isOpen ? t('open') : t('closed')} tone={isOpen ? 'teal' : 'gray'} icon={<Clock size={20} />} /></StaggerItem>
         <StaggerItem><StatsCard featured title={t('todaysSales')} value={formatCurrency(data?.todaySales ?? 0)} tone="teal" icon={<TrendingUp size={20} />} /></StaggerItem>
         <StaggerItem><StatsCard title={t('transactionsCount')} value={formatNumber(data?.transactions ?? 0)} tone="navy" icon={<ShoppingCart size={20} />} /></StaggerItem>
-        <StaggerItem><StatsCard title={t('averageSale')} value={formatCurrency(data?.averageSale ?? 0)} tone="gold" sub={`${t('itemsSold')}: ${formatNumber(data?.itemsSold ?? 0)}`} icon={<Package size={20} />} /></StaggerItem>
       </Stagger>
 
       <Stagger className="grid grid-cols-1 lg:grid-cols-2 gap-6">
