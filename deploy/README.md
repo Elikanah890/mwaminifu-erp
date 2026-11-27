@@ -70,7 +70,7 @@ Frontend (`frontend-mwaminifu/.env.local`) — required values:
 | Variable | Value |
 |---|---|
 | `NEXT_PUBLIC_APP_URL` | `https://YOUR_DOMAIN` |
-| `BACKEND_API_URL` | `https://YOUR_DOMAIN/api/v1` |
+| `BACKEND_API_URL` | `http://127.0.0.1:5000/api/v1` (same VPS) |
 | `NEXT_PUBLIC_API_URL` | `https://YOUR_DOMAIN/api/v1` |
 | `JWT_SECRET` | **exactly the same** as the backend |
 
