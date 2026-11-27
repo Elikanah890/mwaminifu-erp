@@ -155,10 +155,26 @@ const EMPLOYEE_NAV: NavGroup[] = [
       { href: '/employee/activity', label: 'mySales', icon: <History size={18} />, permission: 'sales:view' },
     ],
   },
-  { section: 'inventory', items: [{ href: '/employee/inventory', label: 'stockLookup', icon: <Package size={18} />, permissions: ['inventory:view', 'products:view', 'products:create'] }] },
+  {
+    section: 'inventory',
+    items: [
+      { href: '/employee/inventory', label: 'stockLookup', icon: <Package size={18} />, permissions: ['inventory:view', 'products:view', 'products:create'] },
+      { href: '/employee/purchases', label: 'purchases', icon: <ClipboardList size={18} />, permissions: ['purchases:view', 'purchases:create', 'purchases:approve'] },
+    ],
+  },
   { section: 'customers', items: [{ href: '/employee/customers', label: 'customers', icon: <Users size={18} />, permissions: ['customers:view', 'customers:create', 'customers:update', 'credit:read', 'credit:create'] }] },
+  { section: 'finance', items: [{ href: '/employee/expenses', label: 'expenses', icon: <Receipt size={18} />, permissions: ['expenses:read', 'expenses:create', 'expenses:approve'] }] },
   { section: 'shifts', items: [{ href: '/employee/shift', label: 'currentShift', icon: <Clock size={18} />, permissions: ['shift:view', 'shift:open', 'shift:close'] }] },
-  { section: 'myActivity', items: [{ href: '/employee/reports', label: 'myActivity', icon: <BarChart3 size={18} />, permission: 'reports:sales' }] },
+  {
+    section: 'reports',
+    items: [
+      { href: '/employee/reports', label: 'myActivity', icon: <BarChart3 size={18} />, permission: 'reports:sales' },
+      { href: '/employee/reports/inventory', label: 'inventory', icon: <Boxes size={18} />, permission: 'reports:inventory' },
+      { href: '/employee/reports/credit', label: 'creditReport', icon: <CreditCard size={18} />, permission: 'reports:credit' },
+      { href: '/employee/reports/valuation', label: 'valuation', icon: <Calculator size={18} />, permission: 'reports:valuation' },
+    ],
+  },
+  { section: 'people', items: [{ href: '/employee/employees', label: 'employees', icon: <UserCog size={18} />, permission: 'employees:view' }] },
   { section: 'profilePortalLabel', items: [{ href: '/employee/profile', label: 'profile', icon: <UserRound size={18} /> }] },
 ];
 

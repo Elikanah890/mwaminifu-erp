@@ -1069,6 +1069,10 @@ export const en = {
   selectOption: 'Select…',
   noEffectOnBusinesses: 'Businesses they onboarded are not affected.',
   shop: 'Shop',
+  product: 'Product',
+  creditReport: 'Credit Report',
+  creditReportDesc: 'Outstanding customer credit',
+  customersWithDebt: 'Customers with debt',
 } as const;
 export type Dict = Record<string, string>;
 
@@ -2139,6 +2143,10 @@ const sw: Dict = {
   selectOption: 'Chagua…',
   noEffectOnBusinesses: 'Biashara walizosajili hazitaathirika.',
   shop: 'Duka',
+  product: 'Bidhaa',
+  creditReport: 'Ripoti ya Madeni',
+  creditReportDesc: 'Madeni ya wateja yanayodaiwa',
+  customersWithDebt: 'Wateja wenye madeni',
 };
 export const dictionaries: Record<Locale, Dict> = {
   en: en as unknown as Dict,

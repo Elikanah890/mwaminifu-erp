@@ -509,7 +509,11 @@ class ApiClient {
   async loadPermissions(): Promise<{ permissions: string[]; role: string | null; shopId: string | null }> {
     if (typeof window === 'undefined') return { permissions: [], role: null, shopId: null };
     try {
-      const response = await fetch('/api/auth/permissions', { cache: 'no-store' });
+      const activeShop = getApiActiveShopId();
+      const response = await fetch('/api/auth/permissions', {
+        cache: 'no-store',
+        headers: activeShop ? { 'X-Shop-Id': activeShop } : {},
+      });
       if (!response.ok) return { permissions: [], role: null, shopId: null };
       const payload = (await response.json()) as { data?: { permissions?: string[]; role?: string; shopId?: string | null } };
       const data = payload?.data ?? {};

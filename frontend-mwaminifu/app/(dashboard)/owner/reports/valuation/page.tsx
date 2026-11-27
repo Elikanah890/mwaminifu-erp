@@ -18,6 +18,7 @@ export default function ValuationReportPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const isEmployee = apiClient.getUser()?.role === 'EMPLOYEE';
   const [data, setData] = useState<ValuationAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +53,7 @@ export default function ValuationReportPage() {
     <PageWrapper
       title={t('valuation')}
       description={t('valuationOverview')}
-      breadcrumb={[t('businessOwner'), t('reports'), t('valuation')]}
+      breadcrumb={[isEmployee ? t('employeePortal') : t('businessOwner'), t('reports'), t('valuation')]}
       actions={
         <div className="flex items-center gap-2">
           <button onClick={exportCsv} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>

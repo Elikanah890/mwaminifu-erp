@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  * call (never cached), so owner-granted/revoked employee permissions take
  * effect on the next page load or focus — no re-login required.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const token = (await cookies()).get(ACCESS_TOKEN_COOKIE)?.value;
   if (!token) {
     return NextResponse.json(
@@ -20,8 +20,12 @@ export async function GET() {
 
   let backendResponse: Response;
   try {
+    const shopId = request.headers.get('x-shop-id');
     backendResponse = await fetch(`${BACKEND_API_URL}/users/me/permissions`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(shopId ? { 'X-Shop-Id': shopId } : {}),
+      },
       cache: 'no-store',
     });
   } catch {

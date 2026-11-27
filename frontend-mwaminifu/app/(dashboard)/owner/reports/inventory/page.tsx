@@ -20,6 +20,7 @@ export default function InventoryReportPage() {
   const { activeShopId, loading: shopLoading } = useShop();
   const { t } = useI18n();
   const { toast } = useToast();
+  const isEmployee = apiClient.getUser()?.role === 'EMPLOYEE';
   const [data, setData] = useState<InventoryAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,7 +50,7 @@ export default function InventoryReportPage() {
   const s = data?.summary;
 
   return (
-    <PageWrapper title={t('inventory')} description={t('inventoryOverview')} breadcrumb={[t('businessOwner'), t('reports'), t('inventory')]}>
+    <PageWrapper title={t('inventory')} description={t('inventoryOverview')} breadcrumb={[isEmployee ? t('employeePortal') : t('businessOwner'), t('reports'), t('inventory')]}>
       <div className="flex justify-end gap-2 mb-6">
         <button onClick={exportCsv} className="btn-outline inline-flex items-center gap-2 text-sm"><Download size={16} /> {t('csvExport')}</button>
         <button onClick={exportPdf} className="btn-outline inline-flex items-center gap-2 text-sm"><FileText size={16} /> {t('pdfExport')}</button>

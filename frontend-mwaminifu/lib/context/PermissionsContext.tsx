@@ -62,6 +62,14 @@ export function PermissionsProvider({ role, children }: { role: string; children
     };
   }, [role, refresh]);
 
+  // Poll periodically so an owner's grant/revocation reaches an already-open
+  // employee session without requiring a re-login.
+  useEffect(() => {
+    if (role !== 'EMPLOYEE') return;
+    const id = setInterval(() => void refresh(), 60_000);
+    return () => clearInterval(id);
+  }, [role, refresh]);
+
   // Employee permissions are per shop. Reload them immediately after a switch.
   useEffect(() => {
     if (role !== 'EMPLOYEE') return;
