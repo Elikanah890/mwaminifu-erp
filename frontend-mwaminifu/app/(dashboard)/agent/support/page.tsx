@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
 import { formatDateTime, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
 import Modal from '@/components/Modal';
@@ -37,6 +38,7 @@ interface TicketThread {
 const PER_PAGE = 10;
 
 export default function AgentSupportPage() {
+  const { t } = useI18n();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [meta, setMeta] = useState({ page: 1, limit: PER_PAGE, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -90,7 +92,7 @@ export default function AgentSupportPage() {
       setSubject('');
       setMessage('');
       setPriority('MEDIUM');
-      setNotify('Support ticket created successfully');
+      setNotify(t('supportTicketCreated'));
       load(1);
     } catch (err) {
       setError(errorMessage(err));
@@ -131,52 +133,52 @@ export default function AgentSupportPage() {
 
   const statusBadge = (status: string) =>
     status === 'OPEN' ? (
-      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">Open</span>
+      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning">{t('open')}</span>
     ) : (
-      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-secondary/10 text-secondary">Closed</span>
+      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-secondary/10 text-secondary">{t('closed')}</span>
     );
 
   return (
-    <PageWrapper title="Support" description="Get help from the platform team" breadcrumb={['Agent', 'Support']}>
+    <PageWrapper title={t('support')} description={t('supportDesc')} breadcrumb={[t('agentPortal'), t('support')]}>
 
       {notify && <div className="bg-success/10 border border-success/25 text-secondary px-4 py-3 rounded-lg mb-4 text-sm">{notify}</div>}
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <MotionCard className="surface-card p-6 mb-6">
-        <h2 className="text-lg font-semibold text-primary mb-4">Create a Ticket</h2>
+        <h2 className="text-lg font-semibold text-primary mb-4">{t('createTicket')}</h2>
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('title')}</label>
             <input
               className="input-field"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Brief summary of your issue"
+              placeholder={t('briefSummary')}
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('description')}</label>
             <textarea
               className="input-field min-h-[100px]"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Describe your issue in detail"
+              placeholder={t('describeIssue')}
               required
             />
           </div>
           <div className="flex items-end justify-between gap-4">
             <div className="flex-1 max-w-xs">
-              <label className="block text-sm font-medium text-foreground mb-1">Priority</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('priority')}</label>
               <select className="input-field" value={priority} onChange={(e) => setPriority(e.target.value)}>
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent</option>
+                <option value="LOW">{t('low')}</option>
+                <option value="MEDIUM">{t('medium')}</option>
+                <option value="HIGH">{t('high')}</option>
+                <option value="URGENT">{t('urgent')}</option>
               </select>
             </div>
             <motion.button type="submit" disabled={creating} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-gold">
-              {creating ? 'Submitting...' : 'Submit Ticket'}
+              {creating ? t('submitting') : t('submitTicket')}
             </motion.button>
           </div>
         </form>
@@ -186,31 +188,31 @@ export default function AgentSupportPage() {
         <SkeletonTable rows={PER_PAGE} />
       ) : (
       <Reveal className="surface-card overflow-hidden">
-        <h2 className="text-lg font-semibold text-primary px-6 pt-5 pb-3">My Tickets</h2>
+        <h2 className="text-lg font-semibold text-primary px-6 pt-5 pb-3">{t('myTickets')}</h2>
         {tickets.length === 0 ? (
-          <EmptyState message="No support tickets yet" />
+          <EmptyState message={t('noSupportTickets')} />
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
               <tr className="border-b border-border">
-                <th className="py-3 px-6 font-semibold">Subject</th>
-                <th className="py-3 px-6 font-semibold">Priority</th>
-                <th className="py-3 px-6 font-semibold">Status</th>
-                <th className="py-3 px-6 font-semibold">Created</th>
-                <th className="py-3 px-6 text-right font-semibold">Action</th>
+                <th className="py-3 px-6 font-semibold">{t('subject')}</th>
+                <th className="py-3 px-6 font-semibold">{t('priority')}</th>
+                <th className="py-3 px-6 font-semibold">{t('status')}</th>
+                <th className="py-3 px-6 font-semibold">{t('createdLabel')}</th>
+                <th className="py-3 px-6 text-right font-semibold">{t('action')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {tickets.map((t) => (
-                <tr key={t.id} className="transition-colors hover:bg-muted">
-                  <td className="py-3 px-6 font-medium text-foreground">{t.subject}</td>
-                  <td className="py-3 px-6 text-muted-foreground">{t.priority}</td>
-                  <td className="py-3 px-6">{statusBadge(t.status)}</td>
-                  <td className="py-3 px-6 text-muted-foreground text-xs">{formatDateTime(t.createdAt)}</td>
+              {tickets.map((ticket) => (
+                <tr key={ticket.id} className="transition-colors hover:bg-muted">
+                  <td className="py-3 px-6 font-medium text-foreground">{ticket.subject}</td>
+                  <td className="py-3 px-6 text-muted-foreground">{ticket.priority}</td>
+                  <td className="py-3 px-6">{statusBadge(ticket.status)}</td>
+                  <td className="py-3 px-6 text-muted-foreground text-xs">{formatDateTime(ticket.createdAt)}</td>
                   <td className="py-3 px-6 text-right">
-                    <button onClick={() => openThread(t.id)} className="text-xs text-secondary font-medium hover:underline">
-                      View
+                    <button onClick={() => openThread(ticket.id)} className="text-xs text-secondary font-medium hover:underline">
+                      {t('view')}
                     </button>
                   </td>
                 </tr>
@@ -225,15 +227,15 @@ export default function AgentSupportPage() {
       </Reveal>
       )}
 
-      <Modal open={!!thread} title={thread ? thread.subject : 'Ticket'} onClose={() => setThread(null)} wide>
+      <Modal open={!!thread} title={thread ? thread.subject : t('ticket')} onClose={() => setThread(null)} wide>
         {threadLoading ? (
           <SkeletonCard rows={4} />
         ) : thread ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               {statusBadge(thread.status)}
-              <span className="text-xs text-muted-foreground">Priority: {thread.priority}</span>
-              <span className="text-xs text-muted-foreground">Created {formatDateTime(thread.createdAt)}</span>
+              <span className="text-xs text-muted-foreground">{t('priorityLabel')} {thread.priority}</span>
+              <span className="text-xs text-muted-foreground">{t('createdAtLabel')} {formatDateTime(thread.createdAt)}</span>
             </div>
 
             <div className="space-y-3 max-h-[40vh] overflow-y-auto border border-border rounded-lg p-4 bg-muted">
@@ -260,14 +262,14 @@ export default function AgentSupportPage() {
                   className="input-field flex-1"
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  placeholder="Type your reply..."
+                  placeholder={t('typeReply')}
                 />
                 <motion.button type="submit" disabled={replying || !reply.trim()} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-teal shrink-0 disabled:opacity-40">
-                  {replying ? 'Sending...' : 'Reply'}
+                  {replying ? t('sending') : t('reply')}
                 </motion.button>
               </form>
             ) : (
-              <p className="text-xs text-muted-foreground text-center">This ticket is closed.</p>
+              <p className="text-xs text-muted-foreground text-center">{t('ticketClosed')}</p>
             )}
           </div>
         ) : null}

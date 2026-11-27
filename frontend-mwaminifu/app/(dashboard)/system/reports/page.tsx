@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { PlatformStats, ActivityLog, Subscription } from '@/lib/types';
 import { formatNumber, formatDateTime, errorMessage } from '@/lib/format';
+import { useI18n } from '@/lib/context/I18nContext';
+import { localizeChartLabel } from '@/lib/i18n/chart';
 import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -34,12 +36,12 @@ function actionLabel(action: string): string {
   return action.replace(/_/g, ' ');
 }
 
-const PRESETS: Array<{ key: Preset; label: string }> = [
-  { key: 'today', label: 'Today' },
-  { key: 'week', label: 'This Week' },
-  { key: 'month', label: 'This Month' },
-  { key: 'year', label: 'This Year' },
-  { key: 'custom', label: 'Custom' },
+const PRESETS: Array<{ key: Preset; labelKey: string }> = [
+  { key: 'today', labelKey: 'today' },
+  { key: 'week', labelKey: 'thisWeek' },
+  { key: 'month', labelKey: 'thisMonth' },
+  { key: 'year', labelKey: 'thisYear' },
+  { key: 'custom', labelKey: 'custom' },
 ];
 
 function fmt(d: Date): string {
@@ -61,6 +63,7 @@ function presetRange(p: Preset): { from: string; to: string } {
 }
 
 export default function ReportsPage() {
+  const { t } = useI18n();
   const [agents, setAgents] = useState<AgentsReport | null>(null);
   const [owners, setOwners] = useState<OwnersReport | null>(null);
   const [stats, setStats] = useState<PlatformStats | null>(null);
@@ -146,7 +149,7 @@ export default function ReportsPage() {
   const activeAgents = (agents?.data ?? []).filter((a) => a.isActive).length;
 
   return (
-    <PageWrapper title="Platform Reports" description="Business growth, subscriptions and agent performance" breadcrumb={['System', 'Reports']}>
+    <PageWrapper title={t('platformReports')} description={t('platformReportsDesc')} breadcrumb={[t('systemOwner'), t('reports')]}>
       <Reveal className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex flex-wrap items-center gap-2">
           {PRESETS.map((p) => (
@@ -160,7 +163,7 @@ export default function ReportsPage() {
                 preset === p.key ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'
               }`}
             >
-              {p.label}
+              {t(p.labelKey)}
             </motion.button>
           ))}
           <input type="date" className="input-field w-[150px]" value={from} onChange={(e) => { setPreset('custom'); setFrom(e.target.value); }} />
@@ -173,7 +176,7 @@ export default function ReportsPage() {
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className="btn-navy text-sm px-3 py-2"
         >
-          PDF / Print
+          {t('pdfPrint')}
         </motion.button>
       </Reveal>
 
@@ -188,24 +191,24 @@ export default function ReportsPage() {
       ) : (
         <>
           <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StaggerItem><StatsCard title="New Businesses" value={formatNumber(newBusinesses)} tone="navy" icon={<Users size={20} />} sub="in selected period" /></StaggerItem>
-            <StaggerItem><StatsCard title="Total Shops" value={formatNumber(stats?.totalShops ?? 0)} tone="teal" icon={<Building2 size={20} />} /></StaggerItem>
-            <StaggerItem><StatsCard title="Active Agents" value={formatNumber(activeAgents)} tone="navy" icon={<UserCog size={20} />} /></StaggerItem>
-            <StaggerItem><StatsCard title="Total Subscriptions" value={formatNumber(subscriptions.length)} tone="gold" icon={<CreditCard size={20} />} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('newBusinesses')} value={formatNumber(newBusinesses)} tone="navy" icon={<Users size={20} />} sub={t('inSelectedPeriod')} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('totalShops')} value={formatNumber(stats?.totalShops ?? 0)} tone="teal" icon={<Building2 size={20} />} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('activeAgents')} value={formatNumber(activeAgents)} tone="navy" icon={<UserCog size={20} />} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('totalSubscriptions')} value={formatNumber(subscriptions.length)} tone="gold" icon={<CreditCard size={20} />} /></StaggerItem>
           </Stagger>
 
           <Reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <ChartWrapper title="Business Growth" subtitle="New businesses per month (last 12 months)">
+            <ChartWrapper title={t('businessGrowth')} subtitle={t('businessGrowthSubtitle')}>
               {growth.length === 0 ? (
-                <EmptyState message="No businesses yet" />
+                <EmptyState message={t('noBusinessesYet')} />
               ) : (
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={growth} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} tickFormatter={localizeChartLabel} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} />
-                      <Tooltip formatter={(value) => [Number(value), 'Businesses']} />
+                      <Tooltip formatter={(value) => [Number(value), t('businesses')]} labelFormatter={localizeChartLabel} />
                       <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -213,9 +216,9 @@ export default function ReportsPage() {
               )}
             </ChartWrapper>
 
-            <ChartWrapper title="Subscription Health" subtitle="Active vs lapsed subscriptions">
+            <ChartWrapper title={t('subscriptionHealth')} subtitle={t('subscriptionHealthSubtitle')}>
               {subscriptions.length === 0 ? (
-                <EmptyState message="No subscriptions" />
+                <EmptyState message={t('noSubscriptions')} />
               ) : (
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -225,29 +228,29 @@ export default function ReportsPage() {
                           <Cell key={entry.name} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => [Number(value), 'Shops']} />
+                      <Tooltip formatter={(value) => [Number(value), t('shops')]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
               )}
               <div className="flex items-center justify-center gap-6 text-sm">
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-secondary" /> Active ({activeSubs})</span>
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-danger" /> Lapsed ({lapsedSubs})</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-secondary" /> {t('active')} ({activeSubs})</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-danger" /> {t('lapsed')} ({lapsedSubs})</span>
               </div>
             </ChartWrapper>
           </Reveal>
 
           <Reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <ChartWrapper title="Recent Activities" subtitle="Latest platform actions">
+            <ChartWrapper title={t('recentActivities')} subtitle={t('latestPlatformActions')}>
               {logs.length === 0 ? (
-                <EmptyState message="No activity yet" />
+                <EmptyState message={t('noActivityYet')} />
               ) : (
                 <ul className="divide-y divide-border max-h-80 overflow-y-auto">
                   {logs.map((log) => (
                     <li key={log.id} className="py-3 flex items-center justify-between gap-4 transition-colors hover:bg-muted -mx-2 px-2 rounded-lg">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{actionLabel(log.action)}</p>
-                        <p className="text-xs text-subtle-foreground truncate">{log.user?.name || 'System'} {log.shop ? `· ${log.shop.name}` : ''}</p>
+                        <p className="text-xs text-subtle-foreground truncate">{log.user?.name || t('systemLabel')} {log.shop ? `· ${log.shop.name}` : ''}</p>
                       </div>
                       <span className="text-xs text-subtle-foreground shrink-0">{formatDateTime(log.createdAt)}</span>
                     </li>
@@ -256,20 +259,20 @@ export default function ReportsPage() {
               )}
             </ChartWrapper>
 
-            <ChartWrapper title="Agent Performance" subtitle="Owners onboarded per agent">
+            <ChartWrapper title={t('agentPerformance')} subtitle={t('agentPerformanceSubtitle')}>
               {(agents?.data ?? []).length === 0 ? (
-                <EmptyState message="No agents" />
+                <EmptyState message={t('noAgents')} />
               ) : (
                 <ul className="divide-y divide-border max-h-80 overflow-y-auto">
                   {(agents?.data ?? []).map((a) => (
                     <li key={a.agentId} className="py-3 flex items-center justify-between gap-4 transition-colors hover:bg-muted -mx-2 px-2 rounded-lg">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{a.name} <span className="text-xs text-subtle-foreground">@{a.username}</span></p>
-                        <p className="text-xs text-subtle-foreground">{a.shops} shops · {a.activeOwners} active owners</p>
+                        <p className="text-xs text-subtle-foreground">{a.shops} {t('shops').toLowerCase()} · {a.activeOwners} {t('shopsActiveOwners')}</p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-sm font-bold text-primary">{formatNumber(a.onboarded)}</p>
-                        <p className="text-xs text-subtle-foreground">onboarded</p>
+                        <p className="text-xs text-subtle-foreground">{t('onboarded')}</p>
                       </div>
                     </li>
                   ))}

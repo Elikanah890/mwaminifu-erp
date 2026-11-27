@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { Subscription, SubscriptionPlan, AdminDashboard } from '@/lib/types';
 import { formatCurrency, formatNumber, formatDate, errorMessage } from '@/lib/format';
+import { useI18n } from '@/lib/context/I18nContext';
+import { statusLabel, billingCycleLabel } from '@/lib/i18n/labels';
 import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
@@ -12,6 +14,7 @@ import { Stagger, StaggerItem, Reveal, motion } from '@/components/motion';
 import { Pill } from '@/components/StatusBadge';
 
 export default function RevenuePage() {
+  const { t } = useI18n();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [money, setMoney] = useState<AdminDashboard['money'] | null>(null);
@@ -67,9 +70,9 @@ export default function RevenuePage() {
   }, [active]);
 
   return (
-    <PageWrapper title="Platform Revenue" description="AGAC revenue from shop subscriptions" breadcrumb={['System', 'Revenue']}>
+    <PageWrapper title={t('platformRevenue')} description={t('revenueDesc')} breadcrumb={[t('systemOwner'), t('revenue')]}>
       <Reveal className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <p className="text-sm text-muted-foreground">Subscription revenue only — shop sales are excluded from platform revenue.</p>
+        <p className="text-sm text-muted-foreground">{t('revenueNote')}</p>
         <motion.button
           onClick={load}
           whileHover={{ y: -2 }}
@@ -77,7 +80,7 @@ export default function RevenuePage() {
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className="btn-outline text-sm px-3 py-1.5"
         >
-          Refresh
+          {t('refresh')}
         </motion.button>
       </Reveal>
 
@@ -92,24 +95,24 @@ export default function RevenuePage() {
       ) : (
         <>
           <Stagger className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StaggerItem><StatsCard title="Active Subscriptions" value={formatNumber(active.length)} tone="navy" sub="active shops only" /></StaggerItem>
-            <StaggerItem><StatsCard title="Total Subscription Revenue" value={formatCurrency(money?.totalRevenue ?? 0)} tone="teal" sub="from payments received" /></StaggerItem>
-            <StaggerItem><StatsCard title="MRR (This Month)" value={formatCurrency(money?.monthlyRevenue ?? 0)} tone="gold" sub="payments this month" /></StaggerItem>
-            <StaggerItem><StatsCard title="Net Platform Income" value={formatCurrency(money?.netIncome ?? 0)} tone="navy" sub={`after ${formatCurrency(money?.commissionsPaid ?? 0)} commissions`} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('activeSubscriptions')} value={formatNumber(active.length)} tone="navy" sub={t('activeShopsOnly')} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('totalSubscriptionRevenue')} value={formatCurrency(money?.totalRevenue ?? 0)} tone="teal" sub={t('fromPayments')} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('mrr')} value={formatCurrency(money?.monthlyRevenue ?? 0)} tone="gold" sub={t('paymentsThisMonth')} /></StaggerItem>
+            <StaggerItem><StatsCard title={t('netPlatformIncome')} value={formatCurrency(money?.netIncome ?? 0)} tone="navy" sub={`${t('after')} ${formatCurrency(money?.commissionsPaid ?? 0)} ${t('commissions').toLowerCase()}`} /></StaggerItem>
           </Stagger>
 
           <Reveal className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <ChartWrapper title="Subscriptions by Plan" subtitle="Active subscriptions grouped by plan">
+            <ChartWrapper title={t('subscriptionsByPlan')} subtitle={t('byPlanSubtitle')}>
               {byPlan.length === 0 ? (
-                <EmptyState message="No active subscriptions" />
+                <EmptyState message={t('noActiveSubscriptions')} />
               ) : (
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                     <tr className="border-b border-border">
-                      <th className="py-3 px-3 font-semibold">Plan</th>
-                      <th className="py-3 px-3 font-semibold">Subscriptions</th>
-                      <th className="py-3 px-3 text-right font-semibold">Share</th>
+                      <th className="py-3 px-3 font-semibold">{t('plan')}</th>
+                      <th className="py-3 px-3 font-semibold">{t('subscriptions')}</th>
+                      <th className="py-3 px-3 text-right font-semibold">{t('share')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -128,20 +131,20 @@ export default function RevenuePage() {
               )}
             </ChartWrapper>
 
-            <ChartWrapper title="Plan Pricing" subtitle="Configured subscription plans">
+            <ChartWrapper title={t('planPricing')} subtitle={t('planPricingSubtitle')}>
               {plans.length === 0 ? (
-                <EmptyState message="No plans configured" />
+                <EmptyState message={t('noPlansConfigured')} />
               ) : (
                 <ul className="divide-y divide-border">
                   {plans.map((p) => (
                     <li key={p.id} className="py-3 flex items-center justify-between gap-3 transition-colors hover:bg-muted -mx-2 px-2 rounded-lg">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">{p.name}</p>
-                        <p className="text-xs text-subtle-foreground capitalize">{p.billingCycle || 'month'}</p>
+                        <p className="text-xs text-subtle-foreground capitalize">{billingCycleLabel(t, p.billingCycle)}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-semibold text-primary">{formatCurrency(p.price)}</p>
-                        <Pill tone={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'Active' : 'Inactive'}</Pill>
+                        <Pill tone={p.isActive ? 'green' : 'gray'}>{p.isActive ? t('active') : t('inactive')}</Pill>
                       </div>
                     </li>
                   ))}
@@ -152,29 +155,29 @@ export default function RevenuePage() {
 
           <Reveal>
           <ChartWrapper
-            title="Subscriptions"
-            subtitle="Shops subscribed to the platform"
+            title={t('subscriptions')}
+            subtitle={t('subscriptionsSubtitle')}
             action={
               <select className="input-field max-w-[140px]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="">All</option>
-                <option value="active">Active</option>
-                <option value="expired">Expired</option>
+                <option value="">{t('all')}</option>
+                <option value="active">{t('active')}</option>
+                <option value="expired">{t('expired')}</option>
               </select>
             }
           >
             {filtered.length === 0 ? (
-              <EmptyState message="No subscriptions" />
+              <EmptyState message={t('noSubscriptions')} />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                     <tr className="border-b border-border">
-                      <th className="py-3 px-3 font-semibold">Shop</th>
-                      <th className="py-3 px-3 font-semibold">Owner</th>
-                      <th className="py-3 px-3 font-semibold">Plan</th>
-                      <th className="py-3 px-3 font-semibold">Start</th>
-                      <th className="py-3 px-3 font-semibold">End</th>
-                      <th className="py-3 px-3 font-semibold">Status</th>
+                      <th className="py-3 px-3 font-semibold">{t('shop')}</th>
+                      <th className="py-3 px-3 font-semibold">{t('owner')}</th>
+                      <th className="py-3 px-3 font-semibold">{t('plan')}</th>
+                      <th className="py-3 px-3 font-semibold">{t('start')}</th>
+                      <th className="py-3 px-3 font-semibold">{t('end')}</th>
+                      <th className="py-3 px-3 font-semibold">{t('status')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -185,7 +188,7 @@ export default function RevenuePage() {
                         <td className="py-2.5 px-3"><Pill tone="navy">{s.plan}</Pill></td>
                         <td className="py-2.5 px-3 text-xs text-muted-foreground">{formatDate(s.startDate)}</td>
                         <td className="py-2.5 px-3 text-xs text-muted-foreground">{s.endDate ? formatDate(s.endDate) : '-'}</td>
-                        <td className="py-2.5 px-3"><Pill tone={s.isActive ? 'green' : 'gray'}>{s.status}</Pill></td>
+                        <td className="py-2.5 px-3"><Pill tone={s.isActive ? 'green' : 'gray'}>{statusLabel(t, s.status)}</Pill></td>
                       </tr>
                     ))}
                   </tbody>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/lib/context/I18nContext';
 import { apiClient } from '@/lib/api/client';
 import { formatDateTime, errorMessage } from '@/lib/format';
 import Modal from '@/components/Modal';
@@ -18,6 +19,7 @@ interface NotificationItem {
 }
 
 export default function SystemNotificationsPage() {
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -104,11 +106,11 @@ export default function SystemNotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <PageWrapper title="Notifications" description="Send and manage platform notifications" breadcrumb={['System', 'Notifications']} actions={<>
-          <motion.button onClick={() => setShowSend(true)} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-gold">+ Send Notification</motion.button>
-          <motion.button onClick={load} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-outline">Refresh</motion.button>
+    <PageWrapper title={t('notifications')} description={t('notificationsSystemDesc')} breadcrumb={[t('systemOwner'), t('notifications')]} actions={<>
+          <motion.button onClick={() => setShowSend(true)} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-gold">{t('sendNotification')}</motion.button>
+          <motion.button onClick={load} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-outline">{t('refresh')}</motion.button>
           <motion.button onClick={markAllRead} disabled={markingAll || unreadCount === 0} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-teal disabled:opacity-40">
-            {markingAll ? 'Marking...' : 'Mark all as read'}
+            {markingAll ? t('marking') : t('markAllRead')}
           </motion.button>
         </>}>
 
@@ -119,7 +121,7 @@ export default function SystemNotificationsPage() {
         <SkeletonTable rows={6} />
       ) : notifications.length === 0 ? (
         <Reveal><div className="surface-card">
-          <EmptyState message="No notifications yet" />
+          <EmptyState message={t('noNotificationsYet')} />
         </div></Reveal>
       ) : (
         <Reveal className="surface-card overflow-hidden">
@@ -131,7 +133,7 @@ export default function SystemNotificationsPage() {
               >
                 <span
                   className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${n.isRead ? 'bg-border' : 'bg-secondary'}`}
-                  title={n.isRead ? 'Read' : 'Unread'}
+                  title={n.isRead ? t('read') : t('unread')}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-3">
@@ -146,7 +148,7 @@ export default function SystemNotificationsPage() {
                     disabled={busyId === n.id}
                     className="text-xs text-secondary font-medium hover:underline shrink-0"
                   >
-                    {busyId === n.id ? '...' : 'Mark read'}
+                    {busyId === n.id ? '...' : t('markRead')}
                   </button>
                 )}
               </li>
@@ -155,27 +157,27 @@ export default function SystemNotificationsPage() {
         </Reveal>
       )}
 
-      <Modal open={showSend} title="Send Notification" onClose={() => setShowSend(false)}>
+      <Modal open={showSend} title={t('sendNotification')} onClose={() => setShowSend(false)}>
         <form onSubmit={sendNotification} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Recipients</label>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('recipients')}</label>
             <select className="input-field" value={target} onChange={(e) => setTarget(e.target.value)}>
-              <option value="all_owners">All Business Owners</option>
-              <option value="all_agents">All Agents</option>
+              <option value="all_owners">{t('allBusinessOwners')}</option>
+              <option value="all_agents">{t('allAgents')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title</label>
-            <input className="input-field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Notification title" required />
+            <label className="block text-sm font-medium text-foreground mb-1">{t('title')}</label>
+            <input className="input-field" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('notificationTitle')} required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Body</label>
-            <textarea className="input-field min-h-[100px]" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Notification message" required />
+            <label className="block text-sm font-medium text-foreground mb-1">{t('body')}</label>
+            <textarea className="input-field min-h-[100px]" value={body} onChange={(e) => setBody(e.target.value)} placeholder={t('notificationMessage')} required />
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setShowSend(false)} className="flex-1 btn-outline">Cancel</button>
+            <button type="button" onClick={() => setShowSend(false)} className="flex-1 btn-outline">{t('cancel')}</button>
             <button type="submit" disabled={sending} className="flex-1 btn-gold">
-              {sending ? 'Sending...' : 'Send'}
+              {sending ? t('sending') : t('send')}
             </button>
           </div>
         </form>

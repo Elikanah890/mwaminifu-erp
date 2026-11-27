@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
 import { formatDateTime, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
 import { SkeletonTable, EmptyState } from '@/components/Spinner';
@@ -12,6 +13,7 @@ import { ActivityLog } from '@/lib/types';
 const PER_PAGE = 15;
 
 export default function AgentActivityPage() {
+  const { t } = useI18n();
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [meta, setMeta] = useState({ page: 1, limit: PER_PAGE, total: 0 });
   const [search, setSearch] = useState('');
@@ -41,18 +43,18 @@ export default function AgentActivityPage() {
   }, [load]);
 
   return (
-    <PageWrapper title="Activity Log" description="Your recent actions on the platform" breadcrumb={['Agent', 'Activity']}>
+    <PageWrapper title={t('agentActivityLog')} description={t('agentActivityDesc')} breadcrumb={[t('agentPortal'), t('activity')]}>
 
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <Reveal className="flex flex-wrap items-center gap-3 mb-4">
         <input
           className="input-field max-w-xs"
-          placeholder="Search action..."
+          placeholder={t('searchAction')}
           value={search}
           onChange={(e) => { setSearch(e.target.value); load(1); }}
         />
-        <input className="input-field max-w-[160px]" placeholder="Action filter" value={action} onChange={(e) => { setAction(e.target.value); load(1); }} />
+        <input className="input-field max-w-[160px]" placeholder={t('actionFilter')} value={action} onChange={(e) => { setAction(e.target.value); load(1); }} />
       </Reveal>
 
       {loading ? (
@@ -60,17 +62,17 @@ export default function AgentActivityPage() {
       ) : (
         <Reveal className="surface-card overflow-hidden">
           {activities.length === 0 ? (
-            <EmptyState message="No activity logged yet" />
+            <EmptyState message={t('noActivity')} />
           ) : (
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                 <tr className="border-b border-border">
-                  <th className="py-3 px-6 font-semibold">Date</th>
-                  <th className="py-3 px-6 font-semibold">Action</th>
-                  <th className="py-3 px-6 font-semibold">Business</th>
-                  <th className="py-3 px-6 font-semibold">Shop</th>
-                  <th className="py-3 px-6 font-semibold">Details</th>
+                  <th className="py-3 px-6 font-semibold">{t('date')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('action')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('business')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('shop')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('details')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
 import { SubscriptionPlan, ShopSubscription, PaginationMeta } from '@/lib/types';
 import { formatDate, formatCurrency, errorMessage } from '@/lib/format';
+import { useI18n } from '@/lib/context/I18nContext';
+import { statusLabel, billingCycleLabel } from '@/lib/i18n/labels';
 import Pagination from '@/components/Pagination';
 import Modal from '@/components/Modal';
 import { Pill } from '@/components/StatusBadge';
@@ -24,6 +26,7 @@ const EMPTY_PLAN: Omit<SubscriptionPlan, 'id' | 'createdAt'> = {
 type PlanForm = typeof EMPTY_PLAN;
 
 export default function SubscriptionsPage() {
+  const { t } = useI18n();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscriptions, setSubscriptions] = useState<ShopSubscription[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: 10, total: 0 });
@@ -157,7 +160,7 @@ export default function SubscriptionsPage() {
   };
 
   return (
-    <PageWrapper title="Subscriptions" description="Plans and active shop subscriptions" breadcrumb={['System', 'Subscriptions']} actions={<motion.button onClick={openCreate} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-gold">+ New Plan</motion.button>}>
+    <PageWrapper title={t('subscriptions')} description={t('subscriptionsDesc')} breadcrumb={[t('systemOwner'), t('subscriptions')]} actions={<motion.button onClick={openCreate} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-gold">{t('newPlan')}</motion.button>}>
 
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
@@ -169,7 +172,7 @@ export default function SubscriptionsPage() {
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className={`px-4 py-2 rounded-lg text-sm font-medium border ${tab === 'plans' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'}`}
         >
-          Plans ({plans.length})
+          {t('plans')} ({plans.length})
         </motion.button>
         <motion.button
           onClick={() => switchTab('subscriptions')}
@@ -178,7 +181,7 @@ export default function SubscriptionsPage() {
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className={`px-4 py-2 rounded-lg text-sm font-medium border ${tab === 'subscriptions' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'}`}
         >
-          Active Subscriptions ({meta.activeCount ?? 0})
+          {t('activeSubscriptions')} ({meta.activeCount ?? 0})
         </motion.button>
       </Reveal>
 
@@ -186,7 +189,7 @@ export default function SubscriptionsPage() {
         <SkeletonTable rows={8} />
       ) : tab === 'plans' ? (
         plans.length === 0 ? (
-          <EmptyState message="No plans yet. Create your first plan." />
+          <EmptyState message={t('noPlansYet')} />
         ) : (
           <Stagger className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {plans.map((plan) => (
@@ -194,11 +197,11 @@ export default function SubscriptionsPage() {
                 <MotionCard className="surface-card p-5 flex flex-col h-full">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold text-foreground text-lg">{plan.name}</h3>
-                    <Pill tone={plan.isActive ? 'green' : 'gray'}>{plan.isActive ? 'Active' : 'Inactive'}</Pill>
+                    <Pill tone={plan.isActive ? 'green' : 'gray'}>{plan.isActive ? t('active') : t('inactive')}</Pill>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">{plan.description || 'No description'}</p>
+                  <p className="text-sm text-muted-foreground mb-3">{plan.description || t('noDescription')}</p>
                   <p className="text-2xl font-bold text-primary mb-1">
-                    {formatCurrency(plan.price)} <span className="text-sm font-normal text-muted-foreground">/ {plan.billingCycle}</span>
+                    {formatCurrency(plan.price)} <span className="text-sm font-normal text-muted-foreground">/ {billingCycleLabel(t, plan.billingCycle)}</span>
                   </p>
                   <ul className="text-sm text-foreground space-y-1 mb-4 flex-1">
                     {plan.features.map((f, i) => (
@@ -207,12 +210,12 @@ export default function SubscriptionsPage() {
                         <span>{f}</span>
                       </li>
                     ))}
-                    {plan.features.length === 0 && <li className="text-subtle-foreground text-xs">No features listed</li>}
+                    {plan.features.length === 0 && <li className="text-subtle-foreground text-xs">{t('noFeatures')}</li>}
                   </ul>
                   <div className="flex gap-2">
-                    <button onClick={() => openEdit(plan)} className="flex-1 btn-outline">Edit</button>
+                    <button onClick={() => openEdit(plan)} className="flex-1 btn-outline">{t('edit')}</button>
                     <button onClick={() => deletePlan(plan)} className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-danger border border-danger/25 hover:bg-danger/10">
-                      Delete
+                      {t('delete')}
                     </button>
                   </div>
                 </MotionCard>
@@ -223,29 +226,29 @@ export default function SubscriptionsPage() {
       ) : (
         <div>
           <Reveal className="flex items-center gap-3 mb-4">
-            <label className="text-sm text-muted-foreground">Filter status</label>
+            <label className="text-sm text-muted-foreground">{t('filterStatus')}</label>
             <select className="input-field max-w-[160px]" value={status} onChange={(e) => { setStatus(e.target.value); loadSubs(1); }}>
-              <option value="">All</option>
-              <option value="ACTIVE">Active</option>
-              <option value="EXPIRED">Expired</option>
-              <option value="CANCELLED">Cancelled</option>
-              <option value="PENDING">Pending</option>
+              <option value="">{t('all')}</option>
+              <option value="ACTIVE">{t('active')}</option>
+              <option value="EXPIRED">{t('expired')}</option>
+              <option value="CANCELLED">{t('cancelled')}</option>
+              <option value="PENDING">{t('pending')}</option>
             </select>
           </Reveal>
           <Reveal className="surface-card overflow-hidden">
             {subscriptions.length === 0 ? (
-              <EmptyState message="No subscriptions" />
+              <EmptyState message={t('noSubscriptions')} />
             ) : (
               <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                   <tr className="border-b border-border">
-                    <th className="py-3 px-6 font-semibold">Shop</th>
-                    <th className="py-3 px-6 font-semibold">Owner</th>
-                    <th className="py-3 px-6 font-semibold">Plan</th>
-                    <th className="py-3 px-6 font-semibold">Status</th>
-                    <th className="py-3 px-6 font-semibold">Start</th>
-                    <th className="py-3 px-6 font-semibold">End</th>
+                    <th className="py-3 px-6 font-semibold">{t('shop')}</th>
+                    <th className="py-3 px-6 font-semibold">{t('owner')}</th>
+                    <th className="py-3 px-6 font-semibold">{t('plan')}</th>
+                    <th className="py-3 px-6 font-semibold">{t('status')}</th>
+                    <th className="py-3 px-6 font-semibold">{t('start')}</th>
+                    <th className="py-3 px-6 font-semibold">{t('end')}</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -256,12 +259,12 @@ export default function SubscriptionsPage() {
                       <td className="py-3 px-6 text-muted-foreground">{s.shop?.owner?.name || '-'}</td>
                       <td className="py-3 px-6"><Pill tone="navy">{s.plan}</Pill></td>
                       <td className="py-3 px-6">
-                        <Pill tone={s.status === 'ACTIVE' ? 'green' : s.status === 'EXPIRED' ? 'red' : 'amber'}>{s.status}</Pill>
+                        <Pill tone={s.status === 'ACTIVE' ? 'green' : s.status === 'EXPIRED' ? 'red' : 'amber'}>{statusLabel(t, s.status)}</Pill>
                       </td>
                       <td className="py-3 px-6 text-xs text-muted-foreground">{formatDate(s.startDate)}</td>
                       <td className="py-3 px-6 text-xs text-muted-foreground">{s.endDate ? formatDate(s.endDate) : '-'}</td>
                       <td className="py-3 px-6">
-                        <button onClick={() => setEditingSub(s)} className="text-secondary hover:underline text-xs font-medium">Manage</button>
+                        <button onClick={() => setEditingSub(s)} className="text-secondary hover:underline text-xs font-medium">{t('manage')}</button>
                       </td>
                     </tr>
                   ))}
@@ -276,35 +279,35 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      <Modal open={!!editing} title={editing === 'new' ? 'Create Plan' : editing ? `Edit Plan: ${editing.name}` : ''} onClose={() => setEditing(null)} wide>
+      <Modal open={!!editing} title={editing === 'new' ? t('createPlan') : editing ? `${t('editPlan')}: ${editing.name}` : ''} onClose={() => setEditing(null)} wide>
         <form onSubmit={savePlan} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <input className="input-field" placeholder="Plan name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <input className="input-field" placeholder={t('planName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <div className="grid grid-cols-2 gap-4">
-              <input className="input-field" type="number" min="0" step="0.01" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} required />
+              <input className="input-field" type="number" min="0" step="0.01" placeholder={t('price')} value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} required />
               <select className="input-field" value={form.billingCycle} onChange={(e) => setForm({ ...form, billingCycle: e.target.value })}>
-                <option value="MONTHLY">Monthly</option>
-                <option value="YEARLY">Yearly</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="ONE_TIME">One-time</option>
+                <option value="MONTHLY">{t('monthly')}</option>
+                <option value="YEARLY">{t('yearly')}</option>
+                <option value="WEEKLY">{t('weekly')}</option>
+                <option value="ONE_TIME">{t('oneTime')}</option>
               </select>
             </div>
           </div>
-          <input className="input-field" placeholder="Description" value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <textarea className="input-field min-h-[80px]" placeholder="Features (one per line)" value={featuresText} onChange={(e) => setFeaturesText(e.target.value)} />
-          <textarea className="input-field min-h-[80px] font-mono text-xs" placeholder='Limits as JSON, e.g. {"products": 500, "employees": 10}' value={limitsText} onChange={(e) => setLimitsText(e.target.value)} />
+          <input className="input-field" placeholder={t('description')} value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <textarea className="input-field min-h-[80px]" placeholder={t('featuresOnePerLine')} value={featuresText} onChange={(e) => setFeaturesText(e.target.value)} />
+          <textarea className="input-field min-h-[80px] font-mono text-xs" placeholder={t('limitsJson')} value={limitsText} onChange={(e) => setLimitsText(e.target.value)} />
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
-            Active
+            {t('active')}
           </label>
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setEditing(null)} className="flex-1 btn-outline">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 btn-navy">{saving ? 'Saving...' : 'Save Plan'}</button>
+            <button type="button" onClick={() => setEditing(null)} className="flex-1 btn-outline">{t('cancel')}</button>
+            <button type="submit" disabled={saving} className="flex-1 btn-navy">{saving ? t('saving') : t('savePlan')}</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={!!editingSub} title="Manage Subscription" onClose={() => setEditingSub(null)}>
+      <Modal open={!!editingSub} title={t('manageSubscription')} onClose={() => setEditingSub(null)}>
         {editingSub && (
           <form onSubmit={updateSubscription} className="space-y-4">
             <div className="bg-muted rounded-lg p-3">
@@ -312,7 +315,7 @@ export default function SubscriptionsPage() {
               <p className="text-xs text-muted-foreground">{editingSub.shop?.owner?.name}</p>
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Plan</label>
+              <label className="block text-xs text-muted-foreground mb-1">{t('plan')}</label>
               <select name="subPlan" className="input-field" defaultValue={editingSub.plan}>
                 {plans.map((p) => (
                   <option key={p.id} value={p.name}>{p.name}</option>
@@ -320,21 +323,21 @@ export default function SubscriptionsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Status</label>
+              <label className="block text-xs text-muted-foreground mb-1">{t('status')}</label>
               <select name="subStatus" className="input-field" defaultValue={editingSub.status}>
-                <option value="ACTIVE">Active</option>
-                <option value="EXPIRED">Expired</option>
-                <option value="CANCELLED">Cancelled</option>
-                <option value="PENDING">Pending</option>
+                <option value="ACTIVE">{t('active')}</option>
+                <option value="EXPIRED">{t('expired')}</option>
+                <option value="CANCELLED">{t('cancelled')}</option>
+                <option value="PENDING">{t('pending')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">End date</label>
+              <label className="block text-xs text-muted-foreground mb-1">{t('endDate')}</label>
               <input name="subEnd" type="date" className="input-field" defaultValue={editingSub.endDate ? editingSub.endDate.slice(0, 10) : ''} />
             </div>
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setEditingSub(null)} className="flex-1 btn-outline">Cancel</button>
-              <button type="submit" disabled={saving} className="flex-1 btn-navy">{saving ? 'Saving...' : 'Update'}</button>
+              <button type="button" onClick={() => setEditingSub(null)} className="flex-1 btn-outline">{t('cancel')}</button>
+              <button type="submit" disabled={saving} className="flex-1 btn-navy">{saving ? t('saving') : t('update')}</button>
             </div>
           </form>
         )}

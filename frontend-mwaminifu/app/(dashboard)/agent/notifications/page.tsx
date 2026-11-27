@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
 import { formatDateTime, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
 import PageWrapper from '@/components/PageWrapper';
@@ -21,6 +22,7 @@ interface AgentNotification {
 const PER_PAGE = 10;
 
 export default function AgentNotificationsPage() {
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<AgentNotification[]>([]);
   const [meta, setMeta] = useState({ page: 1, limit: PER_PAGE, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -71,7 +73,7 @@ export default function AgentNotificationsPage() {
     try {
       await apiClient.put('/agents/notifications/read-all', {});
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setNotify('All notifications marked as read');
+      setNotify(t('allMarkedRead'));
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -82,10 +84,10 @@ export default function AgentNotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <PageWrapper title="Notifications" description="Updates about your account and customers" breadcrumb={['Agent', 'Notifications']} actions={<>
-          <motion.button onClick={() => load(meta.page)} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-outline">Refresh</motion.button>
+    <PageWrapper title={t('notifications')} description={t('notificationsDesc')} breadcrumb={[t('agentPortal'), t('notifications')]} actions={<>
+          <motion.button onClick={() => load(meta.page)} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-outline">{t('refresh')}</motion.button>
           <motion.button onClick={markAllRead} disabled={markingAll || unreadCount === 0} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-teal disabled:opacity-40">
-            {markingAll ? 'Marking...' : 'Mark all as read'}
+            {markingAll ? t('marking') : t('markAllRead')}
           </motion.button>
         </>}>
 
@@ -96,7 +98,7 @@ export default function AgentNotificationsPage() {
         <SkeletonTable rows={6} />
       ) : notifications.length === 0 ? (
         <Reveal><div className="surface-card">
-          <EmptyState message="No notifications" />
+          <EmptyState message={t('noNotifications')} />
         </div></Reveal>
       ) : (
         <Reveal className="surface-card overflow-hidden">
@@ -108,7 +110,7 @@ export default function AgentNotificationsPage() {
               >
                 <span
                   className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${n.isRead ? 'bg-border' : 'bg-secondary'}`}
-                  title={n.isRead ? 'Read' : 'Unread'}
+                  title={n.isRead ? t('read') : t('unread')}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-3">

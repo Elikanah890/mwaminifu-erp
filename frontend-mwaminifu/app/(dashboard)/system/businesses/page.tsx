@@ -11,6 +11,8 @@ import Modal from '@/components/Modal';
 import PageWrapper from '@/components/PageWrapper';
 import { Reveal, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
+import { useI18n } from '@/lib/context/I18nContext';
+import { statusLabel } from '@/lib/i18n/labels';
 import { ChevronDown, ChevronRight, Plus, Store, CreditCard, KeyRound, Trash2 } from 'lucide-react';
 
 const PER_PAGE = 10;
@@ -86,6 +88,7 @@ const EMPTY_FORM = {
 };
 
 export default function BusinessesPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>('owners');
 
@@ -194,7 +197,7 @@ export default function BusinessesPage() {
         shopName: form.shopName.trim(),
         tempPassword: res.data?.tempPassword,
       });
-      toast('Business added successfully');
+      toast(t('businessAdded'));
       load(1);
     } catch (err) {
       setFormError(errorMessage(err));
@@ -247,10 +250,10 @@ export default function BusinessesPage() {
   };
 
   const removeOwner = async (b: Business) => {
-    if (!window.confirm('Remove this business owner? Their shops will be archived and sign-in disabled.')) return;
+    if (!window.confirm(t('removeOwnerConfirm'))) return;
     try {
       await apiClient.del(`/admin/business-owners/${b.id}`);
-      toast('Business owner removed');
+      toast(t('businessRemoved'));
       load(1);
     } catch (err) {
       toast(errorMessage(err), 'error');
@@ -271,27 +274,27 @@ export default function BusinessesPage() {
   };
 
   return (
-    <PageWrapper title="Businesses" description="Business owners and shops" breadcrumb={['System', 'Businesses']}>
+    <PageWrapper title={t('businesses')} description={t('businessesDesc')} breadcrumb={[t('systemOwner'), t('businesses')]}>
       <Reveal className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex gap-2">
-          {(['owners', 'shops'] as Tab[]).map((t) => (
+          {(['owners', 'shops'] as Tab[]).map((tabKey) => (
             <motion.button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabKey}
+              onClick={() => setTab(tabKey)}
               whileHover={{ y: -2 }}
               whileTap={{ scale: 0.98 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className={`px-4 py-2 rounded-lg text-sm font-medium border capitalize ${
-                tab === t ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'
+                tab === tabKey ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:bg-muted'
               }`}
             >
-              {t === 'owners' ? 'Business Owners' : t}
+              {tabKey === 'owners' ? t('businessOwners') : t('shops')}
             </motion.button>
           ))}
         </div>
         <div className="flex items-center gap-3">
           {tab === 'owners' && (
-            <button onClick={exportCsv} className="btn-outline">Export CSV</button>
+            <button onClick={exportCsv} className="btn-outline">{t('csvExport')}</button>
           )}
           <motion.button
             onClick={openAdd}
@@ -300,7 +303,7 @@ export default function BusinessesPage() {
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="btn-gold inline-flex items-center gap-2"
           >
-            <Plus size={16} /> Add Business
+            <Plus size={16} /> {t('addBusiness')}
           </motion.button>
         </div>
       </Reveal>
@@ -312,14 +315,14 @@ export default function BusinessesPage() {
           <Reveal className="flex flex-wrap items-center gap-3 mb-4">
             <input
               className="input-field max-w-xs"
-              placeholder="Search business, phone, agent..."
+              placeholder={t('searchBusiness')}
               value={search}
               onChange={(e) => { setSearch(e.target.value); load(1); }}
             />
             <select className="input-field max-w-[180px]" value={status} onChange={(e) => { setStatus(e.target.value); load(1); }}>
-              <option value="">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="">{t('allStatus')}</option>
+              <option value="active">{t('active')}</option>
+              <option value="inactive">{t('inactive')}</option>
             </select>
           </Reveal>
 
@@ -328,20 +331,20 @@ export default function BusinessesPage() {
           ) : (
             <Reveal className="surface-card overflow-hidden">
               {businesses.length === 0 ? (
-                <EmptyState message="No businesses found" />
+                <EmptyState message={t('noBusinesses')} />
               ) : (
                 <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                     <tr className="border-b border-border">
                       <th className="w-10 py-4 px-4" />
-                      <th className="py-3 px-4 font-semibold">Business</th>
-                      <th className="hidden py-3 px-4 font-semibold sm:table-cell">Phone</th>
-                      <th className="hidden py-3 px-4 font-semibold md:table-cell">Agent</th>
-                      <th className="py-3 px-4 font-semibold">Shops</th>
-                      <th className="py-3 px-4 font-semibold">Status</th>
-                      <th className="hidden py-3 px-4 font-semibold lg:table-cell">Created</th>
-                      <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                      <th className="py-3 px-4 font-semibold">{t('business')}</th>
+                      <th className="hidden py-3 px-4 font-semibold sm:table-cell">{t('phone')}</th>
+                      <th className="hidden py-3 px-4 font-semibold md:table-cell">{t('agentPortal')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('shops')}</th>
+                      <th className="py-3 px-4 font-semibold">{t('status')}</th>
+                      <th className="hidden py-3 px-4 font-semibold lg:table-cell">{t('createdLabel')}</th>
+                      <th className="py-3 px-4 font-semibold text-right">{t('actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -360,15 +363,15 @@ export default function BusinessesPage() {
                             <td className="hidden py-3 px-4 text-muted-foreground sm:table-cell">{b.phone || '-'}</td>
                             <td className="hidden py-3 px-4 text-muted-foreground md:table-cell">{b.agentName || '-'}</td>
                             <td className="py-3 px-4">{b.shopCount}</td>
-                            <td className="py-3 px-4"><StatusBadge active={b.isActive} /></td>
+                            <td className="py-3 px-4"><StatusBadge active={b.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} /></td>
                             <td className="hidden py-3 px-4 text-muted-foreground text-xs lg:table-cell">{formatDate(b.createdAt)}</td>
                             <td className="py-3 px-4">
                               <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                                <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline" title="Reset access">
-                                  <KeyRound size={14} /> Reset
+                                <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-xs font-medium text-secondary hover:underline" title={t('resetAccess')}>
+                                  <KeyRound size={14} /> {t('reset')}
                                 </button>
-                                <button onClick={() => removeOwner(b)} className="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline" title="Remove owner">
-                                  <Trash2 size={14} /> Remove
+                                <button onClick={() => removeOwner(b)} className="inline-flex items-center gap-1 text-xs font-medium text-danger hover:underline" title={t('removeOwner')}>
+                                  <Trash2 size={14} /> {t('remove')}
                                 </button>
                               </div>
                             </td>
@@ -383,21 +386,21 @@ export default function BusinessesPage() {
                                 ) : detail ? (
                                   <div className="space-y-6">
                                     <div className="surface-card p-5">
-                                      <h3 className="font-semibold text-primary mb-4">Basic Information</h3>
+                                      <h3 className="font-semibold text-primary mb-4">{t('basicInformation')}</h3>
                                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                                        <div><p className="text-xs text-subtle-foreground">Owner</p><p className="font-medium text-foreground">{detail.name}</p></div>
-                                        <div><p className="text-xs text-subtle-foreground">Phone</p><p className="font-medium text-foreground">{detail.phone || '-'}</p></div>
-                                        <div><p className="text-xs text-subtle-foreground">Email</p><p className="font-medium text-foreground">{detail.email || '-'}</p></div>
-                                        <div><p className="text-xs text-subtle-foreground">Agent</p><p className="font-medium text-foreground">{detail.agent ? `${detail.agent.name} (@${detail.agent.username})` : '-'}</p></div>
-                                        <div><p className="text-xs text-subtle-foreground">Status</p><StatusBadge active={detail.isActive} /></div>
-                                        <div><p className="text-xs text-subtle-foreground">Created</p><p className="font-medium text-foreground">{formatDate(detail.createdAt)}</p></div>
+                                        <div><p className="text-xs text-subtle-foreground">{t('owner')}</p><p className="font-medium text-foreground">{detail.name}</p></div>
+                                        <div><p className="text-xs text-subtle-foreground">{t('phone')}</p><p className="font-medium text-foreground">{detail.phone || '-'}</p></div>
+                                        <div><p className="text-xs text-subtle-foreground">{t('email')}</p><p className="font-medium text-foreground">{detail.email || '-'}</p></div>
+                                        <div><p className="text-xs text-subtle-foreground">{t('agentPortal')}</p><p className="font-medium text-foreground">{detail.agent ? `${detail.agent.name} (@${detail.agent.username})` : '-'}</p></div>
+                                        <div><p className="text-xs text-subtle-foreground">{t('status')}</p><StatusBadge active={detail.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} /></div>
+                                        <div><p className="text-xs text-subtle-foreground">{t('createdLabel')}</p><p className="font-medium text-foreground">{formatDate(detail.createdAt)}</p></div>
                                       </div>
                                     </div>
 
                                     <div className="surface-card p-5">
-                                      <h3 className="font-semibold text-primary mb-4 flex items-center gap-2"><Store size={16} /> Shops ({detail.shops.length})</h3>
+                                      <h3 className="font-semibold text-primary mb-4 flex items-center gap-2"><Store size={16} /> {t('shops')} ({detail.shops.length})</h3>
                                       {detail.shops.length === 0 ? (
-                                        <EmptyState message="No shops under this owner" />
+                                        <EmptyState message={t('noShopsUnderOwner')} />
                                       ) : (
                                         <div className="space-y-4">
                                           {detail.shops.map((shop) => {
@@ -407,10 +410,10 @@ export default function BusinessesPage() {
                                                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                                                   <div>
                                                     <p className="font-semibold text-foreground">{shop.name}</p>
-                                                    <p className="text-xs text-subtle-foreground">{shop.address || 'No location'}</p>
+                                                    <p className="text-xs text-subtle-foreground">{shop.address || t('noLocation')}</p>
                                                   </div>
                                                   <div className="flex items-center gap-2">
-                                                    <Pill tone={shop.isArchived ? 'gray' : 'green'}>{shop.isArchived ? 'Archived' : 'Active'}</Pill>
+                                                    <Pill tone={shop.isArchived ? 'gray' : 'green'}>{shop.isArchived ? t('archived') : t('active')}</Pill>
                                                     {sd?.stats.subscription && (
                                                       <Pill tone={sd.stats.subscription.isActive ? 'navy' : 'amber'}>
                                                         {sd.stats.subscription.plan}
@@ -422,7 +425,7 @@ export default function BusinessesPage() {
                                                 {sd?.stats.subscription && (
                                                   <p className="text-xs text-muted-foreground">
                                                     <CreditCard size={13} className="inline mr-1.5" />
-                                                    Subscription: <strong>{sd.stats.subscription.plan}</strong> — {sd.stats.subscription.status}
+                                                    {t('subscription')}: <strong>{sd.stats.subscription.plan}</strong> — {statusLabel(t, sd.stats.subscription.status)}
                                                     {sd.stats.subscription.endDate ? ` (ends ${formatDate(sd.stats.subscription.endDate)})` : ''}
                                                   </p>
                                                 )}
@@ -451,17 +454,17 @@ export default function BusinessesPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-semibold text-foreground">{b.name}</p>
-                          <p className="text-xs text-muted-foreground">{b.phone || 'No phone'}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Agent: {b.agentName || '-'} · {b.shopCount} shop(s)</p>
+                          <p className="text-xs text-muted-foreground">{b.phone || t('noPhone')}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{t('agentPortal')}: {b.agentName || '-'} · {b.shopCount} {t('agentShopCount')}</p>
                         </div>
-                        <StatusBadge active={b.isActive} />
+                        <StatusBadge active={b.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium">
                         <button onClick={() => resetOwnerAccess(b)} className="inline-flex items-center gap-1 text-secondary hover:underline">
-                          <KeyRound size={14} /> Reset password
+                          <KeyRound size={14} /> {t('resetPassword')}
                         </button>
                         <button onClick={() => removeOwner(b)} className="inline-flex items-center gap-1 text-danger hover:underline">
-                          <Trash2 size={14} /> Remove owner
+                          <Trash2 size={14} /> {t('removeOwner')}
                         </button>
                       </div>
                     </div>
@@ -479,18 +482,18 @@ export default function BusinessesPage() {
       {tab === 'shops' && (shopsLoading ? (
         <SkeletonTable rows={8} />
       ) : shops.length === 0 ? (
-        <Reveal><div className="surface-card"><EmptyState message="No shops found" /></div></Reveal>
+        <Reveal><div className="surface-card"><EmptyState message={t('noShopsFound')} /></div></Reveal>
       ) : (
         <Reveal className="surface-card overflow-hidden">
           <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
               <tr className="border-b border-border">
-                <th className="py-3 px-6 font-semibold">Shop</th>
-                <th className="py-3 px-6 font-semibold">Owner</th>
-                <th className="py-3 px-6 font-semibold">Location</th>
-                <th className="py-3 px-6 font-semibold">Status</th>
-                <th className="py-3 px-6 font-semibold">Created</th>
+                <th className="py-3 px-6 font-semibold">{t('shop')}</th>
+                <th className="py-3 px-6 font-semibold">{t('owner')}</th>
+                <th className="py-3 px-6 font-semibold">{t('location')}</th>
+                <th className="py-3 px-6 font-semibold">{t('status')}</th>
+                <th className="py-3 px-6 font-semibold">{t('createdLabel')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -499,7 +502,7 @@ export default function BusinessesPage() {
                   <td className="py-3 px-6 font-medium text-foreground">{s.name}</td>
                   <td className="py-3 px-6 text-muted-foreground">{s.owner?.name ?? '-'}</td>
                   <td className="py-3 px-6 text-muted-foreground">{s.address || '-'}</td>
-                  <td className="py-3 px-6"><StatusBadge active={!s.isArchived} activeLabel="Active" inactiveLabel="Archived" /></td>
+                  <td className="py-3 px-6"><StatusBadge active={!s.isArchived} activeLabel={t('active')} inactiveLabel={t('archived')} /></td>
                   <td className="py-3 px-6 text-muted-foreground text-xs">{formatDate(s.createdAt)}</td>
                 </tr>
               ))}
@@ -512,10 +515,10 @@ export default function BusinessesPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-foreground">{s.name}</p>
-                    <p className="text-xs text-muted-foreground">{s.owner?.name ?? 'No owner'}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{s.address || 'No location'}</p>
+                    <p className="text-xs text-muted-foreground">{s.owner?.name ?? t('noOwner')}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{s.address || t('noLocation')}</p>
                   </div>
-                  <StatusBadge active={!s.isArchived} activeLabel="Active" inactiveLabel="Archived" />
+                  <StatusBadge active={!s.isArchived} activeLabel={t('active')} inactiveLabel={t('archived')} />
                 </div>
               </div>
             ))}
@@ -523,74 +526,72 @@ export default function BusinessesPage() {
         </Reveal>
       ))}
 
-      <Modal open={showAdd} title="Add Business" onClose={() => setShowAdd(false)} wide>
+      <Modal open={showAdd} title={t('addBusiness')} onClose={() => setShowAdd(false)} wide>
         {formError && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{formError}</div>}
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
-            <p className="text-sm font-semibold text-primary mb-2">Owner Details</p>
+            <p className="text-sm font-semibold text-primary mb-2">{t('ownerDetails')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <input className="input-field" placeholder="Full Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <input className="input-field" type="email" placeholder="Owner email (required)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-              <input className="input-field" placeholder="Phone (optional)" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input className="input-field" placeholder={t('fullName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <input className="input-field" type="email" placeholder={t('ownerEmailRequired')} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              <input className="input-field" placeholder={t('phoneOptional')} inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </div>
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-primary mb-2">Shop & Location</p>
+            <p className="text-sm font-semibold text-primary mb-2">{t('shopLocation')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <input className="input-field" placeholder="Shop Name" value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} required />
+              <input className="input-field" placeholder={t('shopName')} value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} required />
               <select className="input-field" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                <option value="">Business category</option>
+                <option value="">{t('businessCategory')}</option>
                 {BUSINESS_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <select className="input-field" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}>
-                <option value="">Region</option>
+                <option value="">{t('region')}</option>
                 {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
-              <input className="input-field" placeholder="District" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} />
-              <input className="input-field" placeholder="Ward" value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
-              <input className="input-field" placeholder="Street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+              <input className="input-field" placeholder={t('district')} value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} />
+              <input className="input-field" placeholder={t('ward')} value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
+              <input className="input-field" placeholder={t('street')} value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
             </div>
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-primary mb-2">Assignment</p>
+            <p className="text-sm font-semibold text-primary mb-2">{t('assignment')}</p>
             <select className="input-field" value={form.agentId} onChange={(e) => setForm({ ...form, agentId: e.target.value })}>
-              <option value="">No agent (unassigned)</option>
+              <option value="">{t('noAgentUnassigned')}</option>
               {agents.map((a) => <option key={a.id} value={a.id}>{a.name} (@{a.username})</option>)}
             </select>
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setShowAdd(false)} className="flex-1 btn-outline">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 btn-gold">{saving ? 'Creating...' : 'Create Business'}</button>
+            <button type="button" onClick={() => setShowAdd(false)} className="flex-1 btn-outline">{t('cancel')}</button>
+            <button type="submit" disabled={saving} className="flex-1 btn-gold">{saving ? t('creating') : t('createBusiness')}</button>
           </div>
         </form>
       </Modal>
 
       {/* Owner activation instructions */}
-      <Modal open={!!createdOwner} title="Business Owner Created" onClose={() => setCreatedOwner(null)}>
+      <Modal open={!!createdOwner} title={t('businessOwnerCreated')} onClose={() => setCreatedOwner(null)}>
         {createdOwner && (
           <div className="space-y-4 text-sm">
             <p className="text-muted-foreground">
-              <strong className="text-foreground">{createdOwner.name}</strong> ({createdOwner.shopName}) has been created.
-              A welcome email was sent to <strong className="text-foreground">{createdOwner.email}</strong>.
+              <strong className="text-foreground">{createdOwner.name}</strong> ({createdOwner.shopName}) {t('hasBeenCreatedWelcome')} <strong className="text-foreground">{createdOwner.email}</strong>.
             </p>
             <div className="rounded-lg border border-secondary/30 bg-secondary/5 p-4 space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-subtle-foreground">Login email</span>
+                <span className="text-subtle-foreground">{t('loginEmail')}</span>
                 <span className="font-mono font-semibold text-foreground">{createdOwner.email}</span>
               </div>
               {createdOwner.tempPassword && (
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-subtle-foreground">Temporary password</span>
+                  <span className="text-subtle-foreground">{t('tempPassword')}</span>
                   <span className="font-mono font-semibold text-secondary">{createdOwner.tempPassword}</span>
                 </div>
               )}
             </div>
             <p className="rounded-lg bg-muted px-3 py-2 text-xs text-subtle-foreground">
-              The owner signs in with email + password and must change the temporary password on first login.
-              Employees are added by the owner, not here.
+              {t('ownerSignsInDesc')}
             </p>
             <button
               onClick={() => {
@@ -599,9 +600,9 @@ export default function BusinessesPage() {
               }}
               className="btn-outline w-full"
             >
-              Copy credentials
+              {t('copyCredentials')}
             </button>
-            <button onClick={() => setCreatedOwner(null)} className="btn-navy w-full">Done</button>
+            <button onClick={() => setCreatedOwner(null)} className="btn-navy w-full">{t('done')}</button>
           </div>
         )}
       </Modal>

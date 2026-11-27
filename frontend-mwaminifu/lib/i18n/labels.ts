@@ -6,6 +6,8 @@ const STATUS_KEYS: Record<string, string> = {
   REFUNDED: 'refunded',
   VOIDED: 'voided',
   PENDING: 'pending',
+  PENDING_SETUP: 'pendingSetup',
+  RESOLVED: 'resolved',
   APPROVED: 'approved',
   REJECTED: 'rejected',
   ACTIVE: 'active',
@@ -29,6 +31,18 @@ const STATUS_KEYS: Record<string, string> = {
   GRACE: 'grace',
   LAPSED: 'lapsed',
 };
+
+const PRIORITY_KEYS: Record<string, string> = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  URGENT: 'urgent',
+};
+
+export function priorityLabel(t: Translator, value?: string | null): string {
+  if (!value) return '-';
+  return t(PRIORITY_KEYS[value] ?? value);
+}
 
 export function statusLabel(t: Translator, value?: string | null): string {
   if (!value) return '-';
@@ -67,6 +81,16 @@ const CASH_TYPE_KEYS: Record<string, string> = {
 export function cashTypeLabel(t: Translator, value?: string | null): string {
   if (!value) return '-';
   return t(CASH_TYPE_KEYS[value] ?? value);
+}
+
+const BILLING_KEYS: Record<string, string> = {
+  MONTHLY: 'monthly', YEARLY: 'yearly', WEEKLY: 'weekly', DAILY: 'daily', ONE_TIME: 'oneTime',
+  month: 'monthly', year: 'yearly', week: 'weekly', day: 'daily',
+};
+
+export function billingCycleLabel(t: Translator, value?: string | null): string {
+  if (!value) return '-';
+  return t(BILLING_KEYS[value] ?? value);
 }
 
 const ROLE_KEYS: Record<string, string> = {

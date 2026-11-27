@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
 import { formatDate, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import { SkeletonCard } from '@/components/Spinner';
@@ -20,6 +21,7 @@ interface AgentProfile {
 }
 
 export default function AgentProfilePage() {
+  const { t } = useI18n();
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -58,15 +60,15 @@ export default function AgentProfilePage() {
     setError('');
     setNotify('');
     if (!currentPassword) {
-      setError('Enter your current password');
+      setError(t('enterCurrentPassword'));
       return;
     }
     if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
+      setError(t('passwordMin6'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      setError(t('passwordsDoNotMatch'));
       return;
     }
     setSaving(true);
@@ -75,7 +77,7 @@ export default function AgentProfilePage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setNotify('Password changed successfully');
+      setNotify(t('passwordChangedSuccess'));
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -94,90 +96,90 @@ export default function AgentProfilePage() {
   const onboarded = profile?.stats?.onboardedBusinesses ?? profile?._count?.onboardedUsers ?? 0;
 
   return (
-    <PageWrapper title="Agent Profile" description="Your account details" breadcrumb={['Agent', 'Profile']}>
+    <PageWrapper title={t('agentProfile')} description={t('profileDesc')} breadcrumb={[t('agentPortal'), t('profile')]}>
 
       {notify && <div className="bg-success/10 border border-success/25 text-secondary px-4 py-3 rounded-lg mb-4 text-sm">{notify}</div>}
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <Stagger className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <StaggerItem className="surface-card p-6">
-          <h2 className="text-lg font-semibold text-primary mb-4">Profile Information</h2>
+          <h2 className="text-lg font-semibold text-primary mb-4">{t('profileInformation')}</h2>
           <dl className="space-y-4">
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Name</dt>
+              <dt className="text-muted-foreground text-sm">{t('name')}</dt>
               <dd className="font-medium text-foreground">{profile?.name || '-'}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Agent Code</dt>
+              <dt className="text-muted-foreground text-sm">{t('agentCode')}</dt>
               <dd className="font-mono font-medium text-primary">AGAC-{profile?.username || '-'}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Phone / Payout wallet</dt>
+              <dt className="text-muted-foreground text-sm">{t('phonePayoutWallet')}</dt>
               <dd className="font-medium text-foreground">{profile?.phone || '-'}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Email</dt>
+              <dt className="text-muted-foreground text-sm">{t('email')}</dt>
               <dd className="font-medium text-foreground">{profile?.email || '-'}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Status</dt>
+              <dt className="text-muted-foreground text-sm">{t('status')}</dt>
               <dd>
                 <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${profile?.isActive ? 'bg-success/10 text-success' : 'bg-muted-2 text-muted-foreground'}`}>
-                  {profile?.isActive ? 'Active' : 'Inactive'}
+                  {profile?.isActive ? t('active') : t('inactive')}
                 </span>
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground text-sm">Member since</dt>
+              <dt className="text-muted-foreground text-sm">{t('memberSince')}</dt>
               <dd className="font-medium text-foreground">{formatDate(profile?.createdAt)}</dd>
             </div>
           </dl>
 
           <Stagger className="grid grid-cols-2 gap-4 mt-6">
             <StaggerItem className="stat-card">
-              <p className="text-xs text-muted-foreground">Businesses Onboarded</p>
+              <p className="text-xs text-muted-foreground">{t('businessesOnboarded')}</p>
               <p className="text-lg font-bold text-primary">{onboarded}</p>
             </StaggerItem>
             <StaggerItem className="stat-card">
-              <p className="text-xs text-muted-foreground">Shops</p>
+              <p className="text-xs text-muted-foreground">{t('shops')}</p>
               <p className="text-lg font-bold text-primary">{profile?.stats?.totalShops ?? 0}</p>
             </StaggerItem>
           </Stagger>
         </StaggerItem>
 
         <StaggerItem className="surface-card p-6">
-          <h2 className="text-lg font-semibold text-primary mb-4">Change Password</h2>
+          <h2 className="text-lg font-semibold text-primary mb-4">{t('changePassword')}</h2>
           <form onSubmit={handlePassword} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Current Password</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('currentPassword')}</label>
               <input
                 type="password"
                 className="input-field"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
+                placeholder={t('enterCurrentPassword')}
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">New Password</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('newPassword')}</label>
               <input
                 type="password"
                 className="input-field"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder={t('minimum6Chars')}
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
+              <label className="block text-sm font-medium text-foreground mb-1">{t('confirmNewPassword')}</label>
               <input
                 type="password"
                 className="input-field"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter new password"
+                placeholder={t('reenterNewPassword')}
                 required
               />
             </div>

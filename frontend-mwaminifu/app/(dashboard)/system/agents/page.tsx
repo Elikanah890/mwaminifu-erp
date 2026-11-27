@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient, ApiErrorException } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
+import { statusLabel } from '@/lib/i18n/labels';
 import { Agent, AgentDetail, PaginationMeta } from '@/lib/types';
 import { formatDate, formatNumber, formatCurrency, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
@@ -21,6 +23,7 @@ function generateUsername(name: string): string {
 }
 
 export default function AgentsPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: PER_PAGE, total: 0 });
@@ -96,7 +99,7 @@ export default function AgentsPage() {
         tempPassword: res.data?.tempPassword ?? '',
         phone: form.phone.trim() || undefined,
       });
-      toast('Agent registered successfully');
+      toast(t('agentRegistered'));
       load(1);
     } catch (err) {
       const msg = errorMessage(err);
@@ -120,7 +123,7 @@ export default function AgentsPage() {
         isActive: editing.isActive,
       });
       setEditing(null);
-      toast('Agent updated');
+      toast(t('agentUpdated'));
       load(meta.page);
     } catch (err) {
       setFormError(errorMessage(err));
@@ -132,7 +135,7 @@ export default function AgentsPage() {
   const handleToggle = async (agent: Agent) => {
     try {
       await apiClient.put(`/admin/agents/${agent.id}/toggle`, {});
-      toast(agent.isActive ? 'Agent suspended' : 'Agent activated');
+      toast(agent.isActive ? t('agentSuspended') : t('agentActivated'));
       load(meta.page);
     } catch (err) {
       setError(errorMessage(err));
@@ -140,7 +143,7 @@ export default function AgentsPage() {
   };
 
   const handleResetPassword = async (agent: Agent) => {
-    if (!window.confirm(`Reset the password for ${agent.name} (AGAC-${agent.username})? A new password will be sent to their phone.`)) return;
+    if (!window.confirm(`${t('confirmResetPassword')} ${agent.name} (AGAC-${agent.username})? ${t('resetPasswordSent')}`)) return;
     try {
       const res = await apiClient.post<{ username: string; tempPassword: string }>(`/admin/agents/${agent.id}/reset-password`, {});
       if (res.data) setResetCreds({ username: res.data.username, email: (res.data as { email?: string }).email, tempPassword: res.data.tempPassword });
@@ -150,10 +153,10 @@ export default function AgentsPage() {
   };
 
   const handlePayout = async (agent: Agent) => {
-    if (!window.confirm(`Pay out ${formatCurrency(agent.commissionPending ?? 0)} pending commission to ${agent.name}?`)) return;
+    if (!window.confirm(`${t('confirmPayout')} ${formatCurrency(agent.commissionPending ?? 0)} ${t('pendingCommissionTo')} ${agent.name}?`)) return;
     try {
       const res = await apiClient.post<{ amount: number; reference: string }>(`/admin/agents/${agent.id}/payout`, {});
-      toast(`Payout ${res.data?.reference ?? ''} sent (${formatCurrency(res.data?.amount ?? 0)})`);
+      toast(`${t('payoutSent')} ${res.data?.reference ?? ''} (${formatCurrency(res.data?.amount ?? 0)})`);
       load(meta.page);
     } catch (err) {
       setError(errorMessage(err));
@@ -162,7 +165,7 @@ export default function AgentsPage() {
 
   const copy = (text: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text).then(() => toast('Copied'), () => {});
+      navigator.clipboard.writeText(text).then(() => toast(t('copied')), () => {});
     }
   };
 
@@ -171,7 +174,7 @@ export default function AgentsPage() {
     try {
       await apiClient.del(`/admin/agents/${deleting.id}`);
       setDeleting(null);
-      toast('Agent deleted');
+      toast(t('agentDeleted'));
       load(1);
     } catch (err) {
       setError(errorMessage(err));
@@ -192,14 +195,14 @@ export default function AgentsPage() {
   };
 
   return (
-    <PageWrapper title="Agents" description="Oversight of all AGAC agents" breadcrumb={['System', 'Agents']}>
+    <PageWrapper title={t('agents')} description={t('agentsDesc')} breadcrumb={[t('systemOwner'), t('agents')]}>
       <Reveal className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-6">
-        <SearchBar value={search} onChange={(v) => setSearch(v)} placeholder="Search name, username, phone..." />
+        <SearchBar value={search} onChange={(v) => setSearch(v)} placeholder={t('searchAgents')} />
         <div className="flex flex-wrap items-center gap-3">
           <select className="input-field max-w-[160px]" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="">{t('allStatus')}</option>
+            <option value="active">{t('active')}</option>
+            <option value="inactive">{t('inactive')}</option>
           </select>
           <motion.button
             onClick={openCreate}
@@ -208,7 +211,7 @@ export default function AgentsPage() {
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="btn-gold"
           >
-            + Register Agent
+            {t('registerAgent')}
           </motion.button>
         </div>
       </Reveal>
@@ -220,22 +223,22 @@ export default function AgentsPage() {
       ) : (
         <Reveal className="surface-card overflow-hidden">
           {agents.length === 0 ? (
-            <EmptyState message="No agents found" />
+            <EmptyState message={t('noAgents')} />
           ) : (
             <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                 <tr className="border-b border-border">
-                  <th className="py-3 px-6 font-semibold">Agent Code</th>
-                  <th className="py-3 px-6 font-semibold">Name</th>
-                  <th className="hidden py-3 px-6 font-semibold sm:table-cell">Phone</th>
-                  <th className="hidden py-3 px-6 font-semibold md:table-cell">Customers Registered</th>
-                  <th className="hidden py-3 px-6 font-semibold text-right md:table-cell">Commission Pending</th>
-                  <th className="hidden py-3 px-6 font-semibold text-right md:table-cell">Commission Earned</th>
-                  <th className="hidden py-3 px-6 font-semibold text-right lg:table-cell">Commission Paid</th>
-                  <th className="py-3 px-6 font-semibold">Status</th>
-                  <th className="hidden py-3 px-6 font-semibold lg:table-cell">Created</th>
-                  <th className="py-3 px-6 text-right font-semibold">Actions</th>
+                  <th className="py-3 px-6 font-semibold">{t('agentCode')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('name')}</th>
+                  <th className="hidden py-3 px-6 font-semibold sm:table-cell">{t('phone')}</th>
+                  <th className="hidden py-3 px-6 font-semibold md:table-cell">{t('customersRegistered')}</th>
+                  <th className="hidden py-3 px-6 font-semibold text-right md:table-cell">{t('commissionPending')}</th>
+                  <th className="hidden py-3 px-6 font-semibold text-right md:table-cell">{t('commissionEarned')}</th>
+                  <th className="hidden py-3 px-6 font-semibold text-right lg:table-cell">{t('commissionPaid')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('status')}</th>
+                  <th className="hidden py-3 px-6 font-semibold lg:table-cell">{t('createdLabel')}</th>
+                  <th className="py-3 px-6 text-right font-semibold">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -249,29 +252,29 @@ export default function AgentsPage() {
                     <td className="hidden py-3 px-6 text-right font-semibold text-secondary md:table-cell">{formatCurrency(agent.commissionEarned ?? 0)}</td>
                     <td className="hidden py-3 px-6 text-right text-muted-foreground lg:table-cell">{formatCurrency(agent.commissionPaid ?? 0)}</td>
                     <td className="py-3 px-6">
-                      <StatusBadge active={agent.isActive} />
+                      <StatusBadge active={agent.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} />
                     </td>
                     <td className="hidden py-3 px-6 text-muted-foreground text-xs lg:table-cell">{formatDate(agent.createdAt)}</td>
                     <td className="py-3 px-6 text-right"><div className="flex flex-wrap items-center justify-end gap-2">
                       <button onClick={() => openDetail(agent.id)} className="text-xs text-secondary font-medium hover:underline">
-                        View
+                        {t('view')}
                       </button>
                       <button onClick={() => setEditing(agent)} className="text-xs text-secondary font-medium hover:underline">
-                        Edit
+                        {t('edit')}
                       </button>
                       <button onClick={() => handleResetPassword(agent)} className="text-xs text-primary font-medium hover:underline">
-                        Reset password
+                        {t('resetPassword')}
                       </button>
                       {(agent.commissionPending ?? 0) > 0 && (
                         <button onClick={() => handlePayout(agent)} className="text-xs text-success font-medium hover:underline">
-                          Payout
+                          {t('payouts')}
                         </button>
                       )}
                       <button onClick={() => handleToggle(agent)} className="text-xs text-warning font-medium hover:underline">
-                        {agent.isActive ? 'Suspend' : 'Activate'}
+                        {agent.isActive ? t('suspend') : t('activate')}
                       </button>
                       <button onClick={() => setDeleting(agent)} className="text-xs text-danger font-medium hover:underline">
-                        Delete
+                        {t('delete')}
                       </button>
                     </div>
                     </td>
@@ -290,19 +293,19 @@ export default function AgentsPage() {
                       <p className="font-mono text-[11px] text-primary">AGAC-{agent.username}</p>
                       <p className="mt-0.5 font-semibold text-foreground">{agent.name}</p>
                       <p className="text-xs text-muted-foreground">{agent.email || agent.phone || '-'}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{formatNumber(agent._count?.onboardedUsers ?? 0)} customers · {formatCurrency(agent.commissionPending ?? 0)} pending · {formatCurrency(agent.commissionPaid ?? 0)} paid</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{formatNumber(agent._count?.onboardedUsers ?? 0)} {t('customers').toLowerCase()} · {formatCurrency(agent.commissionPending ?? 0)} {t('pending').toLowerCase()} · {formatCurrency(agent.commissionPaid ?? 0)} {t('paid').toLowerCase()}</p>
                     </div>
-                    <StatusBadge active={agent.isActive} />
+                    <StatusBadge active={agent.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-x-3 gap-y-2 text-xs font-medium">
-                    <button onClick={() => openDetail(agent.id)} className="text-secondary hover:underline">View</button>
-                    <button onClick={() => setEditing(agent)} className="text-secondary hover:underline">Edit</button>
-                    <button onClick={() => handleResetPassword(agent)} className="text-primary hover:underline">Reset password</button>
+                    <button onClick={() => openDetail(agent.id)} className="text-secondary hover:underline">{t('view')}</button>
+                    <button onClick={() => setEditing(agent)} className="text-secondary hover:underline">{t('edit')}</button>
+                    <button onClick={() => handleResetPassword(agent)} className="text-primary hover:underline">{t('resetPassword')}</button>
                     {(agent.commissionPending ?? 0) > 0 && (
-                      <button onClick={() => handlePayout(agent)} className="text-success hover:underline">Payout</button>
+                      <button onClick={() => handlePayout(agent)} className="text-success hover:underline">{t('payouts')}</button>
                     )}
-                    <button onClick={() => handleToggle(agent)} className="text-warning hover:underline">{agent.isActive ? 'Suspend' : 'Activate'}</button>
-                    <button onClick={() => setDeleting(agent)} className="text-danger hover:underline">Delete</button>
+                    <button onClick={() => handleToggle(agent)} className="text-warning hover:underline">{agent.isActive ? t('suspend') : t('activate')}</button>
+                    <button onClick={() => setDeleting(agent)} className="text-danger hover:underline">{t('delete')}</button>
                   </div>
                 </div>
               ))}
@@ -315,37 +318,37 @@ export default function AgentsPage() {
       )}
 
       {/* Create modal */}
-      <Modal open={showCreate} title="Register New Agent" onClose={() => setShowCreate(false)}>
+      <Modal open={showCreate} title={t('registerNewAgent')} onClose={() => setShowCreate(false)}>
         {formError && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{formError}</div>}
         <form onSubmit={handleCreate} className="space-y-4">
-          <input className="input-field" placeholder="Full Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <input className="input-field" type="email" placeholder="Email (required)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-          <input className="input-field" placeholder="Phone Number (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <input className="input-field" placeholder={t('fullName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          <input className="input-field" type="email" placeholder={t('emailRequired')} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          <input className="input-field" placeholder={t('phoneOptional')} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Username (auto-generated)</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">{t('usernameAuto')}</label>
             <div className="flex gap-2">
               <input className="input-field" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
               <button type="button" className="btn-outline shrink-0" onClick={() => setForm({ ...form, username: generateUsername(form.name) })}>
-                Regenerate
+                {t('regenerate')}
               </button>
             </div>
           </div>
           <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-            The agent signs in with their <strong>email</strong> and the generated password. Welcome credentials are emailed automatically.
+            {t('agentSignsInWith')} <strong>{t('email').toLowerCase()}</strong> {t('welcomeCredentialsEmailed')}
           </p>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setShowCreate(false)} className="flex-1 btn-outline">
-              Cancel
+              {t('cancel')}
             </button>
             <button type="submit" disabled={saving} className="flex-1 btn-navy">
-              {saving ? 'Creating...' : 'Register Agent'}
+              {saving ? t('creating') : t('registerAgent')}
             </button>
           </div>
         </form>
       </Modal>
 
       {/* Detail modal */}
-      <Modal open={!!detail || detailLoading} title="Agent Details" onClose={() => setDetail(null)} wide>
+      <Modal open={!!detail || detailLoading} title={t('agentDetails')} onClose={() => setDetail(null)} wide>
         {detailLoading ? (
           <SkeletonCard rows={4} />
         ) : detail ? (
@@ -355,34 +358,34 @@ export default function AgentsPage() {
                 <h3 className="text-xl font-bold text-primary">{detail.name}</h3>
                 <p className="text-sm text-muted-foreground">AGAC-{detail.username} {detail.email ? `· ${detail.email}` : ''}</p>
               </div>
-              <StatusBadge active={detail.isActive} />
+              <StatusBadge active={detail.isActive} activeLabel={t('active')} inactiveLabel={t('inactive')} />
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
-              <div className="stat-card"><p className="text-xs text-muted-foreground">Customers</p><p className="text-lg font-bold text-primary">{formatNumber(detail.stats?.onboardedUsers ?? 0)}</p></div>
-              <div className="stat-card"><p className="text-xs text-muted-foreground">Active Customers</p><p className="text-lg font-bold text-secondary">{formatNumber(detail.stats?.activeUsers ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">{t('customers')}</p><p className="text-lg font-bold text-primary">{formatNumber(detail.stats?.onboardedUsers ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">{t('activeCustomers')}</p><p className="text-lg font-bold text-secondary">{formatNumber(detail.stats?.activeUsers ?? 0)}</p></div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
-              <div className="stat-card"><p className="text-xs text-muted-foreground">Commission Earned</p><p className="text-lg font-bold text-primary">{formatCurrency(detail.stats?.commissionEarned ?? 0)}</p></div>
-              <div className="stat-card"><p className="text-xs text-muted-foreground">Commission Pending</p><p className="text-lg font-bold text-warning">{formatCurrency(detail.stats?.commissionPending ?? 0)}</p></div>
-              <div className="stat-card"><p className="text-xs text-muted-foreground">Commission Paid</p><p className="text-lg font-bold text-secondary">{formatCurrency(detail.stats?.commissionPaid ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">{t('commissionEarned')}</p><p className="text-lg font-bold text-primary">{formatCurrency(detail.stats?.commissionEarned ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">{t('commissionPending')}</p><p className="text-lg font-bold text-warning">{formatCurrency(detail.stats?.commissionPending ?? 0)}</p></div>
+              <div className="stat-card"><p className="text-xs text-muted-foreground">{t('commissionPaid')}</p><p className="text-lg font-bold text-secondary">{formatCurrency(detail.stats?.commissionPaid ?? 0)}</p></div>
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-primary mb-2">Registration Log ({detail.onboardedUsers?.length ?? 0})</h4>
+              <h4 className="text-sm font-semibold text-primary mb-2">{t('registrationLog')} ({detail.onboardedUsers?.length ?? 0})</h4>
               {detail.onboardedUsers?.length === 0 ? (
-                <EmptyState message="No businesses registered yet" />
+                <EmptyState message={t('noBusinessesRegistered')} />
               ) : (
                 <div className="max-h-64 overflow-y-auto">
                   <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                       <tr className="border-b border-border">
-                        <th className="py-2 px-3 font-semibold">Business</th>
-                        <th className="py-2 px-3 font-semibold">Phone</th>
-                        <th className="py-2 px-3 font-semibold">Status</th>
-                        <th className="py-2 px-3 font-semibold">Registered</th>
+                        <th className="py-2 px-3 font-semibold">{t('business')}</th>
+                        <th className="py-2 px-3 font-semibold">{t('phone')}</th>
+                        <th className="py-2 px-3 font-semibold">{t('status')}</th>
+                        <th className="py-2 px-3 font-semibold">{t('registered')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -390,7 +393,7 @@ export default function AgentsPage() {
                         <tr key={u.id} className="transition-colors hover:bg-muted">
                           <td className="py-2 px-3 font-medium">{u.name}</td>
                           <td className="py-2 px-3 text-muted-foreground">{u.phone ?? '-'}</td>
-                          <td className="py-2 px-3"><Pill tone={u.isActive ? 'green' : 'gray'}>{u.isActive ? 'Active' : 'Inactive'}</Pill></td>
+                          <td className="py-2 px-3"><Pill tone={u.isActive ? 'green' : 'gray'}>{u.isActive ? t('active') : t('inactive')}</Pill></td>
                           <td className="py-2 px-3 text-muted-foreground text-xs">{formatDate(u.createdAt)}</td>
                         </tr>
                       ))}
@@ -403,19 +406,19 @@ export default function AgentsPage() {
 
             <div className="border-t border-border pt-4 grid gap-4">
               <div>
-                <h4 className="text-sm font-semibold text-primary mb-2">Commissions ({detail.commissions?.length ?? 0})</h4>
+                <h4 className="text-sm font-semibold text-primary mb-2">{t('commissions')} ({detail.commissions?.length ?? 0})</h4>
                 {(detail.commissions?.length ?? 0) === 0 ? (
-                  <p className="text-xs text-subtle-foreground">No commissions yet.</p>
+                  <p className="text-xs text-subtle-foreground">{t('noCommissions')}.</p>
                 ) : (
                   <div className="max-h-56 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="text-left text-xs uppercase tracking-wider text-subtle-foreground">
                         <tr className="border-b border-border">
-                          <th className="py-2 px-3 font-semibold">Date</th>
-                          <th className="py-2 px-3 font-semibold">Owner</th>
-                          <th className="py-2 px-3 font-semibold">Plan</th>
-                          <th className="py-2 px-3 font-semibold text-right">Amount</th>
-                          <th className="py-2 px-3 font-semibold">Status</th>
+                          <th className="py-2 px-3 font-semibold">{t('date')}</th>
+                          <th className="py-2 px-3 font-semibold">{t('owner')}</th>
+                          <th className="py-2 px-3 font-semibold">{t('plan')}</th>
+                          <th className="py-2 px-3 font-semibold text-right">{t('amount')}</th>
+                          <th className="py-2 px-3 font-semibold">{t('status')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -425,7 +428,7 @@ export default function AgentsPage() {
                             <td className="py-2 px-3 font-medium">{c.owner?.name ?? '—'}</td>
                             <td className="py-2 px-3 text-muted-foreground">{c.payment?.subscription?.plan ?? '—'}</td>
                             <td className="py-2 px-3 text-right font-semibold text-secondary">{formatCurrency(c.amount)}</td>
-                            <td className="py-2 px-3"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{c.status}</Pill></td>
+                            <td className="py-2 px-3"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{statusLabel(t, c.status)}</Pill></td>
                           </tr>
                         ))}
                       </tbody>
@@ -434,18 +437,18 @@ export default function AgentsPage() {
                 )}
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-primary mb-2">Payouts ({detail.payouts?.length ?? 0})</h4>
+                <h4 className="text-sm font-semibold text-primary mb-2">{t('payouts')} ({detail.payouts?.length ?? 0})</h4>
                 {(detail.payouts?.length ?? 0) === 0 ? (
-                  <p className="text-xs text-subtle-foreground">No payouts yet.</p>
+                  <p className="text-xs text-subtle-foreground">{t('noPayouts')}.</p>
                 ) : (
                   <div className="max-h-56 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="text-left text-xs uppercase tracking-wider text-subtle-foreground">
                         <tr className="border-b border-border">
-                          <th className="py-2 px-3 font-semibold">Date</th>
-                          <th className="py-2 px-3 font-semibold">Reference</th>
-                          <th className="py-2 px-3 font-semibold text-right">Amount</th>
-                          <th className="py-2 px-3 font-semibold">Status</th>
+                          <th className="py-2 px-3 font-semibold">{t('date')}</th>
+                          <th className="py-2 px-3 font-semibold">{t('reference')}</th>
+                          <th className="py-2 px-3 font-semibold text-right">{t('amount')}</th>
+                          <th className="py-2 px-3 font-semibold">{t('status')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -454,7 +457,7 @@ export default function AgentsPage() {
                             <td className="py-2 px-3 text-muted-foreground text-xs">{formatDate(p.createdAt)}</td>
                             <td className="py-2 px-3 font-mono text-xs">{p.reference ?? '—'}</td>
                             <td className="py-2 px-3 text-right font-semibold text-secondary">{formatCurrency(p.amount)}</td>
-                            <td className="py-2 px-3"><Pill tone={p.status === 'COMPLETED' ? 'green' : 'amber'}>{p.status}</Pill></td>
+                            <td className="py-2 px-3"><Pill tone={p.status === 'COMPLETED' ? 'green' : 'amber'}>{statusLabel(t, p.status)}</Pill></td>
                           </tr>
                         ))}
                       </tbody>
@@ -468,23 +471,23 @@ export default function AgentsPage() {
       </Modal>
 
       {/* Edit modal */}
-      <Modal open={!!editing} title="Edit Agent" onClose={() => setEditing(null)}>
+      <Modal open={!!editing} title={t('editAgent')} onClose={() => setEditing(null)}>
         {formError && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{formError}</div>}
         {editing && (
           <form onSubmit={handleUpdate} className="space-y-4">
-            <input className="input-field" placeholder="Full Name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} required />
-            <input className="input-field" placeholder="Phone" value={editing.phone || ''} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} />
-            <input className="input-field" type="email" placeholder="Email" value={editing.email || ''} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+            <input className="input-field" placeholder={t('fullName')} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} required />
+            <input className="input-field" placeholder={t('phone')} value={editing.phone || ''} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} />
+            <input className="input-field" type="email" placeholder={t('email')} value={editing.email || ''} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
             <label className="flex items-center gap-2 text-sm text-foreground">
               <input type="checkbox" checked={editing.isActive} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} />
-              Account active
+              {t('accountActive')}
             </label>
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setEditing(null)} className="flex-1 btn-outline">
-                Cancel
+                {t('cancel')}
               </button>
               <button type="submit" disabled={saving} className="flex-1 btn-navy">
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('saving') : t('saveChanges')}
               </button>
             </div>
           </form>
@@ -492,56 +495,56 @@ export default function AgentsPage() {
       </Modal>
 
       {/* Delete modal */}
-      <Modal open={!!deleting} title="Delete Agent" onClose={() => setDeleting(null)}>
+      <Modal open={!!deleting} title={t('deleteAgent')} onClose={() => setDeleting(null)}>
         <p className="text-sm text-muted-foreground mb-4">
-          This will permanently deactivate <strong>{deleting?.name}</strong> (AGAC-{deleting?.username}) and disable their login.
-          Businesses they onboarded are not affected.
+          {t('deleteAgentDesc')} <strong>{deleting?.name}</strong> (AGAC-{deleting?.username}) {t('andDisableLogin')}
+          {t('noEffectOnBusinesses')}
         </p>
         <div className="flex gap-3">
           <button type="button" onClick={() => setDeleting(null)} className="flex-1 btn-outline">
-            Cancel
+            {t('cancel')}
           </button>
           <button type="button" onClick={handleDelete} className="flex-1 btn-navy bg-danger">
-            Delete Agent
+            {t('deleteAgent')}
           </button>
         </div>
       </Modal>
 
       {/* New agent credentials */}
-      <Modal open={!!createdCreds} title="Agent Login Credentials" onClose={() => setCreatedCreds(null)}>
+      <Modal open={!!createdCreds} title={t('agentLoginCredentials')} onClose={() => setCreatedCreds(null)}>
         {createdCreds && (
           <div className="space-y-4 text-sm">
             <p className="text-muted-foreground">
-              A welcome email was sent to <strong>{createdCreds.email}</strong>. Share these if it does not arrive.
+              {t('welcomeEmailSentTo')} <strong>{createdCreds.email}</strong>{t('shareIfNotArrive')}
             </p>
-            <CredRow label="Login email" value={createdCreds.email} onCopy={() => copy(createdCreds.email)} />
-            <CredRow label="Temporary password" value={createdCreds.tempPassword} mono onCopy={() => copy(createdCreds.tempPassword)} />
-            <CredRow label="Agent code" value={`AGAC-${createdCreds.username}`} onCopy={() => copy(`AGAC-${createdCreds.username}`)} />
+            <CredRow label={t('loginEmail')} value={createdCreds.email} onCopy={() => copy(createdCreds.email)} />
+            <CredRow label={t('tempPassword')} value={createdCreds.tempPassword} mono onCopy={() => copy(createdCreds.tempPassword)} />
+            <CredRow label={t('agentCode')} value={`AGAC-${createdCreds.username}`} onCopy={() => copy(`AGAC-${createdCreds.username}`)} />
             <button
               onClick={() => copy(`Mwaminifu agent login\nEmail: ${createdCreds.email}\nPassword: ${createdCreds.tempPassword}`)}
               className="btn-navy w-full"
             >
-              Copy credentials
+              {t('copyCredentials')}
             </button>
-            <button onClick={() => setCreatedCreds(null)} className="btn-outline w-full">Done</button>
+            <button onClick={() => setCreatedCreds(null)} className="btn-outline w-full">{t('done')}</button>
           </div>
         )}
       </Modal>
 
       {/* Reset password result */}
-      <Modal open={!!resetCreds} title="New Agent Password" onClose={() => setResetCreds(null)}>
+      <Modal open={!!resetCreds} title={t('newAgentPassword')} onClose={() => setResetCreds(null)}>
         {resetCreds && (
           <div className="space-y-4 text-sm">
-            <p className="text-muted-foreground">The agent&apos;s password was reset and emailed{resetCreds.email ? ` to ${resetCreds.email}` : ''}.</p>
-            <CredRow label="Login email" value={resetCreds.email ?? resetCreds.username} onCopy={() => copy(resetCreds.email ?? resetCreds.username)} />
-            <CredRow label="New password" value={resetCreds.tempPassword} mono onCopy={() => copy(resetCreds.tempPassword)} />
+            <p className="text-muted-foreground">{t('passwordResetEmailed')}{resetCreds.email ? ` ${resetCreds.email}` : ''}.</p>
+            <CredRow label={t('loginEmail')} value={resetCreds.email ?? resetCreds.username} onCopy={() => copy(resetCreds.email ?? resetCreds.username)} />
+            <CredRow label={t('newPassword')} value={resetCreds.tempPassword} mono onCopy={() => copy(resetCreds.tempPassword)} />
             <button
               onClick={() => copy(`Mwaminifu agent login\nEmail: ${resetCreds.email ?? resetCreds.username}\nPassword: ${resetCreds.tempPassword}`)}
               className="btn-navy w-full"
             >
-              Copy credentials
+              {t('copyCredentials')}
             </button>
-            <button onClick={() => setResetCreds(null)} className="btn-outline w-full">Done</button>
+            <button onClick={() => setResetCreds(null)} className="btn-outline w-full">{t('done')}</button>
           </div>
         )}
       </Modal>
@@ -550,6 +553,7 @@ export default function AgentsPage() {
 }
 
 function CredRow({ label, value, mono, onCopy }: { label: string; value: string; mono?: boolean; onCopy?: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted px-3 py-2">
       <div className="min-w-0">
@@ -558,7 +562,7 @@ function CredRow({ label, value, mono, onCopy }: { label: string; value: string;
       </div>
       {onCopy && (
         <button type="button" onClick={onCopy} className="shrink-0 text-xs font-medium text-secondary hover:underline">
-          Copy
+          {t('copy')}
         </button>
       )}
     </div>

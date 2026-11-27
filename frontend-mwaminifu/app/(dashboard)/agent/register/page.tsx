@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
+import { errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
 import { Input, Select, SubmitButton } from '@/components/form';
 import { Reveal, Stagger, StaggerItem, motion } from '@/components/motion';
@@ -30,13 +32,14 @@ const REGIONS = [
 
 type Step = 1 | 2 | 3;
 
-const STEPS: { n: Step; label: string }[] = [
-  { n: 1, label: 'Owner Information' },
-  { n: 2, label: 'Shop & Location' },
-  { n: 3, label: 'Review & Confirm' },
+const STEPS: { n: Step; labelKey: string }[] = [
+  { n: 1, labelKey: 'ownerInformation' },
+  { n: 2, labelKey: 'shopLocation' },
+  { n: 3, labelKey: 'reviewConfirm' },
 ];
 
 export default function RegisterBusinessPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
@@ -75,7 +78,7 @@ export default function RegisterBusinessPage() {
         tempPassword: res.data?.tempPassword,
       });
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Failed to register business', 'error');
+      toast(errorMessage(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -83,24 +86,24 @@ export default function RegisterBusinessPage() {
 
   if (done) {
     return (
-      <PageWrapper title="Register Business" breadcrumb={['Agent', 'Register Business']}>
+      <PageWrapper title={t('registerBusiness')} breadcrumb={[t('agentPortal'), t('registerBusiness')]}>
         <Reveal className="max-w-xl mx-auto surface-card p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-secondary/10 text-secondary flex items-center justify-center mx-auto mb-4 text-3xl">✓</div>
-          <h2 className="text-xl font-bold text-primary mb-2">Account Created Successfully!</h2>
+          <h2 className="text-xl font-bold text-primary mb-2">{t('accountCreated')}</h2>
           <p className="text-sm text-muted-foreground mb-6">
             <strong>{done.name}</strong> — {done.shopName}
             {done.location ? ` · ${done.location}` : ''}
           </p>
           <div className="bg-muted rounded-lg p-4 text-left text-sm text-muted-foreground mb-6">
-            <p>A welcome email was sent to <strong>{done.email}</strong> with a temporary password.</p>
+            <p>{t('welcomeEmailSentTo')} <strong>{done.email}</strong> {t('withTempPassword')}</p>
             {done.tempPassword && (
-              <p className="mt-2">Temporary password (share as backup): <code className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">{done.tempPassword}</code></p>
+              <p className="mt-2">{t('tempPasswordShare')} <code className="rounded bg-card px-1.5 py-0.5 font-mono text-foreground">{done.tempPassword}</code></p>
             )}
-            <p className="mt-2">The owner must change this password on first login.</p>
+            <p className="mt-2">{t('ownerMustChange')}</p>
           </div>
           <div className="flex gap-3">
             <Link href="/agent/dashboard" className="btn-navy flex-1">
-              Go to Dashboard
+              {t('goToDashboard')}
             </Link>
             <button
               onClick={() => {
@@ -111,7 +114,7 @@ export default function RegisterBusinessPage() {
               }}
               className="btn-outline flex-1"
             >
-              Register Another
+              {t('registerAnother')}
             </button>
           </div>
         </Reveal>
@@ -120,7 +123,7 @@ export default function RegisterBusinessPage() {
   }
 
   return (
-    <PageWrapper title="Register Business" description="Onboard a new business owner" breadcrumb={['Agent', 'Register Business']}>
+    <PageWrapper title={t('registerBusiness')} description={t('registerBusinessDesc')} breadcrumb={[t('agentPortal'), t('registerBusiness')]}>
       <Reveal className="max-w-2xl mx-auto">
         <Stagger className="flex items-center gap-2 mb-6">
           {STEPS.map((s, i) => (
@@ -132,7 +135,7 @@ export default function RegisterBusinessPage() {
               >
                 {step > s.n ? '✓' : s.n}
               </div>
-              <span className={`text-sm ${step === s.n ? 'font-semibold text-primary' : 'text-subtle-foreground'}`}>{s.label}</span>
+              <span className={`text-sm ${step === s.n ? 'font-semibold text-primary' : 'text-subtle-foreground'}`}>{t(s.labelKey)}</span>
               {i < STEPS.length - 1 && <span className="w-8 h-px bg-border" />}
             </StaggerItem>
           ))}
@@ -141,13 +144,13 @@ export default function RegisterBusinessPage() {
         <div className="surface-card p-8">
           {step === 1 && (
             <div className="space-y-5">
-              <h3 className="text-lg font-semibold text-primary">Owner Information</h3>
-              <Input label="Full Name" required value={owner.name} onChange={(e) => setOwner({ ...owner, name: e.target.value })} placeholder="Full name" />
-              <Input label="Email" type="email" required hint="Login credentials will be emailed here" value={owner.email} onChange={(e) => setOwner({ ...owner, email: e.target.value })} placeholder="email@example.com" />
-              <Input label="Phone Number" hint="Optional contact number" value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} placeholder="255XXXXXXXXX" inputMode="tel" />
+              <h3 className="text-lg font-semibold text-primary">{t('ownerInformation')}</h3>
+              <Input label={t('fullName')} required value={owner.name} onChange={(e) => setOwner({ ...owner, name: e.target.value })} placeholder={t('fullName')} />
+              <Input label={t('email')} type="email" required hint={t('loginCredentialsEmailed')} value={owner.email} onChange={(e) => setOwner({ ...owner, email: e.target.value })} placeholder="email@example.com" />
+              <Input label={t('phone')} hint={t('optionalContactNumber')} value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} placeholder="255XXXXXXXXX" inputMode="tel" />
               <div className="flex justify-end">
                 <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-navy" disabled={!ownerValid} onClick={() => setStep(2)}>
-                  Continue
+                  {t('continue')}
                 </motion.button>
               </div>
             </div>
@@ -155,31 +158,31 @@ export default function RegisterBusinessPage() {
 
           {step === 2 && (
             <div className="space-y-5">
-              <h3 className="text-lg font-semibold text-primary">Shop & Location</h3>
-              <Input label="Shop Name" required value={shop.shopName} onChange={(e) => setShop({ ...shop, shopName: e.target.value })} placeholder="Business name" />
-              <Select label="Business Category" value={shop.category} onChange={(e) => setShop({ ...shop, category: e.target.value })}>
-                <option value="">Select a category</option>
+              <h3 className="text-lg font-semibold text-primary">{t('shopLocation')}</h3>
+              <Input label={t('shopName')} required value={shop.shopName} onChange={(e) => setShop({ ...shop, shopName: e.target.value })} placeholder={t('businessName')} />
+              <Select label={t('businessCategory')} value={shop.category} onChange={(e) => setShop({ ...shop, category: e.target.value })}>
+                <option value="">{t('selectCategory')}</option>
                 {BUSINESS_CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </Select>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Select label="Region" value={shop.region} onChange={(e) => setShop({ ...shop, region: e.target.value })}>
-                  <option value="">Select region</option>
+                <Select label={t('region')} value={shop.region} onChange={(e) => setShop({ ...shop, region: e.target.value })}>
+                  <option value="">{t('selectRegion')}</option>
                   {REGIONS.map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </Select>
-                <Input label="District" value={shop.district} onChange={(e) => setShop({ ...shop, district: e.target.value })} placeholder="District" />
-                <Input label="Ward" value={shop.ward} onChange={(e) => setShop({ ...shop, ward: e.target.value })} placeholder="Ward" />
-                <Input label="Street" value={shop.street} onChange={(e) => setShop({ ...shop, street: e.target.value })} placeholder="Street" />
+                <Input label={t('district')} value={shop.district} onChange={(e) => setShop({ ...shop, district: e.target.value })} placeholder={t('district')} />
+                <Input label={t('ward')} value={shop.ward} onChange={(e) => setShop({ ...shop, ward: e.target.value })} placeholder={t('ward')} />
+                <Input label={t('street')} value={shop.street} onChange={(e) => setShop({ ...shop, street: e.target.value })} placeholder={t('street')} />
               </div>
               <div className="flex justify-between">
                 <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-outline" onClick={() => setStep(1)}>
-                  Back
+                  {t('back')}
                 </motion.button>
                 <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-navy" disabled={!shopValid} onClick={() => setStep(3)}>
-                  Continue
+                  {t('continue')}
                 </motion.button>
               </div>
             </div>
@@ -187,21 +190,21 @@ export default function RegisterBusinessPage() {
 
           {step === 3 && (
             <div className="space-y-5">
-              <h3 className="text-lg font-semibold text-primary">Review & Confirm</h3>
+              <h3 className="text-lg font-semibold text-primary">{t('reviewConfirm')}</h3>
               <dl className="space-y-3 text-sm">
-                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">Owner Name</dt><dd className="font-medium">{owner.name}</dd></div>
-                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">Phone</dt><dd className="font-medium">{owner.phone}</dd></div>
-                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">Email</dt><dd className="font-medium">{owner.email || '-'}</dd></div>
-                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">Shop Name</dt><dd className="font-medium">{shop.shopName}</dd></div>
-                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">Category</dt><dd className="font-medium">{shop.category || '-'}</dd></div>
-                <div className="flex justify-between"><dt className="text-muted-foreground">Location</dt><dd className="font-medium">{location || '-'}</dd></div>
+                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">{t('ownerName')}</dt><dd className="font-medium">{owner.name}</dd></div>
+                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">{t('phone')}</dt><dd className="font-medium">{owner.phone}</dd></div>
+                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">{t('email')}</dt><dd className="font-medium">{owner.email || '-'}</dd></div>
+                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">{t('shopName')}</dt><dd className="font-medium">{shop.shopName}</dd></div>
+                <div className="flex justify-between border-b border-border pb-2"><dt className="text-muted-foreground">{t('category')}</dt><dd className="font-medium">{shop.category || '-'}</dd></div>
+                <div className="flex justify-between"><dt className="text-muted-foreground">{t('location')}</dt><dd className="font-medium">{location || '-'}</dd></div>
               </dl>
               <div className="flex justify-between pt-2">
                 <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="btn-outline" onClick={() => setStep(2)}>
-                  Back
+                  {t('back')}
                 </motion.button>
                 <SubmitButton loading={submitting} onClick={submit} type="button">
-                  Confirm & Create
+                  {t('confirmCreate')}
                 </SubmitButton>
               </div>
             </div>

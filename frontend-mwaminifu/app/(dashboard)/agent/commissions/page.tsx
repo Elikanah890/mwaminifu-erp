@@ -8,6 +8,8 @@ import StatsCard from '@/components/StatsCard';
 import PageWrapper from '@/components/PageWrapper';
 import ChartWrapper from '@/components/ChartWrapper';
 import { Pill } from '@/components/StatusBadge';
+import { statusLabel, paymentMethodLabel } from '@/lib/i18n/labels';
+import { useI18n } from '@/lib/context/I18nContext';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Stagger, StaggerItem, Reveal } from '@/components/motion';
 
@@ -34,6 +36,7 @@ interface PayoutRow {
 }
 
 export default function AgentCommissionsPage() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<AgentStats | null>(null);
   const [commissions, setCommissions] = useState<CommissionRow[]>([]);
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
@@ -67,7 +70,7 @@ export default function AgentCommissionsPage() {
 
   if (loading)
     return (
-      <PageWrapper title="My Commissions">
+      <PageWrapper title={t('myCommissions')}>
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, i) => (<SkeletonCard key={i} rows={1} />))}
         </div>
@@ -75,32 +78,32 @@ export default function AgentCommissionsPage() {
     );
 
   return (
-    <PageWrapper title="My Commissions" description="Track your earnings and payouts" breadcrumb={['Agent', 'Commissions']}>
+    <PageWrapper title={t('myCommissions')} description={t('myCommissionsDesc')} breadcrumb={[t('agentPortal'), t('myCommissions')]}>
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <StaggerItem><StatsCard title="Total Earned" value={formatCurrency(stats?.commissionEarned ?? 0)} tone="navy" /></StaggerItem>
-        <StaggerItem><StatsCard title="Paid" value={formatCurrency(stats?.commissionPaid ?? 0)} tone="teal" /></StaggerItem>
-        <StaggerItem><StatsCard title="Pending" value={formatCurrency(stats?.commissionPending ?? 0)} tone="gold" /></StaggerItem>
-        <StaggerItem><StatsCard title="This Month" value={formatCurrency(stats?.commissionThisMonth ?? 0)} tone="green" /></StaggerItem>
-        <StaggerItem><StatsCard title="Agent Code" value={stats?.agentCode || '—'} tone="navy" sub={`${formatNumber(stats?.totalBusinesses ?? 0)} customers`} /></StaggerItem>
+        <StaggerItem><StatsCard title={t('totalEarned')} value={formatCurrency(stats?.commissionEarned ?? 0)} tone="navy" /></StaggerItem>
+        <StaggerItem><StatsCard title={t('paid')} value={formatCurrency(stats?.commissionPaid ?? 0)} tone="teal" /></StaggerItem>
+        <StaggerItem><StatsCard title={t('pending')} value={formatCurrency(stats?.commissionPending ?? 0)} tone="gold" /></StaggerItem>
+        <StaggerItem><StatsCard title={t('thisMonth')} value={formatCurrency(stats?.commissionThisMonth ?? 0)} tone="green" /></StaggerItem>
+        <StaggerItem><StatsCard title={t('agentCode')} value={stats?.agentCode || '—'} tone="navy" sub={`${formatNumber(stats?.totalBusinesses ?? 0)} ${t('customers').toLowerCase()}`} /></StaggerItem>
       </Stagger>
 
       <Reveal className="mb-6">
-        <ChartWrapper title="Commission History" subtitle="5% one-time commission per registered business">
+        <ChartWrapper title={t('commissionHistory')} subtitle={t('commissionSubtitle')}>
           {commissions.length === 0 ? (
-            <EmptyState message="No commissions yet" />
+            <EmptyState message={t('noCommissions')} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase tracking-wider text-subtle-foreground">
                   <tr className="border-b border-border">
-                    <th className="py-3 pr-4 font-semibold">Date</th>
-                    <th className="py-3 pr-4 font-semibold">Customer</th>
-                    <th className="py-3 pr-4 font-semibold">Plan</th>
-                    <th className="py-3 pr-4 font-semibold text-right">Amount</th>
-                    <th className="py-3 pr-4 font-semibold">Status</th>
-                    <th className="py-3 font-semibold">Payout Ref</th>
+                    <th className="py-3 pr-4 font-semibold">{t('date')}</th>
+                    <th className="py-3 pr-4 font-semibold">{t('customer')}</th>
+                    <th className="py-3 pr-4 font-semibold">{t('plan')}</th>
+                    <th className="py-3 pr-4 font-semibold text-right">{t('amount')}</th>
+                    <th className="py-3 pr-4 font-semibold">{t('status')}</th>
+                    <th className="py-3 font-semibold">{t('payoutRef')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -110,7 +113,7 @@ export default function AgentCommissionsPage() {
                       <td className="py-3 pr-4 font-medium text-foreground">{c.owner?.name ?? '—'}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{c.payment?.subscription?.plan ?? '—'}</td>
                       <td className="py-3 pr-4 text-right font-semibold text-secondary">{formatCurrency(c.amount)}</td>
-                      <td className="py-3 pr-4"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{c.status}</Pill></td>
+                      <td className="py-3 pr-4"><Pill tone={c.status === 'PAID' ? 'green' : c.status === 'PENDING' ? 'amber' : 'gray'}>{statusLabel(t, c.status)}</Pill></td>
                       <td className="py-3 font-mono text-xs text-muted-foreground">{c.payout?.reference ?? '—'}</td>
                     </tr>
                   ))}
@@ -122,19 +125,19 @@ export default function AgentCommissionsPage() {
       </Reveal>
 
       <Reveal>
-        <ChartWrapper title="Payout History" subtitle="Payments made to your wallet">
+        <ChartWrapper title={t('payoutHistory')} subtitle={t('payoutSubtitle')}>
           {payouts.length === 0 ? (
-            <EmptyState message="No payouts yet" />
+            <EmptyState message={t('noPayouts')} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs uppercase tracking-wider text-subtle-foreground">
                   <tr className="border-b border-border">
-                    <th className="py-3 pr-4 font-semibold">Date</th>
-                    <th className="py-3 pr-4 font-semibold">Reference</th>
-                    <th className="py-3 pr-4 font-semibold">Method</th>
-                    <th className="py-3 pr-4 font-semibold text-right">Amount</th>
-                    <th className="py-3 font-semibold">Status</th>
+                    <th className="py-3 pr-4 font-semibold">{t('date')}</th>
+                    <th className="py-3 pr-4 font-semibold">{t('reference')}</th>
+                    <th className="py-3 pr-4 font-semibold">{t('method')}</th>
+                    <th className="py-3 pr-4 font-semibold text-right">{t('amount')}</th>
+                    <th className="py-3 font-semibold">{t('status')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -142,9 +145,9 @@ export default function AgentCommissionsPage() {
                     <tr key={p.id}>
                       <td className="py-3 pr-4 text-muted-foreground text-xs">{formatDate(p.completedAt || p.createdAt)}</td>
                       <td className="py-3 pr-4 font-mono text-xs text-foreground">{p.reference ?? '—'}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{p.method}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{paymentMethodLabel(t, p.method)}</td>
                       <td className="py-3 pr-4 text-right font-semibold text-secondary">{formatCurrency(p.amount)}</td>
-                      <td className="py-3"><Pill tone={p.status === 'COMPLETED' ? 'green' : 'amber'}>{p.status}</Pill></td>
+                      <td className="py-3"><Pill tone={p.status === 'COMPLETED' ? 'green' : 'amber'}>{statusLabel(t, p.status)}</Pill></td>
                     </tr>
                   ))}
                 </tbody>

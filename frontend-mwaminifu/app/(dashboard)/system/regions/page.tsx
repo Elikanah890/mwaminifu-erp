@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api/client';
 import { Shop, RegionRow } from '@/lib/types';
 import { formatNumber, errorMessage } from '@/lib/format';
 import PageWrapper from '@/components/PageWrapper';
+import { useI18n } from '@/lib/context/I18nContext';
 import ChartWrapper from '@/components/ChartWrapper';
 import { SkeletonCard, EmptyState } from '@/components/Spinner';
 import { Reveal } from '@/components/motion';
@@ -27,6 +28,7 @@ function extractRegion(address?: string | null): string {
 }
 
 export default function RegionsPage() {
+  const { t } = useI18n();
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -79,7 +81,7 @@ export default function RegionsPage() {
 
   if (loading)
     return (
-      <PageWrapper title="Geographic Distribution">
+      <PageWrapper title={t('geographicDistribution')}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SkeletonCard rows={6} />
           <SkeletonCard rows={6} />
@@ -89,7 +91,7 @@ export default function RegionsPage() {
 
   if (error) {
     return (
-      <PageWrapper title="Geographic Distribution">
+      <PageWrapper title={t('geographicDistribution')}>
         <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg text-sm">{error}</div>
       </PageWrapper>
     );
@@ -97,13 +99,13 @@ export default function RegionsPage() {
 
   return (
     <PageWrapper
-      title="Geographic Distribution"
-      description="Where shops are concentrated (derived from shop addresses)"
-      breadcrumb={['System', 'Regions']}
+      title={t('geographicDistribution')}
+      description={t('regionsDesc')}
+      breadcrumb={[t('systemOwner'), t('regions')]}
     >
-      <ChartWrapper title="Shop Density by Region" subtitle="Top regions by shop count" className="mb-6">
+      <ChartWrapper title={t('shopDensityByRegion')} subtitle={t('shopDensitySubtitle')} className="mb-6">
         {!hasRegionData ? (
-          <EmptyState message="No region data available. Add shops with region info to see this map." />
+          <EmptyState message={t('noRegionData')} />
         ) : (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -111,7 +113,7 @@ export default function RegionsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} />
-                <Tooltip formatter={(value) => [Number(value), 'Shops']} />
+                <Tooltip formatter={(value) => [Number(value), t('shops')]} />
                 <Bar dataKey="shops" fill="var(--secondary)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -124,16 +126,16 @@ export default function RegionsPage() {
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
             <tr className="border-b border-border">
-              <th className="py-3 px-6 font-semibold">Region</th>
-              <th className="py-3 px-6 font-semibold">Shops</th>
-              <th className="py-3 px-6 font-semibold">Owners</th>
+              <th className="py-3 px-6 font-semibold">{t('region')}</th>
+              <th className="py-3 px-6 font-semibold">{t('shops')}</th>
+              <th className="py-3 px-6 font-semibold">{t('owners')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {!hasRegionData ? (
               <tr>
                 <td colSpan={3}>
-                  <EmptyState message="No region data available. Add shops with region info to see this map." />
+                  <EmptyState message={t('noRegionData')} />
                 </td>
               </tr>
             ) : (

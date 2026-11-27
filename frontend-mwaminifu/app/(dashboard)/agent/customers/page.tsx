@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { useI18n } from '@/lib/context/I18nContext';
 import { AgentBusiness, PaginationMeta } from '@/lib/types';
 import { formatDate, errorMessage } from '@/lib/format';
 import Pagination from '@/components/Pagination';
@@ -33,6 +34,7 @@ interface BusinessDetail {
 }
 
 export default function AgentCustomersPage() {
+  const { t } = useI18n();
   const [businesses, setBusinesses] = useState<AgentBusiness[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: PER_PAGE, total: 0 });
   const [search, setSearch] = useState('');
@@ -80,14 +82,14 @@ export default function AgentCustomersPage() {
   };
 
   return (
-    <PageWrapper title="My Customers" description="Businesses you have registered" breadcrumb={['Agent', 'My Customers']}>
+    <PageWrapper title={t('myCustomers')} description={t('myCustomersDesc')} breadcrumb={[t('agentPortal'), t('myCustomers')]}>
       <Reveal className="flex flex-wrap items-center gap-3 mb-6">
-        <SearchBar value={search} onChange={(v) => setSearch(v)} placeholder="Search business name..." />
+        <SearchBar value={search} onChange={(v) => setSearch(v)} placeholder={t('searchBusinessName')} />
         <select className="input-field max-w-[160px]" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="pending">Pending Setup</option>
+          <option value="">{t('allStatus')}</option>
+          <option value="active">{t('active')}</option>
+          <option value="inactive">{t('inactive')}</option>
+          <option value="pending">{t('pendingSetup')}</option>
         </select>
       </Reveal>
 
@@ -98,17 +100,17 @@ export default function AgentCustomersPage() {
       ) : (
         <Reveal className="surface-card overflow-hidden">
           {businesses.length === 0 ? (
-            <EmptyState message="No businesses found" />
+            <EmptyState message={t('noBusinesses')} />
           ) : (
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur text-left text-xs uppercase tracking-wider text-subtle-foreground">
                 <tr className="border-b border-border">
-                  <th className="py-3 px-6 font-semibold">Business</th>
-                  <th className="py-3 px-6 font-semibold">Location</th>
-                  <th className="py-3 px-6 font-semibold">Shops</th>
-                  <th className="py-3 px-6 font-semibold">Status</th>
-                  <th className="py-3 px-6 font-semibold">Registered</th>
+                  <th className="py-3 px-6 font-semibold">{t('business')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('location')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('shops')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('status')}</th>
+                  <th className="py-3 px-6 font-semibold">{t('registered')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -119,7 +121,7 @@ export default function AgentCustomersPage() {
                     <td className="py-3 px-6 text-muted-foreground">{b._count?.ownedShops ?? b.ownedShops?.length ?? 0}</td>
                     <td className="py-3 px-6">
                       <Pill tone={!b.isActive ? 'gray' : b.isPinSet ? 'green' : 'amber'}>
-                        {!b.isActive ? 'Inactive' : b.isPinSet ? 'Active' : 'Pending'}
+                        {!b.isActive ? t('inactive') : b.isPinSet ? t('active') : t('pending')}
                       </Pill>
                     </td>
                     <td className="py-3 px-6 text-xs text-muted-foreground">{formatDate(b.createdAt)}</td>
@@ -135,7 +137,7 @@ export default function AgentCustomersPage() {
         </Reveal>
       )}
 
-      <Modal open={!!detail || detailLoading} title="Business Details" onClose={() => setDetail(null)} wide>
+      <Modal open={!!detail || detailLoading} title={t('businessDetails')} onClose={() => setDetail(null)} wide>
         {detailLoading ? (
           <SkeletonCard rows={4} />
         ) : detail ? (
@@ -143,33 +145,33 @@ export default function AgentCustomersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-primary">{detail.name}</h3>
-                <p className="text-muted-foreground">Registered business</p>
+                <p className="text-muted-foreground">{t('registeredBusiness')}</p>
               </div>
               <Pill tone={!detail.isActive ? 'gray' : detail.isPinSet ? 'green' : 'amber'}>
-                {!detail.isActive ? 'Inactive' : detail.isPinSet ? 'Active' : 'Pending'}
+                {!detail.isActive ? t('inactive') : detail.isPinSet ? t('active') : t('pending')}
               </Pill>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Shops</p><p className="font-semibold">{detail.stats?.totalShops ?? detail.ownedShops.length}</p></div>
-              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Employees</p><p className="font-semibold">{detail.stats?.totalEmployees ?? 0}</p></div>
-              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">Registered</p><p className="font-semibold">{formatDate(detail.createdAt)}</p></div>
+              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">{t('shops')}</p><p className="font-semibold">{detail.stats?.totalShops ?? detail.ownedShops.length}</p></div>
+              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">{t('employees')}</p><p className="font-semibold">{detail.stats?.totalEmployees ?? 0}</p></div>
+              <div className="bg-muted rounded-lg p-3"><p className="text-xs text-muted-foreground">{t('registered')}</p><p className="font-semibold">{formatDate(detail.createdAt)}</p></div>
             </div>
 
             <div>
-              <p className="text-xs text-muted-foreground mb-2">Shops</p>
+              <p className="text-xs text-muted-foreground mb-2">{t('shops')}</p>
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {detail.ownedShops.map((shop) => (
                   <div key={shop.id} className="bg-muted rounded-lg p-3">
                     <p className="font-medium text-foreground">{shop.name}</p>
-                    <p className="text-xs text-muted-foreground">{shop.address || 'No address'}</p>
+                    <p className="text-xs text-muted-foreground">{shop.address || t('noAddress')}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             <button onClick={() => setDetail(null)} className="btn-outline w-full">
-              Close
+              {t('close')}
             </button>
           </div>
         ) : null}

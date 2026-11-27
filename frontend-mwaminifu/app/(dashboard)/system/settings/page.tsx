@@ -7,6 +7,7 @@ import PageWrapper from '@/components/PageWrapper';
 import { SkeletonCard } from '@/components/Spinner';
 import { Stagger, StaggerItem, motion } from '@/components/motion';
 import { useToast } from '@/components/Toast';
+import { useI18n } from '@/lib/context/I18nContext';
 import ActiveSessionsCard from '@/components/ActiveSessionsCard';
 import ChangePasswordCard from '@/components/ChangePasswordCard';
 
@@ -24,6 +25,56 @@ interface SettingSection {
   description: string;
   fields: SettingField[];
 }
+
+const SETTING_KEYS: Record<string, string> = {
+  'General Settings': 'settingsGeneral',
+  'Subscription Settings': 'settingsSubscription',
+  'Agent Settings': 'settingsAgent',
+  'Platform Controls': 'settingsPlatform',
+  'Demo Accounts': 'settingsDemo',
+  'Payment Settings': 'settingsPayment',
+  'Platform identity and defaults': 'settingsGeneralDesc',
+  'Plan pricing and grace-period rules': 'settingsSubscriptionDesc',
+  'Agent network configuration': 'settingsAgentDesc',
+  'Live platform availability controls': 'settingsPlatformDesc',
+  'Demo account configuration': 'settingsDemoDesc',
+  'Payment aggregator integration': 'settingsPaymentDesc',
+  'App Name': 'settingsAppName',
+  'Displayed across the platform': 'settingsAppNameDesc',
+  'Default Language': 'settingsDefaultLanguage',
+  'Default interface language': 'settingsDefaultLanguageDesc',
+  'Currency': 'settingsCurrency',
+  'Default currency code': 'settingsCurrencyDesc',
+  'Basic Plan Price (TZS)': 'settingsBasicPrice',
+  'Monthly Basic plan price': 'settingsBasicPriceDesc',
+  'Premium Plan Price (TZS)': 'settingsPremiumPrice',
+  'Monthly Premium plan price': 'settingsPremiumPriceDesc',
+  'Grace Period (days)': 'settingsGraceDays',
+  'Days before a lapsed subscription is deactivated': 'settingsGraceDaysDesc',
+  'Max Shops per Owner': 'settingsMaxShops',
+  'Maximum shops a business owner can create': 'settingsMaxShopsDesc',
+  'Max Agents': 'settingsMaxAgents',
+  'Maximum number of agents': 'settingsMaxAgentsDesc',
+  'Commission Rate (%)': 'settingsCommissionRate',
+  'Agent commission as a percentage': 'settingsCommissionRateDesc',
+  'Agent Code Prefix': 'settingsAgentPrefix',
+  'Prefix used for agent codes': 'settingsAgentPrefixDesc',
+  'Maintenance Mode': 'maintenanceMode',
+  'When ON, business owners and employees cannot log in. System owners and agents keep access.': 'settingsMaintenanceDesc',
+  'Number of Demo Accounts': 'settingsDemoCount',
+  'Active demo accounts': 'settingsDemoCountDesc',
+  'Auto-Reset Frequency': 'settingsAutoReset',
+  'How often demo data is reset': 'settingsAutoResetDesc',
+  'Payment Aggregator': 'settingsPaymentAggregator',
+  'Provider used to collect subscription payments': 'settingsPaymentAggregatorDesc',
+  'Webhook URL': 'settingsWebhook',
+  'Payment callback endpoint': 'settingsWebhookDesc',
+  Swahili: 'swahili',
+  English: 'english',
+  Daily: 'daily',
+  Weekly: 'weekly',
+  Monthly: 'monthly',
+};
 
 const SECTIONS: SettingSection[] = [
   {
@@ -126,6 +177,7 @@ const SECTIONS: SettingSection[] = [
 ];
 
 export default function SettingsPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
@@ -178,7 +230,7 @@ export default function SettingsPage() {
 
   if (loading)
     return (
-      <PageWrapper title="Settings">
+      <PageWrapper title={t('settings')}>
         <div className="space-y-6 max-w-3xl">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonCard key={i} rows={3} />
@@ -188,7 +240,7 @@ export default function SettingsPage() {
     );
 
   return (
-    <PageWrapper title="Settings" description="Platform-wide configuration. Changes are applied immediately and audited." breadcrumb={['System', 'Settings']}>
+    <PageWrapper title={t('settings')} description={t('settingsPageDesc')} breadcrumb={[t('systemOwner'), t('settings')]}>
       {error && <div className="bg-danger/10 border border-danger/25 text-danger px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       <Stagger className="space-y-6 max-w-3xl">
@@ -204,14 +256,14 @@ export default function SettingsPage() {
             <StaggerItem key={section.title}>
             <form onSubmit={(e) => saveSection(e, section)} className="surface-card">
               <div className="px-6 py-4 border-b border-border">
-                <h2 className="text-base font-semibold text-primary">{section.title}</h2>
-                <p className="text-xs text-subtle-foreground">{section.description}</p>
+                <h2 className="text-base font-semibold text-primary">{t(SETTING_KEYS[section.title] ?? section.title)}</h2>
+                <p className="text-xs text-subtle-foreground">{t(SETTING_KEYS[section.description] ?? section.description)}</p>
               </div>
               <div className="divide-y divide-border">
                 {section.fields.map((f) => (
                   <div key={f.key} className="px-6 py-4">
-                    <label className="block text-sm font-semibold text-foreground mb-1">{f.label}</label>
-                    <p className="text-xs text-subtle-foreground mb-2">{f.description}</p>
+                    <label className="block text-sm font-semibold text-foreground mb-1">{t(SETTING_KEYS[f.label] ?? f.label)}</label>
+                    <p className="text-xs text-subtle-foreground mb-2">{f.description ? t(SETTING_KEYS[f.description] ?? f.description) : ''}</p>
                     {f.type === 'boolean' ? (
                       <label className="inline-flex cursor-pointer items-center gap-3">
                         <input
@@ -221,14 +273,14 @@ export default function SettingsPage() {
                           className="h-4 w-4 rounded"
                         />
                         <span className="text-sm font-medium text-foreground">
-                          {values[f.key] === true || values[f.key] === 'true' ? 'Enabled' : 'Disabled'}
+                          {values[f.key] === true || values[f.key] === 'true' ? t('enabled') : t('disabled')}
                         </span>
                       </label>
                     ) : f.type === 'select' ? (
                       <select className="input-field w-full" value={String(values[f.key] ?? '')} onChange={(e) => setValue(f.key, e.target.value)}>
-                        <option value="">Select…</option>
+                        <option value="">{t('selectOption')}</option>
                         {(f.options ?? []).map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
+                          <option key={o.value} value={o.value}>{t(SETTING_KEYS[o.label] ?? o.label)}</option>
                         ))}
                       </select>
                     ) : (
